@@ -382,6 +382,62 @@ export const HospitalView: React.FC = () => {
       });
     };
 
+    const handleHospitalRejected = (payload: {
+      incident_id: string;
+      hospital_id: string;
+      hospital_name: string;
+      reason: string;
+      created_at?: string;
+    }) => {
+      setIncidentsByHospital((prev) => {
+        let hasChanges = false;
+        const updated: Record<string, IncidentPayload[]> = {};
+
+        for (const [hId, list] of Object.entries(prev)) {
+          const idx = list.findIndex((item) => item.id === payload.incident_id);
+          if (idx !== -1) {
+            hasChanges = true;
+            const updatedList = [...list];
+            const target = updatedList[idx];
+            const currentRejections = target.rejections || [];
+            const isAlreadyPresent = currentRejections.some(
+              (r) => r.hospital_id === payload.hospital_id
+            );
+            const newRejections = isAlreadyPresent
+              ? currentRejections.map((r) =>
+                  r.hospital_id === payload.hospital_id
+                    ? { ...r, reason: payload.reason, created_at: payload.created_at || new Date().toISOString() }
+                    : r
+                )
+              : [
+                  ...currentRejections,
+                  {
+                    hospital_id: payload.hospital_id,
+                    hospital_name: payload.hospital_name,
+                    reason: payload.reason,
+                    created_at: payload.created_at || new Date().toISOString(),
+                  },
+                ];
+            updatedList[idx] = {
+              ...target,
+              rejections: newRejections,
+            };
+            updated[hId] = updatedList;
+          } else {
+            updated[hId] = list;
+          }
+        }
+
+        if (!hasChanges) return prev;
+        try {
+          localStorage.setItem('rakshak_hospital_feed', JSON.stringify(updated));
+        } catch {
+          // ignore
+        }
+        return updated;
+      });
+    };
+
     socket.on('connect', handleConnect);
     socket.on('disconnect', handleDisconnect);
     socket.on('connect_error', handleConnectError);
@@ -393,6 +449,7 @@ export const HospitalView: React.FC = () => {
     socket.on('case_accepted', handleCaseAccepted);
     socket.on('incident_escalated', handleIncidentEscalated);
     socket.on('incident_unmatched', handleIncidentUnmatched);
+    socket.on('hospital_rejected', handleHospitalRejected);
 
     return () => {
       socket.off('connect', handleConnect);
@@ -406,6 +463,7 @@ export const HospitalView: React.FC = () => {
       socket.off('case_accepted', handleCaseAccepted);
       socket.off('incident_escalated', handleIncidentEscalated);
       socket.off('incident_unmatched', handleIncidentUnmatched);
+      socket.off('hospital_rejected', handleHospitalRejected);
     };
   }, [selectedHospitalId, playAlertChime]);
 

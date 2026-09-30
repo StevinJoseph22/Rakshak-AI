@@ -228,7 +228,7 @@ export function getIO(): SocketIOServer {
   return io;
 }
 
-export function broadcastNewIncident(
+export async function broadcastNewIncident(
   incident: {
     id: string;
     latitude: number;
@@ -239,10 +239,18 @@ export function broadcastNewIncident(
   },
   matchedHospitals: Hospital[],
   isEscalated: boolean = false
-) {
+): Promise<void> {
   if (!io) {
     console.warn('[Socket.io] Skipping broadcast: Socket.io not initialized.');
     return;
+  }
+
+  // Retrieve cached in-memory image from Redis RAM if already uploaded
+  let activeImageUrl: string | null = null;
+  try {
+    activeImageUrl = await redis.get(`incident_image:${incident.id}`);
+  } catch {
+    // Non-fatal cache read error
   }
 
   // 1. Emit to each matched hospital's room
@@ -256,7 +264,7 @@ export function broadcastNewIncident(
         hospital.road_distance_km ??
         (hospital.distance_km ? Math.round(hospital.distance_km * 1.6 * 10) / 10 : null),
       created_at: incident.created_at,
-      imageUrl: null, // Streamed dynamically via Phase 6
+      imageUrl: activeImageUrl,
       hospital_id: hospital.id,
       hospital_name: hospital.name,
       matched_hospitals_count: matchedHospitals.length,
@@ -267,7 +275,7 @@ export function broadcastNewIncident(
     };
     io!.to(hospital.id).emit('new_incident', payload);
     console.log(
-      `[Socket.io] Emitted new_incident to hospital room: ${hospital.id} (${hospital.name}) [escalated=${isEscalated}]`
+      `[Socket.io] Emitted new_incident to hospital room: ${hospital.id} (${hospital.name}) [escalated=${isEscalated}, hasImage=${!!activeImageUrl}]`
     );
   });
 
@@ -285,7 +293,7 @@ export function broadcastNewIncident(
             : null)
         : null,
     created_at: incident.created_at,
-    imageUrl: null,
+    imageUrl: activeImageUrl,
     matched_hospitals_count: matchedHospitals.length,
     matched_hospitals: matchedHospitals,
     victim_metadata: incident.victim_metadata,
@@ -293,7 +301,9 @@ export function broadcastNewIncident(
     escalated: isEscalated,
   };
   io.to('all_incidents').emit('new_incident', policePayload);
-  console.log(`[Socket.io] Emitted new_incident to all_incidents room (Police Control Room)`);
+  console.log(
+    `[Socket.io] Emitted new_incident to all_incidents room (Police Control Room) [hasImage=${!!activeImageUrl}]`
+  );
 }
 
 /**
@@ -353,6 +363,32 @@ export function broadcastCaseAccepted(
 }
 
 /**
+ * Hospital Rejected - Emitted to Police Control Room and incident room so police know which facility rejected and why.
+ */
+export function broadcastHospitalRejected(
+  incidentId: string,
+  hospitalId: string,
+  hospitalName: string,
+  reason: string,
+  createdAt: string = new Date().toISOString()
+): void {
+  if (!io) return;
+  const payload = {
+    incident_id: incidentId,
+    hospital_id: hospitalId,
+    hospital_name: hospitalName,
+    reason,
+    created_at: createdAt,
+  };
+
+  io.to('all_incidents').emit('hospital_rejected', payload);
+  io.to(`incident:${incidentId}`).emit('hospital_rejected', payload);
+  console.log(
+    `[Socket.io] Emitted hospital_rejected to all_incidents room for incident ${incidentId} by ${hospitalName} (${reason})`
+  );
+}
+
+/**
  * Phase 7: Incident Escalated - Emitted to new hospitals, Police, and Mobile Client.
  */
 export function broadcastIncidentEscalated(
@@ -368,10 +404,30 @@ export function broadcastIncidentEscalated(
 ): void {
   if (!io) return;
 
-  // 1. Broadcast new_incident to newly reached trauma centers
-  broadcastNewIncident(incident, newlyMatchedHospitals, true);
+  // 1. Broadcast new_incident to newly reached trauma centers (checks Redis RAM for existing photo)
+  broadcastNewIncident(incident, newlyMatchedHospitals, true).then(() => {
+    // 2. Also emit image_update explicitly if photo is cached in Redis
+    redis.get(`incident_image:${incident.id}`).then((cachedImage) => {
+      if (cachedImage && io) {
+        newlyMatchedHospitals.forEach((h) => {
+          io!.to(h.id).emit('image_update', {
+            incident_id: incident.id,
+            imageUrl: cachedImage,
+          });
+        });
+        io.to('all_incidents').emit('image_update', {
+          incident_id: incident.id,
+          imageUrl: cachedImage,
+        });
+      }
+    }).catch(() => {
+      // Non-fatal
+    });
+  }).catch((err) => {
+    console.error('[Socket.io] Error in broadcastNewIncident during escalation:', err);
+  });
 
-  // 2. Broadcast incident_escalated to Police and Mobile
+  // 3. Broadcast incident_escalated to Police and Mobile
   const payload = {
     incident_id: incident.id,
     status: 'escalated',

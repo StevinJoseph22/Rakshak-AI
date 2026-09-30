@@ -63,15 +63,18 @@ class ApiClient {
     };
 
     // Candidate base URLs to try in order of priority:
-    // 1. Configured baseUrl (from BACKEND_URL dart-define or default)
-    // 2. http://127.0.0.1:5000 (Active if `adb reverse tcp:5000 tcp:5000` is run)
-    // 3. http://172.22.61.163:5000 (Current local workstation Wi-Fi IP)
+    // 1. http://127.0.0.1:5000 (Active if `adb reverse tcp:5000 tcp:5000` is run)
+    // 2. http://192.168.1.21:5000 (Current local workstation Wi-Fi IP)
+    // 3. Configured baseUrl (from BACKEND_URL dart-define or default)
     // 4. http://10.0.2.2:5000 (Android Emulator host loopback)
     final candidates = <String>[
-      baseUrl,
       'http://127.0.0.1:5000',
+      'http://192.168.1.21:5000',
+      if (baseUrl != kDefaultBackendUrl) baseUrl,
+      'http://10.208.188.149:5000',
       'http://172.22.61.163:5000',
       'http://10.0.2.2:5000',
+      baseUrl,
     ].toSet().toList();
 
     String? lastError;

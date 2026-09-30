@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   AlertTriangle,
   MapPin,
@@ -19,6 +19,7 @@ import {
   Check,
 } from 'lucide-react';
 import { IncidentPayload, Hospital } from '../types';
+import { BACKEND_API_BASE } from '../services/socket';
 
 const REJECTION_REASONS = [
   'No ICU capacity',
@@ -49,6 +50,37 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
   const [isRejectModalOpen, setIsRejectModalOpen] = useState<boolean>(false);
   const [selectedRejectReason, setSelectedRejectReason] = useState<string>('No ICU capacity');
   const [isSubmittingReject, setIsSubmittingReject] = useState<boolean>(false);
+  const [localImageUrl, setLocalImageUrl] = useState<string | null>(incident.imageUrl || null);
+
+  // Auto-fetch ephemeral photo from Redis cache if missing or received after mount
+  useEffect(() => {
+    if (incident.imageUrl) {
+      setLocalImageUrl(incident.imageUrl);
+      return;
+    }
+
+    let isMounted = true;
+    const fetchImage = async () => {
+      try {
+        const res = await fetch(`${BACKEND_API_BASE}/incidents/${incident.id}/image`);
+        if (res.ok) {
+          const data = await res.json();
+          if (isMounted && data.imageUrl) {
+            setLocalImageUrl(data.imageUrl);
+          }
+        }
+      } catch {
+        // Non-fatal cache lookup failure
+      }
+    };
+
+    fetchImage();
+    const timer = setTimeout(fetchImage, 2500);
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+    };
+  }, [incident.id, incident.imageUrl]);
 
   const formattedTime = new Date(incident.created_at).toLocaleTimeString(
     undefined,
@@ -677,6 +709,77 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
         </div>
       )}
 
+      {/* Facility Rejection Notices (Visible to Police and Hospitals) */}
+      {incident.rejections && incident.rejections.length > 0 && (
+        <div
+          style={{
+            background: '#fff1f2',
+            border: '1px solid #fecdd3',
+            borderRadius: '0.375rem',
+            padding: '0.65rem 0.85rem',
+            marginBottom: '0.85rem',
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.45rem',
+              color: '#be123c',
+              fontSize: '0.75rem',
+              fontWeight: 700,
+              textTransform: 'uppercase',
+              letterSpacing: '0.04em',
+              marginBottom: '0.35rem',
+            }}
+          >
+            <AlertTriangle size={14} />
+            <span>Facility Rejection Notices ({incident.rejections.length})</span>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+            {incident.rejections.map((rej, rIdx) => (
+              <div
+                key={`${rej.hospital_id}-${rIdx}`}
+                style={{
+                  fontSize: '0.8rem',
+                  color: '#881337',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: '0.5rem',
+                  padding: '0.2rem 0',
+                  borderTop: rIdx > 0 ? '1px dashed #fecdd3' : 'none',
+                }}
+              >
+                <span>
+                  <strong>{rej.hospital_name}</strong> declined dispatch:{' '}
+                  <span
+                    style={{
+                      background: '#ffe4e6',
+                      color: '#9f1239',
+                      padding: '0.1rem 0.4rem',
+                      borderRadius: '0.25rem',
+                      fontWeight: 600,
+                      fontSize: '0.75rem',
+                    }}
+                  >
+                    {rej.reason}
+                  </span>
+                </span>
+                <span style={{ fontSize: '0.7rem', color: '#9f1239' }}>
+                  {new Date(rej.created_at).toLocaleTimeString([], {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                  })}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Phase 7: Hospital Action Section (Accept / Decline Emergency) */}
       {viewMode === 'hospital' && (
         <div style={{ marginBottom: '1rem' }}>
@@ -853,7 +956,7 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
       )}
 
       {/* Phase 6: Zero-Storage Ephemeral Photo Stream */}
-      {incident.imageUrl ? (
+      {localImageUrl ? (
         <>
           <div
             onClick={() => setIsLightboxOpen(true)}
@@ -943,7 +1046,7 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
               }}
             >
               <img
-                src={incident.imageUrl}
+                src={localImageUrl}
                 alt={`Incident triage intake ${incident.id}`}
                 onContextMenu={(e) => e.preventDefault()}
                 onDragStart={(e) => e.preventDefault()}
@@ -1061,7 +1164,7 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
                 }}
               >
                 <img
-                  src={incident.imageUrl}
+                  src={localImageUrl}
                   alt={`Full resolution triage intake ${incident.id}`}
                   onContextMenu={(e) => e.preventDefault()}
                   onDragStart={(e) => e.preventDefault()}

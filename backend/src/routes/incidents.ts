@@ -11,6 +11,7 @@ import {
   broadcastNewIncident,
   broadcastCaseLocked,
   broadcastCaseAccepted,
+  broadcastHospitalRejected,
   getIO,
 } from '../socket';
 import { redis } from '../redis';
@@ -166,7 +167,7 @@ incidentsRouter.get('/', async (req: Request, res: Response) => {
     const params: unknown[] = [];
 
     if (hospitalId) {
-      // Filter to incidents within 8km of the requested hospital
+      // Filter to incidents within 8km (or 20km if escalated) of the requested hospital
       sql = `
         SELECT 
           i.id,
@@ -197,19 +198,35 @@ incidentsRouter.get('/', async (req: Request, res: Response) => {
               )
               FROM hospitals h
               WHERE h.has_trauma_center = true
-                AND ST_DWithin(h.location, i.location, 8000)
+                AND ST_DWithin(h.location, i.location, CASE WHEN i.status = 'escalated' THEN 20000 ELSE 8000 END)
             ),
             '[]'::json
-          ) AS matched_hospitals
+          ) AS matched_hospitals,
+          COALESCE(
+            (
+              SELECT json_agg(
+                json_build_object(
+                  'hospital_id', ir.hospital_id,
+                  'hospital_name', h_rej.name,
+                  'reason', ir.reason,
+                  'created_at', ir.created_at
+                ) ORDER BY ir.created_at ASC
+              )
+              FROM incident_rejections ir
+              JOIN hospitals h_rej ON h_rej.id = ir.hospital_id
+              WHERE ir.incident_id = i.id
+            ),
+            '[]'::json
+          ) AS rejections
         FROM incidents i
         JOIN hospitals h_spec ON h_spec.id = $1
-        WHERE ST_DWithin(h_spec.location, i.location, 8000)
+        WHERE ST_DWithin(h_spec.location, i.location, CASE WHEN i.status = 'escalated' THEN 20000 ELSE 8000 END)
         ORDER BY i.created_at DESC
         LIMIT $2;
       `;
       params.push(hospitalId, limit);
     } else {
-      // City-wide incidents for Police Control Room with all matched trauma centers within 8km
+      // City-wide incidents for Police Control Room with all matched trauma centers
       sql = `
         SELECT 
           i.id,
@@ -239,10 +256,26 @@ incidentsRouter.get('/', async (req: Request, res: Response) => {
               )
               FROM hospitals h
               WHERE h.has_trauma_center = true
-                AND ST_DWithin(h.location, i.location, 8000)
+                AND ST_DWithin(h.location, i.location, 20000)
             ),
             '[]'::json
-          ) AS matched_hospitals
+          ) AS matched_hospitals,
+          COALESCE(
+            (
+              SELECT json_agg(
+                json_build_object(
+                  'hospital_id', ir.hospital_id,
+                  'hospital_name', h_rej.name,
+                  'reason', ir.reason,
+                  'created_at', ir.created_at
+                ) ORDER BY ir.created_at ASC
+              )
+              FROM incident_rejections ir
+              JOIN hospitals h_rej ON h_rej.id = ir.hospital_id
+              WHERE ir.incident_id = i.id
+            ),
+            '[]'::json
+          ) AS rejections
         FROM incidents i
         ORDER BY i.created_at DESC
         LIMIT $1;
@@ -288,6 +321,7 @@ incidentsRouter.get('/', async (req: Request, res: Response) => {
         hospital_name: matchedHospitals[0]?.name ?? undefined,
         matched_hospitals_count: matchedHospitals.length,
         matched_hospitals: matchedHospitals,
+        rejections: Array.isArray(row.rejections) ? row.rejections : [],
       };
     });
 
@@ -417,6 +451,21 @@ incidentsRouter.get('/:id', async (req: Request, res: Response) => {
           ? error.message
           : 'Unexpected error while retrieving incident.',
     });
+  }
+});
+
+// GET /incidents/:id/image - Directly retrieve ephemeral in-memory photo from Redis RAM
+incidentsRouter.get('/:id/image', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const imageUrl = await redis.get(`incident_image:${id}`);
+    if (!imageUrl) {
+      return res.status(404).json({ error: 'Image not found or expired', imageUrl: null });
+    }
+    return res.json({ incident_id: id, imageUrl });
+  } catch (err) {
+    console.error('[GET /incidents/:id/image Error]', err);
+    return res.status(500).json({ error: 'Failed to retrieve image from cache' });
   }
 });
 
@@ -619,6 +668,14 @@ incidentsRouter.post('/:id/reject', async (req: Request, res: Response) => {
     console.log(
       `[Triage Engine] Hospital ${hospital_id} rejected incident ${id} (Reason: ${reason})`
     );
+
+    // Query hospital name and broadcast rejection notice to Police Control Room
+    const hospRes = await query<{ name: string }>(
+      'SELECT name FROM hospitals WHERE id = $1;',
+      [hospital_id]
+    );
+    const hospitalName = hospRes.rows[0]?.name || 'Trauma Center';
+    broadcastHospitalRejected(id, hospital_id, hospitalName, reason);
 
     // Check if ALL currently matched hospitals have rejected
     let matchedHospitals: string[] = [];

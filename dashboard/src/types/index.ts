@@ -14,6 +14,13 @@ export interface Hospital {
   road_distance_km?: number;
 }
 
+export interface RejectionRecord {
+  hospital_id: string;
+  hospital_name: string;
+  reason: string;
+  created_at: string;
+}
+
 export interface IncidentPayload {
   id: string;
   latitude: number;
@@ -32,5 +39,6 @@ export interface IncidentPayload {
   accepted_hospital_name?: string;
   escalated?: boolean;
   case_locked?: boolean;
+  rejections?: RejectionRecord[];
 }
 

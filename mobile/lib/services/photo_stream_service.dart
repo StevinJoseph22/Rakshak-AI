@@ -33,8 +33,10 @@ class PhotoStreamService {
     // Candidate base URLs matching ApiClient routing
     final candidates = candidateUrls ??
         <String>[
-          kDefaultBackendUrl,
           'http://127.0.0.1:5000',
+          'http://192.168.1.21:5000',
+          if (kDefaultBackendUrl != 'http://10.0.2.2:5000') kDefaultBackendUrl,
+          'http://10.208.188.149:5000',
           'http://172.22.61.163:5000',
           'http://10.0.2.2:5000',
         ].toSet().toList();

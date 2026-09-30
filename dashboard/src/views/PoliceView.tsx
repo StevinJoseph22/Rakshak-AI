@@ -282,6 +282,51 @@ export const PoliceView: React.FC = () => {
       });
     };
 
+    const handleHospitalRejected = (payload: {
+      incident_id: string;
+      hospital_id: string;
+      hospital_name: string;
+      reason: string;
+      created_at?: string;
+    }) => {
+      setIncidents((prev) => {
+        const existingIndex = prev.findIndex((item) => item.id === payload.incident_id);
+        if (existingIndex === -1) return prev;
+        const updatedList = [...prev];
+        const target = updatedList[existingIndex];
+        const currentRejections = target.rejections || [];
+        const isAlreadyPresent = currentRejections.some(
+          (r) => r.hospital_id === payload.hospital_id
+        );
+        const newRejections = isAlreadyPresent
+          ? currentRejections.map((r) =>
+              r.hospital_id === payload.hospital_id
+                ? { ...r, reason: payload.reason, created_at: payload.created_at || new Date().toISOString() }
+                : r
+            )
+          : [
+              ...currentRejections,
+              {
+                hospital_id: payload.hospital_id,
+                hospital_name: payload.hospital_name,
+                reason: payload.reason,
+                created_at: payload.created_at || new Date().toISOString(),
+              },
+            ];
+
+        updatedList[existingIndex] = {
+          ...target,
+          rejections: newRejections,
+        };
+        try {
+          localStorage.setItem('rakshak_police_feed', JSON.stringify(updatedList));
+        } catch {
+          // ignore
+        }
+        return updatedList;
+      });
+    };
+
     socket.on('connect', handleConnect);
     socket.on('disconnect', handleDisconnect);
     socket.on('connect_error', handleConnectError);
@@ -293,6 +338,7 @@ export const PoliceView: React.FC = () => {
     socket.on('incident_escalated', handleIncidentEscalated);
     socket.on('incident_unmatched', handleIncidentUnmatched);
     socket.on('case_locked', handleCaseLocked);
+    socket.on('hospital_rejected', handleHospitalRejected);
 
     return () => {
       socket.off('connect', handleConnect);
@@ -306,6 +352,7 @@ export const PoliceView: React.FC = () => {
       socket.off('incident_escalated', handleIncidentEscalated);
       socket.off('incident_unmatched', handleIncidentUnmatched);
       socket.off('case_locked', handleCaseLocked);
+      socket.off('hospital_rejected', handleHospitalRejected);
     };
   }, [playPoliceChime]);
 
