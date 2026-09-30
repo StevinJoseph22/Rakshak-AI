@@ -5,6 +5,8 @@ import {
   incidentIdParamsSchema,
   updateIncidentStatusSchema,
   rejectIncidentSchema,
+  nearbyIncidentsQuerySchema,
+  claimIncidentSchema,
 } from '../validations';
 import { Incident, Hospital } from '../types';
 import {
@@ -12,6 +14,7 @@ import {
   broadcastCaseLocked,
   broadcastCaseAccepted,
   broadcastHospitalRejected,
+  broadcastIncidentClaimed,
   getIO,
 } from '../socket';
 import { redis } from '../redis';
@@ -173,12 +176,28 @@ incidentsRouter.get('/', async (req: Request, res: Response) => {
           i.id,
           i.status,
           i.accepted_hospital_id,
+          i.ambulance_id,
           i.victim_metadata,
           ST_Y(i.location::geometry) AS latitude,
           ST_X(i.location::geometry) AS longitude,
           i.created_at,
           i.updated_at,
           ROUND((ST_Distance(h_spec.location, i.location) / 1000)::numeric, 2) AS hospital_distance_km,
+          CASE 
+            WHEN h_acc.id IS NOT NULL THEN
+              json_build_object(
+                'id', h_acc.id,
+                'name', h_acc.name,
+                'phone', h_acc.phone,
+                'address', h_acc.address,
+                'has_trauma_center', h_acc.has_trauma_center,
+                'has_icu_capacity', h_acc.has_icu_capacity,
+                'latitude', ST_Y(h_acc.location::geometry),
+                'longitude', ST_X(h_acc.location::geometry),
+                'distance_km', ROUND((ST_Distance(h_acc.location, i.location) / 1000)::numeric, 2)
+              )
+            ELSE NULL 
+          END AS accepted_hospital,
           COALESCE(
             (
               SELECT json_agg(
@@ -220,6 +239,7 @@ incidentsRouter.get('/', async (req: Request, res: Response) => {
           ) AS rejections
         FROM incidents i
         JOIN hospitals h_spec ON h_spec.id = $1
+        LEFT JOIN hospitals h_acc ON i.accepted_hospital_id = h_acc.id
         WHERE ST_DWithin(h_spec.location, i.location, CASE WHEN i.status = 'escalated' THEN 20000 ELSE 8000 END)
         ORDER BY i.created_at DESC
         LIMIT $2;
@@ -232,11 +252,27 @@ incidentsRouter.get('/', async (req: Request, res: Response) => {
           i.id,
           i.status,
           i.accepted_hospital_id,
+          i.ambulance_id,
           i.victim_metadata,
           ST_Y(i.location::geometry) AS latitude,
           ST_X(i.location::geometry) AS longitude,
           i.created_at,
           i.updated_at,
+          CASE 
+            WHEN h_acc.id IS NOT NULL THEN
+              json_build_object(
+                'id', h_acc.id,
+                'name', h_acc.name,
+                'phone', h_acc.phone,
+                'address', h_acc.address,
+                'has_trauma_center', h_acc.has_trauma_center,
+                'has_icu_capacity', h_acc.has_icu_capacity,
+                'latitude', ST_Y(h_acc.location::geometry),
+                'longitude', ST_X(h_acc.location::geometry),
+                'distance_km', ROUND((ST_Distance(h_acc.location, i.location) / 1000)::numeric, 2)
+              )
+            ELSE NULL 
+          END AS accepted_hospital,
           COALESCE(
             (
               SELECT json_agg(
@@ -277,6 +313,7 @@ incidentsRouter.get('/', async (req: Request, res: Response) => {
             '[]'::json
           ) AS rejections
         FROM incidents i
+        LEFT JOIN hospitals h_acc ON i.accepted_hospital_id = h_acc.id
         ORDER BY i.created_at DESC
         LIMIT $1;
       `;
@@ -285,14 +322,21 @@ incidentsRouter.get('/', async (req: Request, res: Response) => {
 
     const result = await query(sql, params);
 
-    // Retrieve active volatile image stream URLs from Redis RAM (0 persistent disk reads)
+    // Retrieve active volatile image stream URLs and ambulance telemetry from Redis RAM
     const imageKeys = result.rows.map((row: Record<string, unknown>) => `incident_image:${row.id}`);
+    const ambKeys = result.rows.map((row: Record<string, unknown>) => `ambulance_loc:${row.id}`);
+
     let cachedImages: (string | null)[] = [];
+    let cachedAmbulanceLocs: (string | null)[] = [];
+
     if (imageKeys.length > 0) {
       try {
-        cachedImages = await redis.mget(imageKeys);
+        [cachedImages, cachedAmbulanceLocs] = await Promise.all([
+          redis.mget(imageKeys),
+          redis.mget(ambKeys),
+        ]);
       } catch (err) {
-        console.warn('[Redis] Failed to fetch cached image URLs:', err);
+        console.warn('[Redis] Failed to fetch cached image URLs / ambulance telemetry:', err);
       }
     }
 
@@ -305,12 +349,24 @@ incidentsRouter.get('/', async (req: Request, res: Response) => {
           : null;
       const roadKm = straightKm !== null ? Math.round(straightKm * 1.6 * 10) / 10 : null;
 
+      let ambLoc = null;
+      if (cachedAmbulanceLocs[idx]) {
+        try {
+          ambLoc = JSON.parse(cachedAmbulanceLocs[idx] as string);
+        } catch {
+          // ignore
+        }
+      }
+
       return {
         id: row.id,
         latitude: Number(row.latitude),
         longitude: Number(row.longitude),
         status: row.status,
         accepted_hospital_id: row.accepted_hospital_id,
+        accepted_hospital: row.accepted_hospital || null,
+        ambulance_id: row.ambulance_id || null,
+        ambulance_location: ambLoc,
         victim_metadata: row.victim_metadata,
         created_at: row.created_at,
         updated_at: row.updated_at,
@@ -378,6 +434,219 @@ incidentsRouter.delete('/', async (req: Request, res: Response) => {
   }
 });
 
+// GET /incidents/nearby - Retrieve active incidents within radius_km of ambulance GPS location
+incidentsRouter.get('/nearby', async (req: Request, res: Response) => {
+  try {
+    const parseResult = nearbyIncidentsQuerySchema.safeParse(req.query);
+    if (!parseResult.success) {
+      return res.status(400).json({
+        error: 'Validation failed',
+        message: 'Invalid nearby incidents query parameters',
+        details: parseResult.error.errors.map((e) => ({
+          field: e.path.join('.'),
+          message: e.message,
+        })),
+      });
+    }
+
+    const { lat, lng, radius_km } = parseResult.data;
+    const radiusMeters = radius_km * 1000;
+
+    const sql = `
+      SELECT 
+        i.id,
+        i.status,
+        i.accepted_hospital_id,
+        i.ambulance_id,
+        i.victim_metadata,
+        ST_Y(i.location::geometry) AS latitude,
+        ST_X(i.location::geometry) AS longitude,
+        i.created_at,
+        i.updated_at,
+        ROUND((ST_Distance(i.location, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography) / 1000)::numeric, 2) AS distance_km,
+        CASE 
+          WHEN h.id IS NOT NULL THEN
+            json_build_object(
+              'id', h.id,
+              'name', h.name,
+              'phone', h.phone,
+              'address', h.address,
+              'has_trauma_center', h.has_trauma_center,
+              'has_icu_capacity', h.has_icu_capacity,
+              'latitude', ST_Y(h.location::geometry),
+              'longitude', ST_X(h.location::geometry),
+              'distance_km', ROUND((ST_Distance(h.location, i.location) / 1000)::numeric, 2)
+            )
+          ELSE NULL 
+        END AS accepted_hospital
+      FROM incidents i
+      LEFT JOIN hospitals h ON i.accepted_hospital_id = h.id
+      WHERE i.status IN ('broadcasting', 'escalated', 'accepted', 'en_route')
+        AND ST_DWithin(i.location, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography, $3)
+      ORDER BY distance_km ASC;
+    `;
+
+    const result = await query(sql, [lng, lat, radiusMeters]);
+
+    // Check Redis RAM for ephemeral photos and ambulance live telemetry
+    const imageKeys = result.rows.map((row: Record<string, unknown>) => `incident_image:${row.id}`);
+    const ambKeys = result.rows.map((row: Record<string, unknown>) => `ambulance_loc:${row.id}`);
+
+    let cachedImages: (string | null)[] = [];
+    let cachedAmbulanceLocs: (string | null)[] = [];
+
+    if (imageKeys.length > 0) {
+      try {
+        [cachedImages, cachedAmbulanceLocs] = await Promise.all([
+          redis.mget(imageKeys),
+          redis.mget(ambKeys),
+        ]);
+      } catch (err) {
+        console.warn('[Redis] Failed to fetch cached image URLs / ambulance telemetry in nearby:', err);
+      }
+    }
+
+    const incidents = result.rows.map((row: Record<string, unknown>, idx: number) => {
+      const straightKm = Number(row.distance_km);
+      const roadKm = Math.round(straightKm * 1.6 * 10) / 10;
+
+      let ambLoc = null;
+      if (cachedAmbulanceLocs[idx]) {
+        try {
+          ambLoc = JSON.parse(cachedAmbulanceLocs[idx] as string);
+        } catch {
+          // ignore
+        }
+      }
+
+      return {
+        id: row.id,
+        latitude: Number(row.latitude),
+        longitude: Number(row.longitude),
+        status: row.status,
+        accepted_hospital_id: row.accepted_hospital_id,
+        accepted_hospital: row.accepted_hospital || null,
+        ambulance_id: row.ambulance_id || null,
+        ambulance_location: ambLoc,
+        victim_metadata: row.victim_metadata,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+        distance_km: straightKm,
+        road_distance_km: roadKm,
+        imageUrl: cachedImages[idx] || null,
+      };
+    });
+
+    return res.json({
+      incidents,
+      total: incidents.length,
+      search_radius_km: radius_km,
+      ambulance_location: { latitude: lat, longitude: lng },
+    });
+  } catch (error) {
+    console.error('[GET /incidents/nearby Error]', error);
+    return res.status(500).json({
+      error: 'Query failed',
+      message:
+        error instanceof Error
+          ? error.message
+          : 'Unexpected database error while fetching nearby incidents.',
+    });
+  }
+});
+
+// POST /incidents/:id/claim - Ambulance claims the emergency case
+incidentsRouter.post('/:id/claim', async (req: Request, res: Response) => {
+  try {
+    const paramsResult = incidentIdParamsSchema.safeParse(req.params);
+    if (!paramsResult.success) {
+      return res.status(400).json({
+        error: 'Validation failed',
+        message: 'Invalid incident ID format. Must be a valid UUID.',
+      });
+    }
+
+    const bodyResult = claimIncidentSchema.safeParse(req.body);
+    if (!bodyResult.success) {
+      return res.status(400).json({
+        error: 'Validation failed',
+        message: 'Invalid claim payload',
+        details: bodyResult.error.errors.map((e) => ({
+          field: e.path.join('.'),
+          message: e.message,
+        })),
+      });
+    }
+
+    const { id } = paramsResult.data;
+    const { ambulance_id } = bodyResult.data;
+
+    const incCheck = await query<{ id: string; status: string; ambulance_id: string | null }>(
+      'SELECT id, status, ambulance_id FROM incidents WHERE id = $1;',
+      [id]
+    );
+
+    if (incCheck.rowCount === 0) {
+      return res.status(404).json({
+        error: 'Not found',
+        message: `Incident with ID '${id}' does not exist.`,
+      });
+    }
+
+    const existing = incCheck.rows[0];
+    if (existing.ambulance_id && existing.ambulance_id !== ambulance_id) {
+      return res.status(409).json({
+        error: 'Conflict',
+        message: `Incident is already claimed by another ambulance unit: ${existing.ambulance_id}`,
+        claimed_by: existing.ambulance_id,
+        incident_id: id,
+      });
+    }
+
+    const updateRes = await query<Incident>(
+      `UPDATE incidents
+       SET ambulance_id = $1, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $2 AND (ambulance_id IS NULL OR ambulance_id = $1)
+       RETURNING 
+         id, status, accepted_hospital_id, ambulance_id, victim_metadata,
+         ST_Y(location::geometry) AS latitude,
+         ST_X(location::geometry) AS longitude,
+         created_at, updated_at;`,
+      [ambulance_id, id]
+    );
+
+    if (updateRes.rowCount === 0) {
+      return res.status(409).json({
+        error: 'Conflict',
+        message: 'Incident was claimed by another unit concurrently.',
+        incident_id: id,
+      });
+    }
+
+    const claimedIncident = {
+      ...updateRes.rows[0],
+      latitude: Number(updateRes.rows[0].latitude),
+      longitude: Number(updateRes.rows[0].longitude),
+    };
+
+    broadcastIncidentClaimed(id, ambulance_id);
+
+    return res.json({
+      message: `Incident successfully claimed by ambulance ${ambulance_id}`,
+      incident: claimedIncident,
+    });
+  } catch (error) {
+    console.error('[POST /incidents/:id/claim Error]', error);
+    return res.status(500).json({
+      error: 'Claim failed',
+      message:
+        error instanceof Error
+          ? error.message
+          : 'Unexpected database error while claiming incident.',
+    });
+  }
+});
+
 // GET /incidents/:id - Retrieve incident detail by ID
 incidentsRouter.get('/:id', async (req: Request, res: Response) => {
   try {
@@ -396,6 +665,7 @@ incidentsRouter.get('/:id', async (req: Request, res: Response) => {
         i.id,
         i.status,
         i.accepted_hospital_id,
+        i.ambulance_id,
         i.victim_metadata,
         ST_Y(i.location::geometry) AS latitude,
         ST_X(i.location::geometry) AS longitude,
@@ -430,8 +700,17 @@ incidentsRouter.get('/:id', async (req: Request, res: Response) => {
     }
 
     let imageUrl: string | null = null;
+    let ambulanceLocation = null;
+
     try {
-      imageUrl = await redis.get(`incident_image:${id}`);
+      const [img, amb] = await Promise.all([
+        redis.get(`incident_image:${id}`),
+        redis.get(`ambulance_loc:${id}`),
+      ]);
+      imageUrl = img;
+      if (amb) {
+        ambulanceLocation = JSON.parse(amb);
+      }
     } catch {
       // Non-fatal cache read
     }
@@ -440,6 +719,7 @@ incidentsRouter.get('/:id', async (req: Request, res: Response) => {
       incident: {
         ...result.rows[0],
         imageUrl,
+        ambulance_location: ambulanceLocation,
       },
     });
   } catch (error) {

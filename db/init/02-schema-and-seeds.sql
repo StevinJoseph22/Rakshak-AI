@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS incidents (
     location GEOGRAPHY(POINT, 4326) NOT NULL,
     status incident_status NOT NULL DEFAULT 'detected',
     accepted_hospital_id UUID REFERENCES hospitals(id) ON DELETE SET NULL,
+    ambulance_id VARCHAR(100),
     victim_metadata JSONB,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP

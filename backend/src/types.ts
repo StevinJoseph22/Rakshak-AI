@@ -30,6 +30,14 @@ export interface Incident {
   status: IncidentStatus;
   accepted_hospital_id: string | null;
   accepted_hospital?: Hospital | null;
+  ambulance_id?: string | null;
+  ambulance_location?: {
+    latitude: number;
+    longitude: number;
+    speed_kmh?: number;
+    heading?: number;
+    updated_at?: string;
+  } | null;
   victim_metadata: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;

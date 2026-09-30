@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 import 'config/lock_screen_config.dart';
+import 'screens/ambulance_console_screen.dart';
 import 'screens/locked_screen_alert_screen.dart';
 import 'screens/permission_rationale_screen.dart';
 import 'screens/simulated_lock_screen.dart';
@@ -185,12 +186,52 @@ class _CrashDetectionScreenState extends State<CrashDetectionScreen> {
     CrashEventService.instance.triggerCrash(event);
   }
 
+  int _selectedNavIndex = 0;
+
   @override
   Widget build(BuildContext context) {
+    if (_selectedNavIndex == 1) {
+      return Scaffold(
+        body: const AmbulanceConsoleScreen(),
+        bottomNavigationBar: BottomNavigationBar(
+          currentIndex: _selectedNavIndex,
+          onTap: (index) {
+            setState(() {
+              _selectedNavIndex = index;
+            });
+          },
+          items: const [
+            BottomNavigationBarItem(
+              icon: Icon(Icons.shield),
+              label: 'Bystander Mode',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.emergency),
+              label: 'Ambulance Mode',
+            ),
+          ],
+        ),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Rakshak-AI Guard'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        actions: [
+          TextButton.icon(
+            onPressed: () {
+              setState(() {
+                _selectedNavIndex = 1;
+              });
+            },
+            icon: const Icon(Icons.emergency, color: Colors.redAccent, size: 20),
+            label: const Text(
+              'Ambulance Mode',
+              style: TextStyle(color: Colors.black87, fontWeight: FontWeight.bold, fontSize: 12),
+            ),
+          ),
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20.0),
@@ -507,6 +548,24 @@ class _CrashDetectionScreenState extends State<CrashDetectionScreen> {
             ),
           ],
         ),
+      ),
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _selectedNavIndex,
+        onTap: (index) {
+          setState(() {
+            _selectedNavIndex = index;
+          });
+        },
+        items: const [
+          BottomNavigationBarItem(
+            icon: Icon(Icons.shield),
+            label: 'Bystander Mode',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.emergency),
+            label: 'Ambulance Mode',
+          ),
+        ],
       ),
     );
   }

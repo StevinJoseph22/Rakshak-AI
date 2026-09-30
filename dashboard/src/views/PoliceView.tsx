@@ -6,11 +6,16 @@ import {
   Trash2,
   Volume2,
   VolumeX,
+  Map as MapIcon,
+  List as ListIcon,
+  LayoutGrid,
+  X,
 } from 'lucide-react';
 import { IncidentPayload, ConnectionStatus } from '../types';
 import { getSocket, BACKEND_API_BASE } from '../services/socket';
 import { IncidentCard } from '../components/IncidentCard';
 import { ReconnectingBanner } from '../components/ReconnectingBanner';
+import { PoliceTacticalMap } from '../components/PoliceTacticalMap';
 
 export const PoliceView: React.FC = () => {
   const [incidents, setIncidents] = useState<IncidentPayload[]>(() => {
@@ -25,6 +30,9 @@ export const PoliceView: React.FC = () => {
     useState<ConnectionStatus>('connected');
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
   const [lastAlertFlash, setLastAlertFlash] = useState<boolean>(false);
+  const [viewMode, setViewMode] = useState<'map' | 'split' | 'cards'>('map');
+  const [selectedIncidentId, setSelectedIncidentId] = useState<string | null>(null);
+  const [lightboxImage, setLightboxImage] = useState<string | null>(null);
 
   const audioContextRef = useRef<AudioContext | null>(null);
 
@@ -327,6 +335,54 @@ export const PoliceView: React.FC = () => {
       });
     };
 
+    const handleIncidentClaimed = (payload: {
+      incident_id: string;
+      ambulance_id: string;
+    }) => {
+      setIncidents((prev) => {
+        const existingIndex = prev.findIndex((item) => item.id === payload.incident_id);
+        if (existingIndex === -1) return prev;
+        const updatedList = [...prev];
+        updatedList[existingIndex] = {
+          ...updatedList[existingIndex],
+          ambulance_id: payload.ambulance_id,
+        };
+        try {
+          localStorage.setItem('rakshak_police_feed', JSON.stringify(updatedList));
+        } catch {
+          // ignore
+        }
+        return updatedList;
+      });
+    };
+
+    const handleAmbulanceLocationUpdate = (payload: {
+      incident_id: string;
+      ambulance_id: string;
+      latitude: number;
+      longitude: number;
+    }) => {
+      setIncidents((prev) => {
+        const existingIndex = prev.findIndex((item) => item.id === payload.incident_id);
+        if (existingIndex === -1) return prev;
+        const updatedList = [...prev];
+        updatedList[existingIndex] = {
+          ...updatedList[existingIndex],
+          ambulance_id: payload.ambulance_id,
+          ambulance_location: {
+            latitude: payload.latitude,
+            longitude: payload.longitude,
+          },
+        };
+        try {
+          localStorage.setItem('rakshak_police_feed', JSON.stringify(updatedList));
+        } catch {
+          // ignore
+        }
+        return updatedList;
+      });
+    };
+
     socket.on('connect', handleConnect);
     socket.on('disconnect', handleDisconnect);
     socket.on('connect_error', handleConnectError);
@@ -339,6 +395,8 @@ export const PoliceView: React.FC = () => {
     socket.on('incident_unmatched', handleIncidentUnmatched);
     socket.on('case_locked', handleCaseLocked);
     socket.on('hospital_rejected', handleHospitalRejected);
+    socket.on('incident_claimed', handleIncidentClaimed);
+    socket.on('ambulance_location_update', handleAmbulanceLocationUpdate);
 
     return () => {
       socket.off('connect', handleConnect);
@@ -353,6 +411,8 @@ export const PoliceView: React.FC = () => {
       socket.off('incident_unmatched', handleIncidentUnmatched);
       socket.off('case_locked', handleCaseLocked);
       socket.off('hospital_rejected', handleHospitalRejected);
+      socket.off('incident_claimed', handleIncidentClaimed);
+      socket.off('ambulance_location_update', handleAmbulanceLocationUpdate);
     };
   }, [playPoliceChime]);
 
@@ -564,106 +624,352 @@ export const PoliceView: React.FC = () => {
         </div>
       </div>
 
-      {/* Incidents Stream */}
-      <div>
+      {/* Incidents Stream Header with View Mode Switcher */}
+      <div style={{ marginBottom: '1rem' }}>
         <div
           style={{
             display: 'flex',
+            flexWrap: 'wrap',
             alignItems: 'center',
             justifyContent: 'space-between',
+            gap: '0.75rem',
             marginBottom: '0.75rem',
           }}
         >
-          <h3
-            style={{
-              margin: 0,
-              fontSize: '1rem',
-              fontWeight: 700,
-              color: '#334155',
-            }}
-          >
-            Live Emergency Incident Stream
-          </h3>
-          <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
-            Broadcasting 24/7 across Bengaluru Urban & Rural
-          </span>
-        </div>
+          <div>
+            <h3
+              style={{
+                margin: 0,
+                fontSize: '1.05rem',
+                fontWeight: 700,
+                color: '#334155',
+              }}
+            >
+              Live Emergency Incident Stream & Dispatch Radar
+            </h3>
+            <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
+              Broadcasting 24/7 across Bengaluru Urban & Rural jurisdiction
+            </span>
+          </div>
 
-        {incidents.length === 0 ? (
+          {/* View Mode Toggle Controls */}
           <div
             style={{
-              background: '#ffffff',
-              borderRadius: '0.75rem',
-              padding: '3rem 1.5rem',
-              textAlign: 'center',
-              border: '2px dashed #cbd5e1',
-              color: '#64748b',
+              display: 'inline-flex',
+              background: '#f1f5f9',
+              padding: '3px',
+              borderRadius: '0.5rem',
+              border: '1px solid #e2e8f0',
+              gap: '2px',
             }}
           >
-            <ShieldAlert
-              size={44}
-              color="#3b82f6"
-              style={{ margin: '0 auto 0.75rem' }}
-            />
-            <h4
-              style={{
-                margin: '0 0 0.35rem 0',
-                fontSize: '1.1rem',
-                color: '#0f172a',
-              }}
-            >
-              No Active Emergencies in City Stream
-            </h4>
-            <p
-              style={{
-                margin: '0 auto',
-                maxWidth: '480px',
-                fontSize: '0.875rem',
-              }}
-            >
-              Police Control Room is actively connected. When any mobile sensor
-              detects a crash or an incident is created via the API, it will appear
-              here in real time with matched hospital counts and coordinates.
-            </p>
             <button
-              onClick={() => {
-                localStorage.removeItem('rakshak_police_cleared');
-                fetch(`${BACKEND_API_BASE}/incidents?limit=20`)
-                  .then((res) => res.json())
-                  .then((data) => {
-                    if (data.incidents && data.incidents.length > 0) {
-                      setIncidents(data.incidents);
-                      localStorage.setItem('rakshak_police_feed', JSON.stringify(data.incidents));
-                    }
-                  });
-              }}
+              onClick={() => setViewMode('map')}
+              title="Tactical City-Wide Map"
               style={{
-                marginTop: '1rem',
-                padding: '0.45rem 0.85rem',
-                background: '#f8fafc',
-                border: '1px solid #cbd5e1',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.35rem',
+                padding: '0.4rem 0.75rem',
+                border: 'none',
                 borderRadius: '0.375rem',
-                color: '#475569',
                 fontSize: '0.8rem',
                 fontWeight: 600,
                 cursor: 'pointer',
+                background: viewMode === 'map' ? '#ffffff' : 'transparent',
+                color: viewMode === 'map' ? '#0f172a' : '#64748b',
+                boxShadow: viewMode === 'map' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                transition: 'all 0.15s ease',
               }}
             >
-              Fetch Database Records
+              <MapIcon size={15} />
+              <span>Tactical Map</span>
+            </button>
+            <button
+              onClick={() => setViewMode('split')}
+              title="Split View (Map + Cards)"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.35rem',
+                padding: '0.4rem 0.75rem',
+                border: 'none',
+                borderRadius: '0.375rem',
+                fontSize: '0.8rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+                background: viewMode === 'split' ? '#ffffff' : 'transparent',
+                color: viewMode === 'split' ? '#0f172a' : '#64748b',
+                boxShadow: viewMode === 'split' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              <LayoutGrid size={15} />
+              <span>Split View</span>
+            </button>
+            <button
+              onClick={() => setViewMode('cards')}
+              title="Feed Cards View"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.35rem',
+                padding: '0.4rem 0.75rem',
+                border: 'none',
+                borderRadius: '0.375rem',
+                fontSize: '0.8rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+                background: viewMode === 'cards' ? '#ffffff' : 'transparent',
+                color: viewMode === 'cards' ? '#0f172a' : '#64748b',
+                boxShadow: viewMode === 'cards' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              <ListIcon size={15} />
+              <span>Feed Cards ({incidents.length})</span>
             </button>
           </div>
-        ) : (
+        </div>
+
+        {/* View Mode: Tactical Map */}
+        {(viewMode === 'map' || viewMode === 'split') && (
+          <div style={{ marginBottom: viewMode === 'split' ? '1.5rem' : '0' }}>
+            <PoliceTacticalMap
+              incidents={incidents}
+              selectedIncidentId={selectedIncidentId}
+              onSelectIncident={(inc) => setSelectedIncidentId(inc.id)}
+              onImageClick={(img) => setLightboxImage(img)}
+            />
+
+            {/* Quick incident ticker below map when in Map mode */}
+            {viewMode === 'map' && incidents.length > 0 && (
+              <div
+                style={{
+                  marginTop: '0.75rem',
+                  display: 'flex',
+                  gap: '0.5rem',
+                  overflowX: 'auto',
+                  padding: '0.5rem 0',
+                }}
+              >
+                {incidents.map((inc) => (
+                  <button
+                    key={inc.id}
+                    onClick={() => setSelectedIncidentId(inc.id)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.4rem',
+                      padding: '0.4rem 0.75rem',
+                      background: selectedIncidentId === inc.id ? '#1e293b' : '#ffffff',
+                      color: selectedIncidentId === inc.id ? '#ffffff' : '#334155',
+                      border: `1px solid ${selectedIncidentId === inc.id ? '#0f172a' : '#e2e8f0'}`,
+                      borderRadius: '0.375rem',
+                      fontSize: '0.75rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: 8,
+                        height: 8,
+                        borderRadius: '50%',
+                        backgroundColor:
+                          inc.status === 'accepted'
+                            ? '#10b981'
+                            : inc.status === 'escalated'
+                            ? '#ea580c'
+                            : inc.status === 'unmatched'
+                            ? '#ef4444'
+                            : '#f59e0b',
+                      }}
+                    />
+                    <span>{inc.id.substring(0, 8)}...</span>
+                    {inc.ambulance_id && <span>🚑</span>}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* View Mode: Incident Cards */}
+        {(viewMode === 'cards' || viewMode === 'split') && (
           <div>
-            {incidents.map((incident) => (
-              <IncidentCard
-                key={incident.id}
-                incident={incident}
-                viewMode="police"
-              />
-            ))}
+            {incidents.length === 0 ? (
+              <div
+                style={{
+                  background: '#ffffff',
+                  borderRadius: '0.75rem',
+                  padding: '3rem 1.5rem',
+                  textAlign: 'center',
+                  border: '2px dashed #cbd5e1',
+                  color: '#64748b',
+                }}
+              >
+                <ShieldAlert
+                  size={44}
+                  color="#3b82f6"
+                  style={{ margin: '0 auto 0.75rem' }}
+                />
+                <h4
+                  style={{
+                    margin: '0 0 0.35rem 0',
+                    fontSize: '1.1rem',
+                    color: '#0f172a',
+                  }}
+                >
+                  No Active Emergencies in City Stream
+                </h4>
+                <p
+                  style={{
+                    margin: '0 auto',
+                    maxWidth: '480px',
+                    fontSize: '0.875rem',
+                  }}
+                >
+                  Police Control Room is actively connected. When any mobile sensor
+                  detects a crash or an incident is created via the API, it will appear
+                  here in real time with matched hospital counts and coordinates.
+                </p>
+                <button
+                  onClick={() => {
+                    localStorage.removeItem('rakshak_police_cleared');
+                    fetch(`${BACKEND_API_BASE}/incidents?limit=20`)
+                      .then((res) => res.json())
+                      .then((data) => {
+                        if (data.incidents && data.incidents.length > 0) {
+                          setIncidents(data.incidents);
+                          localStorage.setItem('rakshak_police_feed', JSON.stringify(data.incidents));
+                        }
+                      });
+                  }}
+                  style={{
+                    marginTop: '1rem',
+                    padding: '0.45rem 0.85rem',
+                    background: '#f8fafc',
+                    border: '1px solid #cbd5e1',
+                    borderRadius: '0.375rem',
+                    color: '#475569',
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Fetch Database Records
+                </button>
+              </div>
+            ) : (
+              <div>
+                {incidents.map((incident) => (
+                  <IncidentCard
+                    key={incident.id}
+                    incident={incident}
+                    viewMode="police"
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Empty state when only map is shown and incidents are 0 */}
+        {viewMode === 'map' && incidents.length === 0 && (
+          <div
+            style={{
+              marginTop: '1rem',
+              background: '#ffffff',
+              borderRadius: '0.5rem',
+              padding: '1.5rem',
+              textAlign: 'center',
+              border: '1px solid #e2e8f0',
+              color: '#64748b',
+              fontSize: '0.875rem',
+            }}
+          >
+            Tactical Radar scanning Bengaluru city perimeter (0 active emergency beacons). Listening on <code>all_incidents</code> socket room.
           </div>
         )}
       </div>
+
+      {/* Lightbox Modal for Photo Inspection */}
+      {lightboxImage && (
+        <div
+          onClick={() => setLightboxImage(null)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.85)',
+            backdropFilter: 'blur(6px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            padding: '1rem',
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              position: 'relative',
+              maxWidth: '850px',
+              maxHeight: '90vh',
+              background: '#0f172a',
+              borderRadius: '0.75rem',
+              overflow: 'hidden',
+              boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)',
+              border: '1px solid #334155',
+            }}
+          >
+            <button
+              onClick={() => setLightboxImage(null)}
+              style={{
+                position: 'absolute',
+                top: '12px',
+                right: '12px',
+                background: 'rgba(0,0,0,0.6)',
+                border: 'none',
+                color: '#ffffff',
+                borderRadius: '50%',
+                width: '32px',
+                height: '32px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                zIndex: 10,
+              }}
+            >
+              <X size={18} />
+            </button>
+            <img
+              src={lightboxImage}
+              alt="High-Res On-Scene Triage"
+              style={{
+                width: '100%',
+                maxHeight: '85vh',
+                objectFit: 'contain',
+                display: 'block',
+              }}
+            />
+            <div
+              style={{
+                padding: '10px 16px',
+                background: '#0f172a',
+                color: '#94a3b8',
+                fontSize: '12px',
+                textAlign: 'center',
+                borderTop: '1px solid #1e293b',
+              }}
+            >
+              🔒 Ephemeral On-Scene RAM Stream • Auto-purged after 15m TTL • Zero Persistent Storage
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

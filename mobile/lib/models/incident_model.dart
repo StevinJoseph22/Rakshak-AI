@@ -165,3 +165,58 @@ class IncidentResponse {
     };
   }
 }
+
+/// Nearby incident model returned from GET /incidents/nearby (Ambulance Console).
+class NearbyIncident {
+  final String id;
+  final String status;
+  final double latitude;
+  final double longitude;
+  final double distanceKm;
+  final double? roadDistanceKm;
+  final String? acceptedHospitalId;
+  final MatchedHospital? acceptedHospital;
+  final String? ambulanceId;
+  final String? imageUrl;
+  final Map<String, dynamic>? victimMetadata;
+  final DateTime? createdAt;
+
+  const NearbyIncident({
+    required this.id,
+    required this.status,
+    required this.latitude,
+    required this.longitude,
+    required this.distanceKm,
+    this.roadDistanceKm,
+    this.acceptedHospitalId,
+    this.acceptedHospital,
+    this.ambulanceId,
+    this.imageUrl,
+    this.victimMetadata,
+    this.createdAt,
+  });
+
+  factory NearbyIncident.fromJson(Map<String, dynamic> json) {
+    return NearbyIncident(
+      id: json['id'] as String? ?? '',
+      status: json['status'] as String? ?? 'broadcasting',
+      latitude: _parseDouble(json['latitude']),
+      longitude: _parseDouble(json['longitude']),
+      distanceKm: _parseDouble(json['distance_km']),
+      roadDistanceKm: json['road_distance_km'] != null ? _parseDouble(json['road_distance_km']) : null,
+      acceptedHospitalId: json['accepted_hospital_id'] as String?,
+      acceptedHospital: json['accepted_hospital'] != null && json['accepted_hospital'] is Map<String, dynamic>
+          ? MatchedHospital.fromJson(json['accepted_hospital'] as Map<String, dynamic>)
+          : null,
+      ambulanceId: json['ambulance_id'] as String?,
+      imageUrl: json['imageUrl'] as String?,
+      victimMetadata: json['victim_metadata'] is Map<String, dynamic>
+          ? json['victim_metadata'] as Map<String, dynamic>
+          : null,
+      createdAt: json['created_at'] != null
+          ? DateTime.tryParse(json['created_at'].toString())
+          : null,
+    );
+  }
+}
+

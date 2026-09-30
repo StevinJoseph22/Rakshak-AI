@@ -76,6 +76,57 @@ export function initSocketIO(httpServer: HttpServer): SocketIOServer {
       }
     });
 
+    // Phase 8: Live Ambulance GPS Telemetry Beacon
+    socket.on(
+      'ambulance_location',
+      async (data: {
+        incident_id: string;
+        ambulance_id: string;
+        latitude: number;
+        longitude: number;
+        speed_kmh?: number;
+        heading?: number;
+      }) => {
+        try {
+          if (
+            !data?.incident_id ||
+            !data?.ambulance_id ||
+            typeof data.latitude !== 'number' ||
+            typeof data.longitude !== 'number'
+          ) {
+            return;
+          }
+
+          const telemetry = {
+            incident_id: data.incident_id,
+            ambulance_id: data.ambulance_id,
+            latitude: data.latitude,
+            longitude: data.longitude,
+            speed_kmh: data.speed_kmh ?? 0,
+            heading: data.heading ?? 0,
+            timestamp: new Date().toISOString(),
+          };
+
+          try {
+            await redis.setex(
+              `ambulance_loc:${data.incident_id}`,
+              600,
+              JSON.stringify(telemetry)
+            );
+          } catch {
+            // ignore
+          }
+
+          if (io) {
+            io.to(`incident:${data.incident_id}`).emit('ambulance_location_update', telemetry);
+            io.to('all_incidents').emit('ambulance_location_update', telemetry);
+          }
+        } catch (err) {
+          console.warn('[Socket.io] Error handling ambulance_location:', err);
+        }
+      }
+    );
+
     // Phase 6: Zero-Storage Ephemeral Photo Stream Handler
     socket.on(
       'incident_image',
@@ -458,4 +509,69 @@ export function broadcastIncidentUnmatched(incidentId: string): void {
   io.to(`incident:${incidentId}`).emit('incident_unmatched', payload);
   console.log(`[Socket.io] Emitted incident_unmatched for incident ${incidentId}`);
 }
+
+/**
+ * Phase 8: Broadcast incident claimed by ambulance unit.
+ */
+/**
+ * Phase 8: Broadcast incident claimed by ambulance unit.
+ */
+export async function broadcastIncidentClaimed(incidentId: string, ambulanceId: string): Promise<void> {
+  if (!io) return;
+  const payload = {
+    incident_id: incidentId,
+    ambulance_id: ambulanceId,
+    claimed_at: new Date().toISOString(),
+  };
+  io.to(`incident:${incidentId}`).emit('incident_claimed', payload);
+  io.to('all_incidents').emit('incident_claimed', payload);
+
+  try {
+    const res = await query<{ accepted_hospital_id: string | null }>(
+      'SELECT accepted_hospital_id FROM incidents WHERE id = $1',
+      [incidentId]
+    );
+    if (res.rows[0]?.accepted_hospital_id) {
+      io.to(res.rows[0].accepted_hospital_id).emit('incident_claimed', payload);
+    }
+  } catch (err) {
+    console.error('[Socket.io] Error routing incident_claimed to accepted hospital:', err);
+  }
+
+  console.log(`[Socket.io] Broadcasted incident_claimed for ${incidentId} by ${ambulanceId}`);
+}
+
+/**
+ * Phase 8: Broadcast ambulance telemetry update.
+ */
+export async function broadcastAmbulanceLocation(telemetry: {
+  incident_id: string;
+  ambulance_id: string;
+  latitude: number;
+  longitude: number;
+  speed_kmh?: number;
+  heading?: number;
+  timestamp?: string;
+}): Promise<void> {
+  if (!io) return;
+  const payload = {
+    ...telemetry,
+    timestamp: telemetry.timestamp || new Date().toISOString(),
+  };
+  io.to(`incident:${telemetry.incident_id}`).emit('ambulance_location_update', payload);
+  io.to('all_incidents').emit('ambulance_location_update', payload);
+
+  try {
+    const res = await query<{ accepted_hospital_id: string | null }>(
+      'SELECT accepted_hospital_id FROM incidents WHERE id = $1',
+      [telemetry.incident_id]
+    );
+    if (res.rows[0]?.accepted_hospital_id) {
+      io.to(res.rows[0].accepted_hospital_id).emit('ambulance_location_update', payload);
+    }
+  } catch (err) {
+    console.error('[Socket.io] Error routing ambulance_location_update to accepted hospital:', err);
+  }
+}
+
 

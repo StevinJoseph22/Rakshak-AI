@@ -37,6 +37,15 @@ export interface IncidentPayload {
   status?: 'detected' | 'broadcasting' | 'accepted' | 'en_route' | 'resolved' | 'escalated' | 'unmatched';
   accepted_hospital_id?: string | null;
   accepted_hospital_name?: string;
+  accepted_hospital?: Hospital | null;
+  ambulance_id?: string | null;
+  ambulance_location?: {
+    latitude: number;
+    longitude: number;
+    speed_kmh?: number;
+    heading?: number;
+    timestamp?: string;
+  } | null;
   escalated?: boolean;
   case_locked?: boolean;
   rejections?: RejectionRecord[];

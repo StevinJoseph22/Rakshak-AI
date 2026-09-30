@@ -123,8 +123,104 @@ class ApiClient {
     );
   }
 
+  /// Fetches active incidents within radiusKm of given ambulance coordinates.
+  /// Matches Phase 8: GET /incidents/nearby?lat=&lng=&radius_km=
+  Future<ApiResult<List<NearbyIncident>>> fetchNearbyIncidents({
+    required double latitude,
+    required double longitude,
+    double radiusKm = 15.0,
+    Duration timeout = const Duration(seconds: 4),
+  }) async {
+    final candidates = <String>[
+      'http://127.0.0.1:5000',
+      'http://192.168.1.21:5000',
+      if (baseUrl != kDefaultBackendUrl) baseUrl,
+      'http://10.208.188.149:5000',
+      'http://172.22.61.163:5000',
+      'http://10.0.2.2:5000',
+      baseUrl,
+    ].toSet().toList();
+
+    String? lastError;
+    for (final candidateUrl in candidates) {
+      final uri = Uri.parse(
+        '$candidateUrl/incidents/nearby?lat=$latitude&lng=$longitude&radius_km=$radiusKm',
+      );
+      try {
+        final response = await _httpClient.get(
+          uri,
+          headers: {'Accept': 'application/json'},
+        ).timeout(timeout);
+
+        if (response.statusCode >= 200 && response.statusCode < 300) {
+          final decoded = jsonDecode(response.body) as Map<String, dynamic>;
+          final list = (decoded['incidents'] as List<dynamic>? ?? [])
+              .map((item) => NearbyIncident.fromJson(item as Map<String, dynamic>))
+              .toList();
+          return ApiResult.success(list, statusCode: response.statusCode);
+        } else {
+          return ApiResult.failure('Failed to fetch nearby incidents', statusCode: response.statusCode);
+        }
+      } catch (e) {
+        lastError = 'Error ($candidateUrl): $e';
+        continue;
+      }
+    }
+    return ApiResult.failure('Unable to reach backend: $lastError');
+  }
+
+  /// Claims an incident for the ambulance unit.
+  /// Matches Phase 8: POST /incidents/:id/claim
+  Future<ApiResult<bool>> claimIncident({
+    required String incidentId,
+    required String ambulanceId,
+    Duration timeout = const Duration(seconds: 4),
+  }) async {
+    final candidates = <String>[
+      'http://127.0.0.1:5000',
+      'http://192.168.1.21:5000',
+      if (baseUrl != kDefaultBackendUrl) baseUrl,
+      'http://10.208.188.149:5000',
+      'http://172.22.61.163:5000',
+      'http://10.0.2.2:5000',
+      baseUrl,
+    ].toSet().toList();
+
+    String? lastError;
+    for (final candidateUrl in candidates) {
+      final uri = Uri.parse('$candidateUrl/incidents/$incidentId/claim');
+      try {
+        final response = await _httpClient.post(
+          uri,
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+          body: jsonEncode({'ambulance_id': ambulanceId}),
+        ).timeout(timeout);
+
+        if (response.statusCode >= 200 && response.statusCode < 300) {
+          return const ApiResult.success(true);
+        } else if (response.statusCode == 409) {
+          final decoded = jsonDecode(response.body) as Map<String, dynamic>;
+          return ApiResult.failure(
+            decoded['message']?.toString() ?? 'Already claimed by another ambulance',
+            statusCode: 409,
+          );
+        } else {
+          return ApiResult.failure('Claim failed with status ${response.statusCode}');
+        }
+      } catch (e) {
+        lastError = 'Error ($candidateUrl): $e';
+        continue;
+      }
+    }
+    return ApiResult.failure('Unable to reach backend: $lastError');
+  }
+
   /// Closes client resources.
   void dispose() {
     _httpClient.close();
   }
 }
+

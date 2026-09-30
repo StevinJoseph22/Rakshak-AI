@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { IncidentPayload, Hospital } from '../types';
 import { BACKEND_API_BASE } from '../services/socket';
+import { IncidentRouteMap } from './IncidentRouteMap';
 
 const REJECTION_REASONS = [
   'No ICU capacity',
@@ -121,6 +122,11 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
     viewMode === 'hospital';
   const isEscalated = incident.status === 'escalated' || !!incident.escalated;
   const isUnmatched = incident.status === 'unmatched';
+  const acceptedHospital: Hospital | null =
+    incident.accepted_hospital ||
+    matchedHospitalsList.find((h) => h.id === incident.accepted_hospital_id) ||
+    (currentHospitalId ? matchedHospitalsList.find((h) => h.id === currentHospitalId) || null : null) ||
+    (matchedHospitalsList.length > 0 && isAccepted ? matchedHospitalsList[0] : null);
 
   const cardBorderLeft = isAccepted
     ? '5px solid #16a34a'
@@ -784,27 +790,39 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
       {viewMode === 'hospital' && (
         <div style={{ marginBottom: '1rem' }}>
           {isThisHospitalAccepted ? (
-            <div
-              style={{
-                background: '#dcfce7',
-                border: '1px solid #86efac',
-                borderRadius: '0.5rem',
-                padding: '0.75rem 1rem',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.75rem',
-                color: '#15803d',
-                fontWeight: 600,
-                fontSize: '0.875rem',
-              }}
-            >
-              <CheckCircle2 size={20} />
-              <div>
-                <div>EMERGENCY ACCEPTED BY YOUR FACILITY</div>
-                <div style={{ fontSize: '0.75rem', fontWeight: 400, color: '#166534' }}>
-                  Trauma bay alerted • Ambulance dispatched • Case locked across network
+            <div>
+              <div
+                style={{
+                  background: '#dcfce7',
+                  border: '1px solid #86efac',
+                  borderRadius: '0.5rem',
+                  padding: '0.75rem 1rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.75rem',
+                  color: '#15803d',
+                  fontWeight: 600,
+                  fontSize: '0.875rem',
+                }}
+              >
+                <CheckCircle2 size={20} />
+                <div>
+                  <div>EMERGENCY ACCEPTED BY YOUR FACILITY</div>
+                  <div style={{ fontSize: '0.75rem', fontWeight: 400, color: '#166534' }}>
+                    Trauma bay alerted • Ambulance dispatched • Case locked across network
+                  </div>
                 </div>
               </div>
+
+              {acceptedHospital && (
+                <IncidentRouteMap
+                  incidentId={incident.id}
+                  incidentLat={incident.latitude}
+                  incidentLng={incident.longitude}
+                  hospital={acceptedHospital}
+                  ambulanceLocation={incident.ambulance_location}
+                />
+              )}
             </div>
           ) : isLockedByOther ? (
             <div
@@ -931,27 +949,37 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
 
       {/* Police View Acceptance Banner */}
       {viewMode === 'police' && isAccepted && (
-        <div
-          style={{
-            background: '#dcfce7',
-            border: '1px solid #86efac',
-            borderRadius: '0.5rem',
-            padding: '0.65rem 0.85rem',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.6rem',
-            color: '#15803d',
-            fontSize: '0.8rem',
-            fontWeight: 600,
-            marginBottom: '0.85rem',
-          }}
-        >
-          <CheckCircle2 size={16} />
-          <span>
-            Accepted by:{' '}
-            <strong>{incident.accepted_hospital_name || 'Designated Trauma Center'}</strong>
-            {' • Ambulance en route'}
-          </span>
+        <div style={{ marginBottom: '0.85rem' }}>
+          <div
+            style={{
+              background: '#dcfce7',
+              border: '1px solid #86efac',
+              borderRadius: '0.5rem',
+              padding: '0.65rem 0.85rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.6rem',
+              color: '#15803d',
+              fontSize: '0.8rem',
+              fontWeight: 600,
+            }}
+          >
+            <CheckCircle2 size={16} />
+            <span>
+              Accepted by:{' '}
+              <strong>{incident.accepted_hospital_name || 'Designated Trauma Center'}</strong>
+              {' • Ambulance en route'}
+            </span>
+          </div>
+          {acceptedHospital && (
+            <IncidentRouteMap
+              incidentId={incident.id}
+              incidentLat={incident.latitude}
+              incidentLng={incident.longitude}
+              hospital={acceptedHospital}
+              ambulanceLocation={incident.ambulance_location}
+            />
+          )}
         </div>
       )}
 

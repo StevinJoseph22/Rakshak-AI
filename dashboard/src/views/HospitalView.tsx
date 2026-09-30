@@ -438,6 +438,78 @@ export const HospitalView: React.FC = () => {
       });
     };
 
+    const handleIncidentClaimed = (payload: {
+      incident_id: string;
+      ambulance_id: string;
+    }) => {
+      setIncidentsByHospital((prev) => {
+        let hasChanges = false;
+        const updated: Record<string, IncidentPayload[]> = {};
+
+        for (const [hId, list] of Object.entries(prev)) {
+          const idx = list.findIndex((item) => item.id === payload.incident_id);
+          if (idx !== -1) {
+            hasChanges = true;
+            const updatedList = [...list];
+            updatedList[idx] = {
+              ...updatedList[idx],
+              ambulance_id: payload.ambulance_id,
+            };
+            updated[hId] = updatedList;
+          } else {
+            updated[hId] = list;
+          }
+        }
+
+        if (!hasChanges) return prev;
+        try {
+          localStorage.setItem('rakshak_hospital_feed', JSON.stringify(updated));
+        } catch {
+          // ignore
+        }
+        return updated;
+      });
+    };
+
+    const handleAmbulanceLocationUpdate = (payload: {
+      incident_id: string;
+      ambulance_id: string;
+      latitude: number;
+      longitude: number;
+    }) => {
+      setIncidentsByHospital((prev) => {
+        let hasChanges = false;
+        const updated: Record<string, IncidentPayload[]> = {};
+
+        for (const [hId, list] of Object.entries(prev)) {
+          const idx = list.findIndex((item) => item.id === payload.incident_id);
+          if (idx !== -1) {
+            hasChanges = true;
+            const updatedList = [...list];
+            updatedList[idx] = {
+              ...updatedList[idx],
+              ambulance_id: payload.ambulance_id,
+              ambulance_location: {
+                latitude: payload.latitude,
+                longitude: payload.longitude,
+              },
+            };
+            updated[hId] = updatedList;
+          } else {
+            updated[hId] = list;
+          }
+        }
+
+        if (!hasChanges) return prev;
+        try {
+          localStorage.setItem('rakshak_hospital_feed', JSON.stringify(updated));
+        } catch {
+          // ignore
+        }
+        return updated;
+      });
+    };
+
     socket.on('connect', handleConnect);
     socket.on('disconnect', handleDisconnect);
     socket.on('connect_error', handleConnectError);
@@ -450,6 +522,8 @@ export const HospitalView: React.FC = () => {
     socket.on('incident_escalated', handleIncidentEscalated);
     socket.on('incident_unmatched', handleIncidentUnmatched);
     socket.on('hospital_rejected', handleHospitalRejected);
+    socket.on('incident_claimed', handleIncidentClaimed);
+    socket.on('ambulance_location_update', handleAmbulanceLocationUpdate);
 
     return () => {
       socket.off('connect', handleConnect);
@@ -464,6 +538,8 @@ export const HospitalView: React.FC = () => {
       socket.off('incident_escalated', handleIncidentEscalated);
       socket.off('incident_unmatched', handleIncidentUnmatched);
       socket.off('hospital_rejected', handleHospitalRejected);
+      socket.off('incident_claimed', handleIncidentClaimed);
+      socket.off('ambulance_location_update', handleAmbulanceLocationUpdate);
     };
   }, [selectedHospitalId, playAlertChime]);
 
