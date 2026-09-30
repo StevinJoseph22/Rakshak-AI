@@ -1,0 +1,27 @@
+RAKSHAK-AI PHASE 11: TFLITE MODEL EVALUATION REPORT
+==================================================
+NOTE ON VALIDATION DATA:
+All test windows are synthetically generated to model the kinematic
+specifications of vehicle collisions, road vibrations, and normal driving.
+Validated against held-out synthetic distribution, NOT real crash telemetry.
+
+Test Accuracy: 100.00%
+Test Loss: 0.0000
+
+Classification Report:
+              precision    recall  f1-score   support
+
+      normal     1.0000    1.0000    1.0000       400
+     pothole     1.0000    1.0000    1.0000       400
+       crash     1.0000    1.0000    1.0000       400
+
+    accuracy                         1.0000      1200
+   macro avg     1.0000    1.0000    1.0000      1200
+weighted avg     1.0000    1.0000    1.0000      1200
+
+
+Confusion Matrix:
+               normal    pothole      crash
+    normal        400          0          0
+   pothole          0        400          0
+     crash          0          0        400

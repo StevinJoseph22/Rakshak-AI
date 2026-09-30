@@ -19,6 +19,7 @@ dependencies:
   latlong2: ^0.10.1
   shared_preferences: ^2.5.5
   url_launcher: ^6.3.2
+  tflite_flutter: ^0.12.1
 
 dev_dependencies:
   flutter_test:
@@ -30,3 +31,5 @@ dependency_overrides:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/models/crash_classifier.tflite

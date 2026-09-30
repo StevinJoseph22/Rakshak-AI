@@ -104,6 +104,7 @@ class CrashDetectorService {
     _isMonitoring = true;
     _clearBuffers();
     _initGps();
+    TfLiteClassifierStub.initialize().catchError((_) => false);
   }
 
   /// Stops monitoring and cancels GPS listeners.
@@ -316,6 +317,10 @@ class CrashDetectorService {
           speedDelta >= impactSpeedDropThresholdKmh ||
           (preImpactSpeedKmh >= impactSpeedDropThresholdKmh && _currentSpeedKmh <= 5.0);
 
+      // Run through TFLite model as secondary classification signal
+      final accelWindow = _accelHistory.map((s) => s.netG).toList();
+      final classification = _tfliteStub.classify(accelWindow, _gyroMagnitudes);
+
       if (speedDroppedTowardZero) {
         _lastCrashTriggeredTime = now;
 
@@ -329,7 +334,17 @@ class CrashDetectorService {
         );
 
         debugPrint('CRASH DETECTED by Sensor Rule Engine: $event');
+        debugPrint(
+          'Rule-based: CRASH | TFLite: ${classification.label} '
+          '(${classification.confidence.toStringAsFixed(2)} confidence)',
+        );
         CrashEventService.instance.publish(event);
+      } else {
+        // High G spike but no speed drop (e.g. phone drop inside moving vehicle)
+        debugPrint(
+          'Suppressed: High G (${currentSample.netG.toStringAsFixed(1)}G) without speed drop | '
+          'TFLite: ${classification.label} (${classification.confidence.toStringAsFixed(2)} confidence)',
+        );
       }
     }
   }
