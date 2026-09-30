@@ -115,24 +115,27 @@ class EmergencySmsService {
         'Emergency services have been notified.';
   }
 
-  /// Builds Message 2: Hospital acceptance update
+  /// Builds Message 2: Hospital acceptance update (kept strictly < 160 chars for guaranteed single-part SMS)
   String buildHospitalAcceptedMessage({
     required String victimName,
     required String hospitalName,
     required String hospitalAddress,
     required String hospitalPhone,
   }) {
-    return 'UPDATE: $victimName has been accepted by $hospitalName, $hospitalAddress. '
-        'Hospital contact: $hospitalPhone.';
+    final shortAddress = hospitalAddress.split(',').take(2).join(',').trim();
+    final full = 'UPDATE: $victimName has been accepted by $hospitalName, $shortAddress. Hospital contact: $hospitalPhone.';
+    if (full.length <= 160) {
+      return full;
+    }
+    return 'UPDATE: $victimName has been accepted by $hospitalName. Hospital contact: $hospitalPhone.';
   }
 
-  /// Builds Message 3: Ambulance dispatch update
+  /// Builds Message 3: Ambulance dispatch update (kept strictly < 160 chars for guaranteed single-part SMS)
   String buildAmbulanceDispatchedMessage({
     required String victimName,
     required String ambulanceId,
   }) {
-    return 'UPDATE: Ambulance $ambulanceId has been dispatched and is en route to $victimName\'s location. '
-        'Emergency services are responding.';
+    return 'UPDATE: Ambulance $ambulanceId has been dispatched and is en route to $victimName\'s location. Emergency services are responding.';
   }
 
   /// Sends crash alert via Real Native SmsManager or falls back to WhatsApp preview

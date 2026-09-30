@@ -130,6 +130,7 @@ class MainActivity : FlutterActivity() {
                             return@setMethodCallHandler
                         }
 
+                        android.util.Log.i("RakshakSms", "Attempting SMS to $phone (length ${message.length}): $message")
                         val smsManager: SmsManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                             getSystemService(SmsManager::class.java) ?: SmsManager.getDefault()
                         } else {
@@ -138,12 +139,23 @@ class MainActivity : FlutterActivity() {
 
                         val parts = smsManager.divideMessage(message)
                         if (parts.size > 1) {
-                            smsManager.sendMultipartTextMessage(phone, null, parts, null, null)
+                            android.util.Log.i("RakshakSms", "Sending multipart SMS (${parts.size} parts) to $phone")
+                            try {
+                                smsManager.sendMultipartTextMessage(phone, null, parts, null, null)
+                            } catch (e: Exception) {
+                                android.util.Log.w("RakshakSms", "sendMultipartTextMessage failed, falling back to sequential sendTextMessage: ${e.message}")
+                                for (part in parts) {
+                                    smsManager.sendTextMessage(phone, null, part, null, null)
+                                }
+                            }
                         } else {
+                            android.util.Log.i("RakshakSms", "Sending single SMS to $phone")
                             smsManager.sendTextMessage(phone, null, message, null, null)
                         }
+                        android.util.Log.i("RakshakSms", "SMS dispatch call completed successfully for $phone")
                         result.success(true)
                     } catch (e: Exception) {
+                        android.util.Log.e("RakshakSms", "SMS dispatch error: ${e.message}", e)
                         result.error("SMS_SEND_FAILED", e.message ?: "Failed to send SMS via SIM", null)
                     }
                 }

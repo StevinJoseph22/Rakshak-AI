@@ -1,7 +1,11 @@
+import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
+import 'package:http/http.dart' as http;
 import 'package:socket_io_client/socket_io_client.dart' as io;
 import 'api_client.dart';
+import 'crash_event_service.dart';
 import 'emergency_sms_service.dart';
 
 enum TriageState {
@@ -71,6 +75,7 @@ class IncidentTrackingService {
 
   io.Socket? _socket;
   String? _trackedIncidentId;
+  Timer? _pollingTimer;
 
   final ValueNotifier<TriageStatus> statusNotifier =
       ValueNotifier<TriageStatus>(const TriageStatus());
@@ -98,6 +103,9 @@ class IncidentTrackingService {
       return;
     }
 
+    // Start dual-channel HTTP polling heartbeat alongside WebSocket
+    _startPollingFallback(incidentId);
+
     if (_socket != null && _socket!.connected) {
       debugPrint('[IncidentTrackingService] Socket already connected, emitting join_incident:$incidentId');
       _socket!.emit('join_incident', incidentId);
@@ -120,7 +128,7 @@ class IncidentTrackingService {
       final socket = io.io(
         workingUrl,
         io.OptionBuilder()
-            .setTransports(['websocket'])
+            .setTransports(['websocket', 'polling'])
             .enableAutoConnect()
             .setReconnectionAttempts(10)
             .setReconnectionDelay(1000)
@@ -238,13 +246,95 @@ class IncidentTrackingService {
         }
       });
 
+      socket.on('feed_cleared', (_) {
+        debugPrint('[IncidentTrackingService] feed_cleared received: resetting demo state and SMS alert history');
+        EmergencySmsService.instance.resetAlertHistory();
+        CrashEventService.instance.beginNewIncidentDispatch();
+        leaveIncident();
+      });
+
       _socket = socket;
+      socket.connect();
     } catch (err) {
       debugPrint('[IncidentTrackingService] Error attempting connection: $err');
     }
   }
 
+  void _startPollingFallback(String incidentId) {
+    _pollingTimer?.cancel();
+    _pollingTimer = Timer.periodic(const Duration(seconds: 2), (timer) async {
+      if (_trackedIncidentId != incidentId) {
+        timer.cancel();
+        return;
+      }
+
+      try {
+        final workingUrl = await resolveReachableBackendUrl();
+        final uri = Uri.parse('$workingUrl/incidents/$incidentId');
+        final response = await http.get(uri).timeout(const Duration(seconds: 3));
+
+        if (response.statusCode == 200) {
+          final body = json.decode(response.body);
+          final inc = body['incident'] as Map<String, dynamic>?;
+          if (inc == null) return;
+
+          final status = inc['status']?.toString();
+          final acceptedHosp = inc['accepted_hospital'] as Map<String, dynamic>?;
+          final ambulanceId = inc['ambulance_id']?.toString();
+
+          // 1. Process hospital acceptance
+          if (status == 'accepted' && acceptedHosp != null) {
+            final hospName = acceptedHosp['name']?.toString() ?? 'Trauma Center';
+            final hospAddress = acceptedHosp['address']?.toString() ?? 'Emergency Bay';
+            final hospPhone = acceptedHosp['phone']?.toString() ?? '108';
+
+            if (statusNotifier.value.state != TriageState.accepted ||
+                statusNotifier.value.hospitalName != hospName) {
+              debugPrint('[IncidentTrackingService][PollingFallback] Incident accepted by $hospName');
+              statusNotifier.value = TriageStatus(
+                state: TriageState.accepted,
+                incidentId: incidentId,
+                hospitalName: hospName,
+                hospitalAddress: hospAddress,
+                hospitalPhone: hospPhone,
+                hospitalLat: (acceptedHosp['latitude'] as num?)?.toDouble(),
+                hospitalLng: (acceptedHosp['longitude'] as num?)?.toDouble(),
+                message: 'Emergency accepted by $hospName. Trauma bay ready.',
+              );
+            }
+
+            EmergencySmsService.instance.sendHospitalAcceptedAlert(
+              incidentId: incidentId,
+              hospitalName: hospName,
+              hospitalAddress: hospAddress,
+              hospitalPhone: hospPhone,
+            );
+          }
+
+          // 2. Process ambulance claiming
+          if (ambulanceId != null && ambulanceId.isNotEmpty) {
+            if (!statusNotifier.value.message.toString().contains(ambulanceId)) {
+              debugPrint('[IncidentTrackingService][PollingFallback] Ambulance $ambulanceId dispatched');
+              statusNotifier.value = statusNotifier.value.copyWith(
+                message: 'Ambulance $ambulanceId is dispatched and en route.',
+              );
+            }
+
+            EmergencySmsService.instance.sendAmbulanceDispatchedAlert(
+              incidentId: incidentId,
+              ambulanceId: ambulanceId,
+            );
+          }
+        }
+      } catch (e) {
+        debugPrint('[IncidentTrackingService][PollingFallback] Polling check notice: $e');
+      }
+    });
+  }
+
   void leaveIncident() {
+    _pollingTimer?.cancel();
+    _pollingTimer = null;
     try {
       _socket?.disconnect();
       _socket?.destroy();

@@ -224,6 +224,9 @@ class _CrashDetectionScreenState extends State<CrashDetectionScreen> {
   }
 
   void _triggerSimulatedCrash() {
+    EmergencySmsService.instance.resetAlertHistory();
+    CrashEventService.instance.beginNewIncidentDispatch();
+
     double lat = 12.9716;
     double lng = 77.5946;
 

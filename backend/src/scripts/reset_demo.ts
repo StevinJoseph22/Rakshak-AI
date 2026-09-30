@@ -41,21 +41,34 @@ async function resetDemoState() {
     }
 
     // 3. Verify clean hospital network
-    console.log('[3/3] Verifying trauma hospital capacity...');
+    console.log('[3/4] Verifying trauma hospital capacity...');
     const hospRes = await pool.query('SELECT COUNT(*) as count FROM hospitals WHERE has_trauma_center = true;');
     console.log(`  -> Trauma centers online & ready: ${hospRes.rows[0].count}`);
+
+    // 4. Signal live backend to broadcast 'feed_cleared' so mobile apps and dashboards clear UI & dedup history
+    console.log('[4/4] Broadcasting feed_cleared signal to live mobile apps and dashboards...');
+    try {
+      const res = await fetch('http://127.0.0.1:5000/incidents', {
+        method: 'DELETE',
+        signal: AbortSignal.timeout(1500),
+      });
+      if (res.ok) {
+        console.log('  -> Live backend notified: feed_cleared broadcast to mobile & dashboards.');
+      }
+    } catch {
+      console.log('  -> Note: Standalone server process not reachable via HTTP; database & Redis cleared directly.');
+    }
 
     console.log('\nDEMO STATE RESET COMPLETE: System is 100% clean and ready for judges.\n');
   } catch (error) {
     console.error('Reset demo state encountered error:', error);
   } finally {
     try {
-      redis.disconnect();
+      await redis.quit();
     } catch {
       // ignore
     }
     await closePool();
-    process.exit(0);
   }
 }
 

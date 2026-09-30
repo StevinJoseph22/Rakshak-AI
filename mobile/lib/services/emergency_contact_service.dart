@@ -48,10 +48,6 @@ class EmergencyContactService {
 
   /// Loads emergency contacts from SharedPreferences (or seeds defaults on first run)
   Future<List<EmergencyContact>> getContacts() async {
-    if (_cachedContacts != null) {
-      return List.unmodifiable(_cachedContacts!);
-    }
-
     try {
       final prefs = await SharedPreferences.getInstance();
       final rawJson = prefs.getString(_keyContacts);
@@ -63,14 +59,13 @@ class EmergencyContactService {
       } else {
         // First run: seed demo contacts
         _cachedContacts = List.from(defaultDemoContacts);
-        await saveContacts(_cachedContacts!);
+        await saveContacts(_cachedContacts);
       }
     } catch (e) {
       debugPrint('[EmergencyContactService] Error reading contacts: $e');
-      _cachedContacts = List.from(defaultDemoContacts);
     }
 
-    return List.unmodifiable(_cachedContacts!);
+    return List.unmodifiable(_cachedContacts);
   }
 
   /// Saves contacts list to SharedPreferences
@@ -102,17 +97,16 @@ class EmergencyContactService {
 
   /// Gets the registered device owner/victim's name
   Future<String> getVictimName() async {
-    if (_cachedVictimName != null) {
-      return _cachedVictimName!;
-    }
     try {
       final prefs = await SharedPreferences.getInstance();
       final name = prefs.getString(_keyVictimName);
-      _cachedVictimName = (name != null && name.trim().isNotEmpty) ? name.trim() : defaultDemoVictimName;
+      if (name != null && name.trim().isNotEmpty) {
+        _cachedVictimName = name.trim();
+      }
     } catch (e) {
-      _cachedVictimName = defaultDemoVictimName;
+      debugPrint('[EmergencyContactService] Error reading victim name: $e');
     }
-    return _cachedVictimName!;
+    return _cachedVictimName;
   }
 
   /// Updates the registered device owner/victim's name
@@ -120,7 +114,7 @@ class EmergencyContactService {
     _cachedVictimName = name.trim();
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_keyVictimName, _cachedVictimName!);
+      await prefs.setString(_keyVictimName, _cachedVictimName);
     } catch (e) {
       debugPrint('[EmergencyContactService] Error saving victim name: $e');
     }
