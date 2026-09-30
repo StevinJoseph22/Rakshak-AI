@@ -80,6 +80,7 @@ class _LockedScreenAlertScreenState extends State<LockedScreenAlertScreen>
   void _broadcastIncident() {
     // Reset previous incident ID to prevent race conditions or stale photo streaming
     CrashEventService.instance.beginNewIncidentDispatch();
+    EmergencySmsService.instance.resetAlertHistory();
 
     final lat = widget.crashEvent?.latitude ?? CrashDetectorService.instance.lastKnownLatitude;
     final lng = widget.crashEvent?.longitude ?? CrashDetectorService.instance.lastKnownLongitude;

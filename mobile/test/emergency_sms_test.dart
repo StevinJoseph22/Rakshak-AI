@@ -36,6 +36,17 @@ void main() {
       expect(msg.contains('Hospital contact: +91-80-26304050.'), isTrue);
     });
 
+    test('Ambulance dispatched message formatting contains ambulance ID and victim name', () {
+      final service = EmergencySmsService.instance;
+      final msg = service.buildAmbulanceDispatchedMessage(
+        victimName: 'Rahul Verma',
+        ambulanceId: 'BLR-01',
+      );
+
+      expect(msg.contains('UPDATE: Ambulance BLR-01 has been dispatched and is en route to Rahul Verma\'s location.'), isTrue);
+      expect(msg.contains('Emergency services are responding.'), isTrue);
+    });
+
     test('Phone number cleaning handles 10-digit, plus signs, and spaces for WhatsApp', () {
       final service = EmergencySmsService.instance;
       expect(service.cleanPhoneNumberForWhatsApp('9876543210'), '919876543210');
@@ -45,6 +56,7 @@ void main() {
 
     test('sendCrashAlert executes in test environment without throwing and returns dispatch result', () async {
       final service = EmergencySmsService.instance;
+      service.resetAlertHistory();
       final result = await service.sendCrashAlert(lat: 12.9716, lng: 77.5946);
 
       expect(result.success, isTrue);
@@ -54,6 +66,7 @@ void main() {
 
     test('sendHospitalAcceptedAlert executes in test environment without throwing', () async {
       final service = EmergencySmsService.instance;
+      service.resetAlertHistory();
       final result = await service.sendHospitalAcceptedAlert(
         hospitalName: 'Manipal Emergency Care',
         hospitalAddress: 'HAL Old Airport Rd',
@@ -63,6 +76,25 @@ void main() {
       expect(result.success, isTrue);
       expect(result.totalContacts, greaterThanOrEqualTo(1));
       expect(result.messageBody.contains('UPDATE:'), isTrue);
+    });
+
+    test('sendAmbulanceDispatchedAlert executes and deduplication skips second send', () async {
+      final service = EmergencySmsService.instance;
+      service.resetAlertHistory();
+      final result1 = await service.sendAmbulanceDispatchedAlert(
+        incidentId: 'test-inc-1',
+        ambulanceId: 'BLR-01',
+      );
+      expect(result1.success, isTrue);
+      expect(result1.messageBody.contains('BLR-01'), isTrue);
+
+      // Calling again with same ambulance ID is skipped as duplicate
+      final result2 = await service.sendAmbulanceDispatchedAlert(
+        incidentId: 'test-inc-1',
+        ambulanceId: 'BLR-01',
+      );
+      expect(result2.success, isTrue);
+      expect(result2.successfulSends, 0);
     });
   });
 }

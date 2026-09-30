@@ -5,7 +5,7 @@ import 'package:http/http.dart' as http;
 import '../config/backend_config.dart';
 import '../models/incident_model.dart';
 
-export '../config/backend_config.dart' show kDefaultBackendUrl, getBackendCandidates, kDemoWorkstationIp;
+export '../config/backend_config.dart' show kDefaultBackendUrl, getBackendCandidates, kDemoWorkstationIp, resolveReachableBackendUrl, gActiveBackendUrl;
 
 /// Generic result wrapper for API calls that never crashes on network failure.
 class ApiResult<T> {
@@ -33,6 +33,10 @@ class ApiResult<T> {
 /// HTTP API Client for Rakshak-AI backend.
 /// Default baseUrl uses 10.0.2.2 (Android Emulator host loopback) or BACKEND_URL define.
 class ApiClient {
+  /// Stores the most recent verified responsive backend URL across network candidates
+  static String? get activeBackendUrl => gActiveBackendUrl;
+  static set activeBackendUrl(String? val) => gActiveBackendUrl = val;
+
   final String baseUrl;
   final http.Client _httpClient;
 
@@ -77,6 +81,7 @@ class ApiClient {
         final decoded = jsonDecode(response.body) as Map<String, dynamic>;
 
         if (response.statusCode >= 200 && response.statusCode < 300) {
+          activeBackendUrl = candidateUrl;
           final incidentResponse = IncidentResponse.fromJson(decoded);
           return ApiResult.success(incidentResponse, statusCode: response.statusCode);
         } else {
@@ -125,6 +130,7 @@ class ApiClient {
         ).timeout(timeout);
 
         if (response.statusCode >= 200 && response.statusCode < 300) {
+          activeBackendUrl = candidateUrl;
           final decoded = jsonDecode(response.body) as Map<String, dynamic>;
           final list = (decoded['incidents'] as List<dynamic>? ?? [])
               .map((item) => NearbyIncident.fromJson(item as Map<String, dynamic>))
@@ -163,6 +169,7 @@ class ApiClient {
         ).timeout(timeout);
 
         if (response.statusCode >= 200 && response.statusCode < 300) {
+          activeBackendUrl = candidateUrl;
           return const ApiResult.success(true);
         } else if (response.statusCode == 409) {
           final decoded = jsonDecode(response.body) as Map<String, dynamic>;

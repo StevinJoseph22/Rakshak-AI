@@ -54,6 +54,25 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
     String relationship = existing?.relationship ?? 'Family';
     bool isPrimary = existing?.isPrimary ?? (_contacts.isEmpty);
 
+    const relationshipOptions = [
+      'Family',
+      'Parent',
+      'Father',
+      'Mother',
+      'Spouse',
+      'Sibling',
+      'Sister',
+      'Brother',
+      'Child',
+      'Friend',
+      'Guardian',
+      'Other',
+    ];
+
+    if (!relationshipOptions.contains(relationship)) {
+      relationship = 'Family';
+    }
+
     final formKey = GlobalKey<FormState>();
 
     await showDialog(
@@ -95,12 +114,12 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
-                    value: relationship,
+                    value: relationshipOptions.contains(relationship) ? relationship : 'Family',
                     decoration: const InputDecoration(
                       labelText: 'Relationship',
                       prefixIcon: Icon(Icons.group),
                     ),
-                    items: ['Family', 'Parent', 'Spouse', 'Sibling', 'Friend', 'Guardian', 'Other']
+                    items: relationshipOptions
                         .map((rel) => DropdownMenuItem(value: rel, child: Text(rel)))
                         .toList(),
                     onChanged: (val) {
@@ -362,11 +381,17 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
                             ),
                             title: Row(
                               children: [
-                                Text(contact.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                                Flexible(
+                                  child: Text(
+                                    contact.name,
+                                    style: const TextStyle(fontWeight: FontWeight.bold),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
                                 if (contact.isPrimary) ...[
                                   const SizedBox(width: 6),
                                   Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
                                     decoration: BoxDecoration(
                                       color: Colors.red.shade50,
                                       borderRadius: BorderRadius.circular(4),
@@ -375,7 +400,7 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
                                     child: Text(
                                       'PRIMARY',
                                       style: TextStyle(
-                                        fontSize: 9,
+                                        fontSize: 8.5,
                                         fontWeight: FontWeight.w800,
                                         color: Colors.red.shade800,
                                       ),
@@ -384,16 +409,26 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
                                 ],
                               ],
                             ),
-                            subtitle: Text('${contact.relationship} • ${contact.phone}'),
+                            subtitle: Text(
+                              '${contact.relationship} • ${contact.phone}',
+                              overflow: TextOverflow.ellipsis,
+                            ),
                             trailing: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 IconButton(
-                                  icon: const Icon(Icons.edit, size: 20),
+                                  icon: const Icon(Icons.edit, size: 19),
+                                  visualDensity: VisualDensity.compact,
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
                                   onPressed: () => _addOrEditContact(existing: contact),
                                 ),
+                                const SizedBox(width: 8),
                                 IconButton(
-                                  icon: const Icon(Icons.delete_outline, size: 20, color: Colors.redAccent),
+                                  icon: const Icon(Icons.delete_outline, size: 19, color: Colors.redAccent),
+                                  visualDensity: VisualDensity.compact,
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
                                   onPressed: () => _deleteContact(contact.id),
                                 ),
                               ],

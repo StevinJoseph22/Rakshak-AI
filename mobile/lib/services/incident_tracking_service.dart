@@ -99,112 +99,148 @@ class IncidentTrackingService {
     }
 
     if (_socket != null && _socket!.connected) {
+      debugPrint('[IncidentTrackingService] Socket already connected, emitting join_incident:$incidentId');
+      _socket!.emit('join_incident', incidentId);
       return;
     }
 
     final candidates = candidateUrls ?? getBackendCandidates();
-
     _connectToSocket(incidentId, candidates);
   }
 
-  void _connectToSocket(String incidentId, List<String> candidates) {
+  Future<void> _connectToSocket(String incidentId, List<String> candidates) async {
     _socket?.disconnect();
     _socket?.dispose();
     _socket = null;
 
-    for (final url in candidates) {
-      try {
-        final socket = io.io(
-          url,
-          io.OptionBuilder()
-              .setTransports(['websocket'])
-              .enableAutoConnect()
-              .setReconnectionAttempts(5)
-              .build(),
-        );
+    final workingUrl = await resolveReachableBackendUrl();
+    debugPrint('[IncidentTrackingService] Connecting socket to $workingUrl for incident:$incidentId');
 
-        socket.onConnect((_) {
-          debugPrint('[IncidentTrackingService] Connected to $url, joining incident:$incidentId');
-          statusNotifier.value = statusNotifier.value.copyWith(isConnected: true);
-          socket.emit('join_incident', incidentId);
-        });
+    try {
+      final socket = io.io(
+        workingUrl,
+        io.OptionBuilder()
+            .setTransports(['websocket'])
+            .enableAutoConnect()
+            .setReconnectionAttempts(10)
+            .setReconnectionDelay(1000)
+            .build(),
+      );
 
-        socket.onDisconnect((_) {
-          debugPrint('[IncidentTrackingService] Disconnected from socket');
-          statusNotifier.value = statusNotifier.value.copyWith(isConnected: false);
-        });
+      socket.onConnect((_) {
+        debugPrint('[IncidentTrackingService] Connected to $workingUrl, joining incident:$incidentId');
+        statusNotifier.value = statusNotifier.value.copyWith(isConnected: true);
+        if (_trackedIncidentId != null) {
+          socket.emit('join_incident', _trackedIncidentId);
+        }
+      });
 
-        socket.onConnectError((err) {
-          debugPrint('[IncidentTrackingService] Connection error: $err');
-          statusNotifier.value = statusNotifier.value.copyWith(isConnected: false);
-        });
+      socket.on('reconnect', (_) {
+        debugPrint('[IncidentTrackingService] Reconnected to $workingUrl, rejoining incident:$_trackedIncidentId');
+        statusNotifier.value = statusNotifier.value.copyWith(isConnected: true);
+        if (_trackedIncidentId != null) {
+          socket.emit('join_incident', _trackedIncidentId);
+        }
+      });
 
-        socket.on('case_accepted', (data) {
-          debugPrint('[IncidentTrackingService] case_accepted received: $data');
-          if (data is Map) {
-            final incId = data['incident_id']?.toString();
-            if (incId == null || incId == _trackedIncidentId) {
-              final hosp = data['hospital'] as Map?;
-              final hospName = hosp?['name']?.toString() ?? 'Trauma Center';
-              final hospAddress = hosp?['address']?.toString() ?? 'Emergency Bay';
-              final hospPhone = hosp?['phone']?.toString() ?? '108';
+      socket.onDisconnect((_) {
+        debugPrint('[IncidentTrackingService] Disconnected from socket');
+        statusNotifier.value = statusNotifier.value.copyWith(isConnected: false);
+      });
 
-              statusNotifier.value = TriageStatus(
-                state: TriageState.accepted,
-                incidentId: _trackedIncidentId,
-                hospitalName: hospName,
-                hospitalAddress: hospAddress,
-                hospitalPhone: hospPhone,
-                hospitalLat: (hosp?['latitude'] as num?)?.toDouble(),
-                hospitalLng: (hosp?['longitude'] as num?)?.toDouble(),
-                message: 'Emergency accepted by trauma center. Ambulance dispatched.',
-              );
+      socket.onConnectError((err) {
+        debugPrint('[IncidentTrackingService] Connection error: $err');
+        statusNotifier.value = statusNotifier.value.copyWith(isConnected: false);
+      });
 
-              // Privacy note: Emergency contact data is stored locally on-device and only sent
-              // alongside an actual confirmed incident dispatch via victim_metadata.
-              // Dispatch follow-up update SMS: "UPDATE: [victim] has been accepted by [hospital]..."
-              EmergencySmsService.instance.sendHospitalAcceptedAlert(
-                hospitalName: hospName,
-                hospitalAddress: hospAddress,
-                hospitalPhone: hospPhone,
-              );
-            }
+      socket.on('case_accepted', (data) {
+        debugPrint('[IncidentTrackingService] case_accepted received: $data');
+        if (data is Map) {
+          final incId = data['incident_id']?.toString().toLowerCase().trim();
+          final trackedId = _trackedIncidentId?.toLowerCase().trim();
+          if (incId == null || trackedId == null || incId == trackedId) {
+            final hosp = data['hospital'] as Map?;
+            final hospName = hosp?['name']?.toString() ?? 'Trauma Center';
+            final hospAddress = hosp?['address']?.toString() ?? 'Emergency Bay';
+            final hospPhone = hosp?['phone']?.toString() ?? '108';
+
+            statusNotifier.value = TriageStatus(
+              state: TriageState.accepted,
+              incidentId: _trackedIncidentId ?? incId,
+              hospitalName: hospName,
+              hospitalAddress: hospAddress,
+              hospitalPhone: hospPhone,
+              hospitalLat: (hosp?['latitude'] as num?)?.toDouble(),
+              hospitalLng: (hosp?['longitude'] as num?)?.toDouble(),
+              message: 'Emergency accepted by $hospName. Trauma bay ready.',
+            );
+
+            // Privacy note: Emergency contact data is stored locally on-device and only sent
+            // alongside an actual confirmed incident dispatch via victim_metadata.
+            // Dispatch follow-up update SMS: "UPDATE: [victim] has been accepted by [hospital]..."
+            EmergencySmsService.instance.sendHospitalAcceptedAlert(
+              incidentId: _trackedIncidentId ?? incId,
+              hospitalName: hospName,
+              hospitalAddress: hospAddress,
+              hospitalPhone: hospPhone,
+            );
           }
-        });
+        }
+      });
 
-        socket.on('incident_escalated', (data) {
-          debugPrint('[IncidentTrackingService] incident_escalated received: $data');
-          if (data is Map) {
-            final incId = data['incident_id']?.toString();
-            if (incId == null || incId == _trackedIncidentId) {
-              final radius = data['search_radius']?.toString() ?? '20km';
-              statusNotifier.value = statusNotifier.value.copyWith(
-                state: TriageState.escalated,
-                searchRadius: radius,
-                message: 'Searching wider trauma network ($radius)...',
-              );
-            }
+      socket.on('incident_claimed', (data) {
+        debugPrint('[IncidentTrackingService] incident_claimed received: $data');
+        if (data is Map) {
+          final incId = data['incident_id']?.toString().toLowerCase().trim();
+          final trackedId = _trackedIncidentId?.toLowerCase().trim();
+          final ambId = data['ambulance_id']?.toString() ?? '108 Unit';
+          if (incId == null || trackedId == null || incId == trackedId) {
+            statusNotifier.value = statusNotifier.value.copyWith(
+              message: 'Ambulance $ambId is dispatched and en route.',
+            );
+
+            // Dispatch follow-up update SMS: "UPDATE: Ambulance [ambId] has been dispatched..."
+            EmergencySmsService.instance.sendAmbulanceDispatchedAlert(
+              incidentId: _trackedIncidentId ?? incId,
+              ambulanceId: ambId,
+            );
           }
-        });
+        }
+      });
 
-        socket.on('incident_unmatched', (data) {
-          debugPrint('[IncidentTrackingService] incident_unmatched received: $data');
-          if (data is Map) {
-            final incId = data['incident_id']?.toString();
-            if (incId == null || incId == _trackedIncidentId) {
-              statusNotifier.value = statusNotifier.value.copyWith(
-                state: TriageState.unmatched,
-                message: 'No immediate trauma centers available. Central emergency dispatch notified.',
-              );
-            }
+      socket.on('incident_escalated', (data) {
+        debugPrint('[IncidentTrackingService] incident_escalated received: $data');
+        if (data is Map) {
+          final incId = data['incident_id']?.toString().toLowerCase().trim();
+          final trackedId = _trackedIncidentId?.toLowerCase().trim();
+          if (incId == null || trackedId == null || incId == trackedId) {
+            final radius = data['search_radius']?.toString() ?? '20km';
+            statusNotifier.value = statusNotifier.value.copyWith(
+              state: TriageState.escalated,
+              searchRadius: radius,
+              message: 'Searching wider trauma network ($radius)...',
+            );
           }
-        });
+        }
+      });
 
-        _socket = socket;
-        break;
-      } catch (err) {
-        debugPrint('[IncidentTrackingService] Error attempting $url: $err');
-      }
+      socket.on('incident_unmatched', (data) {
+        debugPrint('[IncidentTrackingService] incident_unmatched received: $data');
+        if (data is Map) {
+          final incId = data['incident_id']?.toString().toLowerCase().trim();
+          final trackedId = _trackedIncidentId?.toLowerCase().trim();
+          if (incId == null || trackedId == null || incId == trackedId) {
+            statusNotifier.value = statusNotifier.value.copyWith(
+              state: TriageState.unmatched,
+              message: 'No immediate trauma centers available. Central emergency dispatch notified.',
+            );
+          }
+        }
+      });
+
+      _socket = socket;
+    } catch (err) {
+      debugPrint('[IncidentTrackingService] Error attempting connection: $err');
     }
   }
 

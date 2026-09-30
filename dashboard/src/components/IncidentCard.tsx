@@ -681,70 +681,104 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
 
       {/* Privacy note: Emergency contact data is the victim's own chosen contact,
           stored locally on-device and only sent alongside an actual incident dispatch via victim_metadata.
-          It is never stored in a standalone contacts table or cached in Redis alongside temporary photos. */}
+          It is never stored in a standalone contacts table or cached in Redis alongside temporary photos.
+          For hospitals, the family contact number is protected and only revealed upon accepting the case. */}
       {incident.victim_metadata &&
         typeof incident.victim_metadata === 'object' &&
         Boolean((incident.victim_metadata as Record<string, unknown>).emergency_contact_name) && (
-          <div
-            style={{
-              background: '#f0fdf4',
-              border: '1px solid #86efac',
-              borderRadius: '0.375rem',
-              padding: '0.65rem 0.85rem',
-              marginBottom: '0.85rem',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              flexWrap: 'wrap',
-              gap: '0.5rem',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
-              <span style={{ fontSize: '1rem' }}>📞</span>
+          (viewMode === 'police' || isAccepted) ? (
+            <div
+              style={{
+                background: '#f0fdf4',
+                border: '1px solid #86efac',
+                borderRadius: '0.375rem',
+                padding: '0.65rem 0.85rem',
+                marginBottom: '0.85rem',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '0.5rem',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                <span style={{ fontSize: '1rem' }}>📞</span>
+                <div>
+                  <span
+                    style={{
+                      fontSize: '0.725rem',
+                      fontWeight: 800,
+                      color: '#166534',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.04em',
+                    }}
+                  >
+                    Verified SOS Contact (Family Notified via SMS)
+                  </span>
+                  <div style={{ fontSize: '0.875rem', fontWeight: 700, color: '#14532d' }}>
+                    Emergency Contact:{' '}
+                    {String((incident.victim_metadata as Record<string, unknown>).emergency_contact_name)}
+                    {(incident.victim_metadata as Record<string, unknown>).emergency_contact_relationship
+                      ? ` (${String((incident.victim_metadata as Record<string, unknown>).emergency_contact_relationship)})`
+                      : ''}
+                    {', '}
+                    <span style={{ fontFamily: 'monospace' }}>
+                      {String((incident.victim_metadata as Record<string, unknown>).emergency_contact_phone)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <a
+                href={`tel:${String((incident.victim_metadata as Record<string, unknown>).emergency_contact_phone)}`}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.25rem',
+                  padding: '0.35rem 0.65rem',
+                  background: '#15803d',
+                  color: '#ffffff',
+                  borderRadius: '0.375rem',
+                  textDecoration: 'none',
+                  fontSize: '0.75rem',
+                  fontWeight: 600,
+                }}
+                title="Call Emergency Contact"
+              >
+                <Phone size={12} /> Call Family
+              </a>
+            </div>
+          ) : (
+            <div
+              style={{
+                background: '#f8fafc',
+                border: '1px solid #cbd5e1',
+                borderRadius: '0.375rem',
+                padding: '0.55rem 0.85rem',
+                marginBottom: '0.85rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+              }}
+            >
+              <span style={{ fontSize: '1rem' }}>🛡️</span>
               <div>
                 <span
                   style={{
-                    fontSize: '0.725rem',
+                    fontSize: '0.7rem',
                     fontWeight: 800,
-                    color: '#166534',
+                    color: '#475569',
                     textTransform: 'uppercase',
                     letterSpacing: '0.04em',
                   }}
                 >
-                  Verified SOS Contact (Family Notified via SMS)
+                  Emergency Contact On File (Privacy Protected)
                 </span>
-                <div style={{ fontSize: '0.875rem', fontWeight: 700, color: '#14532d' }}>
-                  Emergency Contact:{' '}
-                  {String((incident.victim_metadata as Record<string, unknown>).emergency_contact_name)}
-                  {(incident.victim_metadata as Record<string, unknown>).emergency_contact_relationship
-                    ? ` (${String((incident.victim_metadata as Record<string, unknown>).emergency_contact_relationship)})`
-                    : ''}
-                  {', '}
-                  <span style={{ fontFamily: 'monospace' }}>
-                    {String((incident.victim_metadata as Record<string, unknown>).emergency_contact_phone)}
-                  </span>
+                <div style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                  Emergency Contact: <strong>{String((incident.victim_metadata as Record<string, unknown>).emergency_contact_name)}</strong> • Full contact number revealed once your hospital accepts this case
                 </div>
               </div>
             </div>
-            <a
-              href={`tel:${String((incident.victim_metadata as Record<string, unknown>).emergency_contact_phone)}`}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '0.25rem',
-                padding: '0.35rem 0.65rem',
-                background: '#15803d',
-                color: '#ffffff',
-                borderRadius: '0.375rem',
-                textDecoration: 'none',
-                fontSize: '0.75rem',
-                fontWeight: 600,
-              }}
-              title="Call Emergency Contact"
-            >
-              <Phone size={12} /> Call Family
-            </a>
-          </div>
+          )
         )}
 
       {/* Victim Telemetry (if available) */}

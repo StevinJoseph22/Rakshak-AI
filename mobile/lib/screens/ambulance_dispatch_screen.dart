@@ -5,6 +5,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
 import 'package:socket_io_client/socket_io_client.dart' as io;
+import 'package:url_launcher/url_launcher.dart';
 import '../models/incident_model.dart';
 import '../services/api_client.dart';
 import '../services/crash_detector_service.dart';
@@ -114,6 +115,35 @@ class _AmbulanceDispatchScreenState extends State<AmbulanceDispatchScreen> {
     }
   }
 
+  Future<void> _openGoogleMapsNavigation({
+    required double destLat,
+    required double destLng,
+    double? originLat,
+    double? originLng,
+  }) async {
+    final nativeUri = Uri.parse('google.navigation:q=$destLat,$destLng&mode=d');
+    final webUri = (originLat != null && originLng != null)
+        ? Uri.parse('https://www.google.com/maps/dir/?api=1&origin=$originLat,$originLng&destination=$destLat,$destLng&travelmode=driving')
+        : Uri.parse('https://www.google.com/maps/dir/?api=1&destination=$destLat,$destLng&travelmode=driving');
+
+    try {
+      if (await canLaunchUrl(nativeUri)) {
+        await launchUrl(nativeUri, mode: LaunchMode.externalApplication);
+      } else if (await canLaunchUrl(webUri)) {
+        await launchUrl(webUri, mode: LaunchMode.externalApplication);
+      } else {
+        await launchUrl(webUri, mode: LaunchMode.platformDefault);
+      }
+    } catch (e) {
+      debugPrint('[AmbulanceDispatchScreen] Error opening navigation: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Opening Google Maps failed: $e')),
+        );
+      }
+    }
+  }
+
   Future<void> _claimIncident() async {
     final result = await _apiClient.claimIncident(
       incidentId: widget.incident.id,
@@ -134,69 +164,72 @@ class _AmbulanceDispatchScreenState extends State<AmbulanceDispatchScreen> {
     }
   }
 
-  void _startTelemetryBeacon() {
-    final candidates = getBackendCandidates();
+  Future<void> _startTelemetryBeacon() async {
+    final workingUrl = await resolveReachableBackendUrl();
 
-    for (final url in candidates) {
-      try {
-        final socket = io.io(
-          url,
-          io.OptionBuilder()
-              .setTransports(['websocket'])
-              .enableAutoConnect()
-              .build(),
-        );
+    try {
+      final socket = io.io(
+        workingUrl,
+        io.OptionBuilder()
+            .setTransports(['websocket'])
+            .enableAutoConnect()
+            .setReconnectionAttempts(10)
+            .setReconnectionDelay(1000)
+            .build(),
+      );
 
-        socket.onConnect((_) {
-          _beaconSocket = socket;
-          if (mounted) setState(() => _isSocketConnected = true);
-          socket.emit('join_incident', widget.incident.id);
-        });
+      socket.onConnect((_) {
+        _beaconSocket = socket;
+        if (mounted) setState(() => _isSocketConnected = true);
+        socket.emit('join_incident', widget.incident.id);
+      });
 
-        socket.onDisconnect((_) {
-          if (mounted) setState(() => _isSocketConnected = false);
-        });
+      socket.on('reconnect', (_) {
+        if (mounted) setState(() => _isSocketConnected = true);
+        socket.emit('join_incident', widget.incident.id);
+      });
 
-        socket.onConnectError((_) {
-          if (mounted) setState(() => _isSocketConnected = false);
-        });
+      socket.onDisconnect((_) {
+        if (mounted) setState(() => _isSocketConnected = false);
+      });
 
-        // Listen for real-time hospital rejections
-        socket.on('hospital_rejected', (data) {
-          if (data is Map && mounted) {
-            setState(() {
-              final hospName = data['hospital_name']?.toString() ?? 'Hospital';
-              final reason = data['reason']?.toString() ?? 'Facility Unavailable';
-              _rejections.add({
-                'hospital_name': hospName,
-                'reason': reason,
-              });
+      socket.onConnectError((_) {
+        if (mounted) setState(() => _isSocketConnected = false);
+      });
+
+      // Listen for real-time hospital rejections
+      socket.on('hospital_rejected', (data) {
+        if (data is Map && mounted) {
+          setState(() {
+            final hospName = data['hospital_name']?.toString() ?? 'Hospital';
+            final reason = data['reason']?.toString() ?? 'Facility Unavailable';
+            _rejections.add({
+              'hospital_name': hospName,
+              'reason': reason,
             });
-          }
-        });
+          });
+        }
+      });
 
-        // Listen for real-time case accepted
-        socket.on('case_accepted', (data) {
-          if (data is Map && mounted) {
-            final hosp = data['hospital'] as Map?;
-            if (hosp != null) {
-              final hLat = (hosp['latitude'] as num?)?.toDouble();
-              final hLng = (hosp['longitude'] as num?)?.toDouble();
-              if (hLat != null && hLng != null) {
-                _fetchRoadRoute(
-                  LatLng(widget.incident.latitude, widget.incident.longitude),
-                  LatLng(hLat, hLng),
-                );
-              }
+      // Listen for real-time case accepted
+      socket.on('case_accepted', (data) {
+        if (data is Map && mounted) {
+          final hosp = data['hospital'] as Map?;
+          if (hosp != null) {
+            final hLat = (hosp['latitude'] as num?)?.toDouble();
+            final hLng = (hosp['longitude'] as num?)?.toDouble();
+            if (hLat != null && hLng != null) {
+              _fetchRoadRoute(
+                LatLng(widget.incident.latitude, widget.incident.longitude),
+                LatLng(hLat, hLng),
+              );
             }
           }
-        });
+        }
+      });
 
-        break;
-      } catch (_) {
-        continue;
-      }
-    }
+      _beaconSocket = socket;
+    } catch (_) {}
 
     _telemetryTimer = Timer.periodic(const Duration(seconds: 4), (_) {
       _emitAmbulanceTelemetry();
@@ -711,16 +744,44 @@ class _AmbulanceDispatchScreenState extends State<AmbulanceDispatchScreen> {
                               const SizedBox(width: 8),
                               _buildTrafficDot(const Color(0xFFF59E0B), 'Moderate'),
                               const SizedBox(width: 8),
-                              _buildTrafficDot(const Color(0xFFEF4444), 'Congested'),
+                               _buildTrafficDot(const Color(0xFFEF4444), 'Congested'),
                             ],
                           ),
                         ),
                       ),
+
+                    // Floating Quick Navigation Button on Map
+                    Positioned(
+                      top: 12,
+                      right: 12,
+                      child: ElevatedButton.icon(
+                        onPressed: () => _openGoogleMapsNavigation(
+                          destLat: hospitalLocation?.latitude ?? widget.incident.latitude,
+                          destLng: hospitalLocation?.longitude ?? widget.incident.longitude,
+                          originLat: _ambulanceLat,
+                          originLng: _ambulanceLng,
+                        ),
+                        icon: const Icon(Icons.directions, size: 18),
+                        label: Text(
+                          isAccepted ? 'Directions to Hospital' : 'Directions to Scene',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11.5),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF1D4ED8),
+                          foregroundColor: Colors.white,
+                          elevation: 4,
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),
 
-              // Bottom Action Bar: Camera On-Scene & Hospital Call
+              // Bottom Action Bar: Google Maps Directions, Camera On-Scene & Hospital Call
               Container(
                 padding: const EdgeInsets.all(14),
                 decoration: const BoxDecoration(
@@ -737,6 +798,27 @@ class _AmbulanceDispatchScreenState extends State<AmbulanceDispatchScreen> {
                   top: false,
                   child: Row(
                     children: [
+                      // Direct Google Maps Turn-by-Turn Button
+                      ElevatedButton.icon(
+                        onPressed: () => _openGoogleMapsNavigation(
+                          destLat: hospitalLocation?.latitude ?? widget.incident.latitude,
+                          destLng: hospitalLocation?.longitude ?? widget.incident.longitude,
+                          originLat: _ambulanceLat,
+                          originLng: _ambulanceLng,
+                        ),
+                        icon: const Icon(Icons.navigation, size: 17),
+                        label: const Text('Directions', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF2563EB),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+
                       // Capture On-Scene Photo (Phase 6 Zero-Gallery Camera Flow)
                       Expanded(
                         child: ElevatedButton.icon(
@@ -751,7 +833,7 @@ class _AmbulanceDispatchScreenState extends State<AmbulanceDispatchScreen> {
                             );
                           },
                           icon: const Icon(Icons.camera_alt),
-                          label: const Text('Capture Scene Photo'),
+                          label: const Text('Capture Scene'),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.blue.shade700,
                             foregroundColor: Colors.white,
@@ -763,7 +845,7 @@ class _AmbulanceDispatchScreenState extends State<AmbulanceDispatchScreen> {
                         ),
                       ),
                       if (hospitalPhone.isNotEmpty) ...[
-                        const SizedBox(width: 10),
+                        const SizedBox(width: 8),
                         OutlinedButton.icon(
                           onPressed: () {
                             ScaffoldMessenger.of(context).showSnackBar(
@@ -778,7 +860,7 @@ class _AmbulanceDispatchScreenState extends State<AmbulanceDispatchScreen> {
                           style: OutlinedButton.styleFrom(
                             foregroundColor: Colors.green.shade800,
                             side: BorderSide(color: Colors.green.shade800),
-                            padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 16),
+                            padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 12),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(10),
                             ),

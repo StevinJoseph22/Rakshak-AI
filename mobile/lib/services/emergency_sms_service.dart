@@ -47,6 +47,15 @@ class EmergencySmsService {
   // Global navigator key fallback when context isn't passed directly
   static GlobalKey<NavigatorState>? navigatorKey;
 
+  // Deduplication set preventing duplicate SMS dispatches on socket reconnects
+  final Set<String> _dispatchedAlertKeys = <String>{};
+
+  /// Clears alert dispatch history when a new incident session begins
+  void resetAlertHistory() {
+    _dispatchedAlertKeys.clear();
+    debugPrint('[EmergencySmsService] Cleared SMS alert history for new incident');
+  }
+
   /// Check whether we are running in a Flutter test environment
   bool get _isTestEnvironment {
     try {
@@ -117,12 +126,34 @@ class EmergencySmsService {
         'Hospital contact: $hospitalPhone.';
   }
 
+  /// Builds Message 3: Ambulance dispatch update
+  String buildAmbulanceDispatchedMessage({
+    required String victimName,
+    required String ambulanceId,
+  }) {
+    return 'UPDATE: Ambulance $ambulanceId has been dispatched and is en route to $victimName\'s location. '
+        'Emergency services are responding.';
+  }
+
   /// Sends crash alert via Real Native SmsManager or falls back to WhatsApp preview
   Future<EmergencySmsDispatchResult> sendCrashAlert({
     required double lat,
     required double lng,
     BuildContext? context,
   }) async {
+    final alertKey = 'CRASH_${lat.toStringAsFixed(4)}_${lng.toStringAsFixed(4)}';
+    if (_dispatchedAlertKeys.contains(alertKey)) {
+      debugPrint('[EmergencySmsService] Crash alert already dispatched for location. Skipping duplicate.');
+      return EmergencySmsDispatchResult(
+        success: true,
+        mode: SmsDeliveryMode.nativeSim,
+        totalContacts: 0,
+        successfulSends: 0,
+        messageBody: '',
+      );
+    }
+    _dispatchedAlertKeys.add(alertKey);
+
     final contacts = await EmergencyContactService.instance.getContacts();
     final victimName = await EmergencyContactService.instance.getVictimName();
     final message = buildCrashAlertMessage(victimName: victimName, lat: lat, lng: lng);
@@ -137,11 +168,25 @@ class EmergencySmsService {
 
   /// Sends hospital acceptance alert via Real Native SmsManager or falls back to WhatsApp preview
   Future<EmergencySmsDispatchResult> sendHospitalAcceptedAlert({
+    String? incidentId,
     required String hospitalName,
     required String hospitalAddress,
     required String hospitalPhone,
     BuildContext? context,
   }) async {
+    final alertKey = 'HOSPITAL_ACCEPTED_${incidentId ?? ""}_${hospitalName.trim()}_${hospitalPhone.trim()}';
+    if (_dispatchedAlertKeys.contains(alertKey)) {
+      debugPrint('[EmergencySmsService] Hospital accepted alert already dispatched for $hospitalName. Skipping duplicate.');
+      return EmergencySmsDispatchResult(
+        success: true,
+        mode: SmsDeliveryMode.nativeSim,
+        totalContacts: 0,
+        successfulSends: 0,
+        messageBody: '',
+      );
+    }
+    _dispatchedAlertKeys.add(alertKey);
+
     final contacts = await EmergencyContactService.instance.getContacts();
     final victimName = await EmergencyContactService.instance.getVictimName();
     final message = buildHospitalAcceptedMessage(
@@ -153,6 +198,40 @@ class EmergencySmsService {
 
     return _dispatchAlert(
       alertType: 'HOSPITAL_ACCEPTED',
+      contacts: contacts,
+      message: message,
+      context: context,
+    );
+  }
+
+  /// Sends ambulance dispatched alert via Real Native SmsManager or falls back to WhatsApp preview
+  Future<EmergencySmsDispatchResult> sendAmbulanceDispatchedAlert({
+    String? incidentId,
+    required String ambulanceId,
+    BuildContext? context,
+  }) async {
+    final alertKey = 'AMBULANCE_DISPATCHED_${incidentId ?? ""}_${ambulanceId.trim()}';
+    if (_dispatchedAlertKeys.contains(alertKey)) {
+      debugPrint('[EmergencySmsService] Ambulance dispatched alert already dispatched for $ambulanceId. Skipping duplicate.');
+      return EmergencySmsDispatchResult(
+        success: true,
+        mode: SmsDeliveryMode.nativeSim,
+        totalContacts: 0,
+        successfulSends: 0,
+        messageBody: '',
+      );
+    }
+    _dispatchedAlertKeys.add(alertKey);
+
+    final contacts = await EmergencyContactService.instance.getContacts();
+    final victimName = await EmergencyContactService.instance.getVictimName();
+    final message = buildAmbulanceDispatchedMessage(
+      victimName: victimName,
+      ambulanceId: ambulanceId,
+    );
+
+    return _dispatchAlert(
+      alertType: 'AMBULANCE_DISPATCHED',
       contacts: contacts,
       message: message,
       context: context,

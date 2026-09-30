@@ -67,11 +67,12 @@ export function initSocketIO(httpServer: HttpServer): SocketIOServer {
       socket.emit('joined_police', { room: 'all_incidents', status: 'ok' });
     });
 
-    // Phase 7: Mobile client joins its per-incident status room
+    // Phase 7: Mobile client joins its per-incident status room (and all_incidents for city broadcasts)
     socket.on('join_incident', (incidentId: string) => {
       if (incidentId) {
         socket.join(`incident:${incidentId}`);
-        console.log(`[Socket.io] Socket ${socket.id} joined room: incident:${incidentId}`);
+        socket.join('all_incidents');
+        console.log(`[Socket.io] Socket ${socket.id} joined room: incident:${incidentId} and all_incidents`);
         socket.emit('joined_incident', { incidentId, status: 'ok' });
       }
     });
