@@ -70,51 +70,59 @@ export const PoliceView: React.FC = () => {
     }
   }, [soundEnabled]);
 
-  // Initial fetch of recent incidents from backend on mount
-  useEffect(() => {
-    let isMounted = true;
-    const isCleared = localStorage.getItem('rakshak_police_cleared') === 'true';
-    if (isCleared) {
-      return;
-    }
-
-    fetch(`${BACKEND_API_BASE}/incidents?limit=20`)
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP error ${res.status}`);
-        return res.json();
-      })
-      .then((data) => {
-        if (!isMounted) return;
-        if (data.incidents && Array.isArray(data.incidents)) {
-          setIncidents((prev) => {
-            const mergedMap = new Map<string, IncidentPayload>();
-            data.incidents.forEach((inc: IncidentPayload) => {
-              mergedMap.set(inc.id, inc);
-            });
-            prev.forEach((inc: IncidentPayload) => {
-              const existing = mergedMap.get(inc.id);
-              mergedMap.set(inc.id, existing ? { ...existing, ...inc } : inc);
-            });
-            const merged = Array.from(mergedMap.values()).sort(
-              (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-            );
-            try {
-              localStorage.setItem('rakshak_police_feed', JSON.stringify(merged));
-            } catch {
-              // Ignore
-            }
-            return merged;
+  // Fetch live incidents from backend API
+  const fetchPoliceIncidents = useCallback(async () => {
+    try {
+      localStorage.removeItem('rakshak_police_cleared');
+      const res = await fetch(`${BACKEND_API_BASE}/incidents?limit=20`);
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.incidents && Array.isArray(data.incidents)) {
+        setIncidents((prev) => {
+          const mergedMap = new Map<string, IncidentPayload>();
+          data.incidents.forEach((inc: IncidentPayload) => {
+            mergedMap.set(inc.id, inc);
           });
-        }
-      })
-      .catch((err) => {
-        console.warn('[PoliceView] Failed to fetch incidents on mount:', err);
-      });
+          // Preserve any in-memory socket attributes if they are newer
+          prev.forEach((inc: IncidentPayload) => {
+            if (mergedMap.has(inc.id)) {
+              const fromServer = mergedMap.get(inc.id)!;
+              mergedMap.set(inc.id, {
+                ...fromServer,
+                ambulance_location: inc.ambulance_location || fromServer.ambulance_location,
+                imageUrl: inc.imageUrl || fromServer.imageUrl,
+              });
+            }
+          });
+          const merged = Array.from(mergedMap.values()).sort(
+            (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+          );
+          try {
+            localStorage.setItem('rakshak_police_feed', JSON.stringify(merged));
+          } catch {
+            // Ignore
+          }
+          return merged;
+        });
+      }
+    } catch (err) {
+      console.warn('[PoliceView] Failed to fetch incidents:', err);
+    }
+  }, []);
+
+  // Fetch on mount, window focus, and background sync every 4 seconds
+  useEffect(() => {
+    fetchPoliceIncidents();
+
+    const interval = setInterval(fetchPoliceIncidents, 4000);
+    const handleFocus = () => fetchPoliceIncidents();
+    window.addEventListener('focus', handleFocus);
 
     return () => {
-      isMounted = false;
+      clearInterval(interval);
+      window.removeEventListener('focus', handleFocus);
     };
-  }, []);
+  }, [fetchPoliceIncidents]);
 
   // Connect and join police "all_incidents" broadcast room
   useEffect(() => {
@@ -177,7 +185,6 @@ export const PoliceView: React.FC = () => {
       setIncidents([]);
       try {
         localStorage.setItem('rakshak_police_feed', '[]');
-        localStorage.setItem('rakshak_police_cleared', 'true');
       } catch {
         // ignore
       }
@@ -186,7 +193,10 @@ export const PoliceView: React.FC = () => {
     const handleImageUpdate = (payload: { incident_id: string; imageUrl: string }) => {
       setIncidents((prev) => {
         const existingIndex = prev.findIndex((item) => item.id === payload.incident_id);
-        if (existingIndex === -1) return prev;
+        if (existingIndex === -1) {
+          fetchPoliceIncidents();
+          return prev;
+        }
         const updatedList = [...prev];
         updatedList[existingIndex] = { ...updatedList[existingIndex], imageUrl: payload.imageUrl };
         try {
@@ -205,7 +215,10 @@ export const PoliceView: React.FC = () => {
     }) => {
       setIncidents((prev) => {
         const existingIndex = prev.findIndex((item) => item.id === payload.incident_id);
-        if (existingIndex === -1) return prev;
+        if (existingIndex === -1) {
+          fetchPoliceIncidents();
+          return prev;
+        }
         const updatedList = [...prev];
         updatedList[existingIndex] = {
           ...updatedList[existingIndex],
@@ -229,7 +242,10 @@ export const PoliceView: React.FC = () => {
     }) => {
       setIncidents((prev) => {
         const existingIndex = prev.findIndex((item) => item.id === payload.incident_id);
-        if (existingIndex === -1) return prev;
+        if (existingIndex === -1) {
+          fetchPoliceIncidents();
+          return prev;
+        }
         const updatedList = [...prev];
         updatedList[existingIndex] = {
           ...updatedList[existingIndex],
@@ -251,7 +267,10 @@ export const PoliceView: React.FC = () => {
     }) => {
       setIncidents((prev) => {
         const existingIndex = prev.findIndex((item) => item.id === payload.incident_id);
-        if (existingIndex === -1) return prev;
+        if (existingIndex === -1) {
+          fetchPoliceIncidents();
+          return prev;
+        }
         const updatedList = [...prev];
         updatedList[existingIndex] = {
           ...updatedList[existingIndex],
@@ -273,7 +292,10 @@ export const PoliceView: React.FC = () => {
     }) => {
       setIncidents((prev) => {
         const existingIndex = prev.findIndex((item) => item.id === payload.incident_id);
-        if (existingIndex === -1) return prev;
+        if (existingIndex === -1) {
+          fetchPoliceIncidents();
+          return prev;
+        }
         const updatedList = [...prev];
         updatedList[existingIndex] = {
           ...updatedList[existingIndex],
@@ -299,7 +321,10 @@ export const PoliceView: React.FC = () => {
     }) => {
       setIncidents((prev) => {
         const existingIndex = prev.findIndex((item) => item.id === payload.incident_id);
-        if (existingIndex === -1) return prev;
+        if (existingIndex === -1) {
+          fetchPoliceIncidents();
+          return prev;
+        }
         const updatedList = [...prev];
         const target = updatedList[existingIndex];
         const currentRejections = target.rejections || [];
@@ -341,7 +366,10 @@ export const PoliceView: React.FC = () => {
     }) => {
       setIncidents((prev) => {
         const existingIndex = prev.findIndex((item) => item.id === payload.incident_id);
-        if (existingIndex === -1) return prev;
+        if (existingIndex === -1) {
+          fetchPoliceIncidents();
+          return prev;
+        }
         const updatedList = [...prev];
         updatedList[existingIndex] = {
           ...updatedList[existingIndex],
@@ -364,7 +392,10 @@ export const PoliceView: React.FC = () => {
     }) => {
       setIncidents((prev) => {
         const existingIndex = prev.findIndex((item) => item.id === payload.incident_id);
-        if (existingIndex === -1) return prev;
+        if (existingIndex === -1) {
+          fetchPoliceIncidents();
+          return prev;
+        }
         const updatedList = [...prev];
         updatedList[existingIndex] = {
           ...updatedList[existingIndex],
@@ -414,13 +445,12 @@ export const PoliceView: React.FC = () => {
       socket.off('incident_claimed', handleIncidentClaimed);
       socket.off('ambulance_location_update', handleAmbulanceLocationUpdate);
     };
-  }, [playPoliceChime]);
+  }, [playPoliceChime, fetchPoliceIncidents]);
 
   const handleClearFeed = async () => {
     setIncidents([]);
     try {
       localStorage.setItem('rakshak_police_feed', '[]');
-      localStorage.setItem('rakshak_police_cleared', 'true');
       // Purge test incidents from database so they do not resurrect
       await fetch(`${BACKEND_API_BASE}/incidents`, { method: 'DELETE' });
     } catch {
@@ -836,17 +866,7 @@ export const PoliceView: React.FC = () => {
                   here in real time with matched hospital counts and coordinates.
                 </p>
                 <button
-                  onClick={() => {
-                    localStorage.removeItem('rakshak_police_cleared');
-                    fetch(`${BACKEND_API_BASE}/incidents?limit=20`)
-                      .then((res) => res.json())
-                      .then((data) => {
-                        if (data.incidents && data.incidents.length > 0) {
-                          setIncidents(data.incidents);
-                          localStorage.setItem('rakshak_police_feed', JSON.stringify(data.incidents));
-                        }
-                      });
-                  }}
+                  onClick={fetchPoliceIncidents}
                   style={{
                     marginTop: '1rem',
                     padding: '0.45rem 0.85rem',

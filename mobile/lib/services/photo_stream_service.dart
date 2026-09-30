@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:socket_io_client/socket_io_client.dart' as io;
+import '../config/backend_config.dart';
 import 'api_client.dart';
 
 /// Service for streaming emergency crash visual triage telemetry directly
@@ -31,15 +32,7 @@ class PhotoStreamService {
     // zero-storage specification.
 
     // Candidate base URLs matching ApiClient routing
-    final candidates = candidateUrls ??
-        <String>[
-          'http://127.0.0.1:5000',
-          'http://192.168.1.21:5000',
-          if (kDefaultBackendUrl != 'http://10.0.2.2:5000') kDefaultBackendUrl,
-          'http://10.208.188.149:5000',
-          'http://172.22.61.163:5000',
-          'http://10.0.2.2:5000',
-        ].toSet().toList();
+    final candidates = candidateUrls ?? getBackendCandidates();
 
     for (final candidateUrl in candidates) {
       debugPrint(

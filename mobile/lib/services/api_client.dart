@@ -2,7 +2,10 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
+import '../config/backend_config.dart';
 import '../models/incident_model.dart';
+
+export '../config/backend_config.dart' show kDefaultBackendUrl, getBackendCandidates, kDemoWorkstationIp;
 
 /// Generic result wrapper for API calls that never crashes on network failure.
 class ApiResult<T> {
@@ -27,12 +30,6 @@ class ApiResult<T> {
   }
 }
 
-/// Default backend URL. Can be overridden via `--dart-define=BACKEND_URL=http://<YOUR_IP>:5000`
-const String kDefaultBackendUrl = String.fromEnvironment(
-  'BACKEND_URL',
-  defaultValue: 'http://10.0.2.2:5000',
-);
-
 /// HTTP API Client for Rakshak-AI backend.
 /// Default baseUrl uses 10.0.2.2 (Android Emulator host loopback) or BACKEND_URL define.
 class ApiClient {
@@ -48,8 +45,6 @@ class ApiClient {
   /// Reports a new crash incident with GPS coordinates and optional victim metadata.
   /// Matches Phase 1: POST /incidents
   /// Body: { "latitude": double, "longitude": double, "victim_metadata": {...} }
-  ///
-  /// TODO: Phase 5/6 will call this from LockedScreenAlertScreen confirm button
   Future<ApiResult<IncidentResponse>> reportIncident({
     required double latitude,
     required double longitude,
@@ -62,21 +57,7 @@ class ApiClient {
       if (victimMetadata != null) 'victim_metadata': victimMetadata,
     };
 
-    // Candidate base URLs to try in order of priority:
-    // 1. http://127.0.0.1:5000 (Active if `adb reverse tcp:5000 tcp:5000` is run)
-    // 2. http://192.168.1.21:5000 (Current local workstation Wi-Fi IP)
-    // 3. Configured baseUrl (from BACKEND_URL dart-define or default)
-    // 4. http://10.0.2.2:5000 (Android Emulator host loopback)
-    final candidates = <String>[
-      'http://127.0.0.1:5000',
-      'http://192.168.1.21:5000',
-      if (baseUrl != kDefaultBackendUrl) baseUrl,
-      'http://10.208.188.149:5000',
-      'http://172.22.61.163:5000',
-      'http://10.0.2.2:5000',
-      baseUrl,
-    ].toSet().toList();
-
+    final candidates = getBackendCandidates(baseUrl);
     String? lastError;
 
     for (final candidateUrl in candidates) {
@@ -131,16 +112,7 @@ class ApiClient {
     double radiusKm = 15.0,
     Duration timeout = const Duration(seconds: 4),
   }) async {
-    final candidates = <String>[
-      'http://127.0.0.1:5000',
-      'http://192.168.1.21:5000',
-      if (baseUrl != kDefaultBackendUrl) baseUrl,
-      'http://10.208.188.149:5000',
-      'http://172.22.61.163:5000',
-      'http://10.0.2.2:5000',
-      baseUrl,
-    ].toSet().toList();
-
+    final candidates = getBackendCandidates(baseUrl);
     String? lastError;
     for (final candidateUrl in candidates) {
       final uri = Uri.parse(
@@ -176,16 +148,7 @@ class ApiClient {
     required String ambulanceId,
     Duration timeout = const Duration(seconds: 4),
   }) async {
-    final candidates = <String>[
-      'http://127.0.0.1:5000',
-      'http://192.168.1.21:5000',
-      if (baseUrl != kDefaultBackendUrl) baseUrl,
-      'http://10.208.188.149:5000',
-      'http://172.22.61.163:5000',
-      'http://10.0.2.2:5000',
-      baseUrl,
-    ].toSet().toList();
-
+    final candidates = getBackendCandidates(baseUrl);
     String? lastError;
     for (final candidateUrl in candidates) {
       final uri = Uri.parse('$candidateUrl/incidents/$incidentId/claim');

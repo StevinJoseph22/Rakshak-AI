@@ -5,19 +5,24 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
+import android.telephony.SmsManager
 import android.view.WindowManager
+import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
     private val CHANNEL = "com.rakshak.mobile/lock_screen"
+    private val SMS_CHANNEL = "com.rakshak.mobile/emergency_sms"
     private val EMERGENCY_CHANNEL_ID = "rakshak_emergency_sos"
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -85,6 +90,62 @@ class MainActivity : FlutterActivity() {
                     val body = call.argument<String>("body") ?: "Broadcasting coordinates to nearest trauma centers"
                     sendFullScreenNotification(title, body)
                     result.success(true)
+                }
+                else -> result.notImplemented()
+            }
+        }
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, SMS_CHANNEL).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "checkSmsPermission" -> {
+                    val granted = ContextCompat.checkSelfPermission(
+                        this,
+                        android.Manifest.permission.SEND_SMS
+                    ) == PackageManager.PERMISSION_GRANTED
+                    result.success(granted)
+                }
+                "requestSmsPermission" -> {
+                    ActivityCompat.requestPermissions(
+                        this,
+                        arrayOf(android.Manifest.permission.SEND_SMS),
+                        1011
+                    )
+                    result.success(true)
+                }
+                "sendSmsNative" -> {
+                    val phone = call.argument<String>("phone")
+                    val message = call.argument<String>("message")
+                    if (phone.isNullOrBlank() || message.isNullOrBlank()) {
+                        result.error("INVALID_ARGS", "Phone and message must not be blank", null)
+                        return@setMethodCallHandler
+                    }
+                    try {
+                        val hasPerm = ContextCompat.checkSelfPermission(
+                            this,
+                            android.Manifest.permission.SEND_SMS
+                        ) == PackageManager.PERMISSION_GRANTED
+
+                        if (!hasPerm) {
+                            result.error("PERMISSION_DENIED", "SEND_SMS permission not granted", null)
+                            return@setMethodCallHandler
+                        }
+
+                        val smsManager: SmsManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                            getSystemService(SmsManager::class.java) ?: SmsManager.getDefault()
+                        } else {
+                            SmsManager.getDefault()
+                        }
+
+                        val parts = smsManager.divideMessage(message)
+                        if (parts.size > 1) {
+                            smsManager.sendMultipartTextMessage(phone, null, parts, null, null)
+                        } else {
+                            smsManager.sendTextMessage(phone, null, message, null, null)
+                        }
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("SMS_SEND_FAILED", e.message ?: "Failed to send SMS via SIM", null)
+                    }
                 }
                 else -> result.notImplemented()
             }

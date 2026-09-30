@@ -5,9 +5,11 @@ import { ConnectionStatus } from '../types';
 
 interface NavbarProps {
   status: ConnectionStatus;
+  demoMode?: boolean;
+  onToggleDemoMode?: () => void;
 }
 
-export const Navbar: React.FC<NavbarProps> = ({ status }) => {
+export const Navbar: React.FC<NavbarProps> = ({ status, demoMode = false, onToggleDemoMode }) => {
   return (
     <header
       style={{
@@ -126,13 +128,45 @@ export const Navbar: React.FC<NavbarProps> = ({ status }) => {
           </NavLink>
         </nav>
 
-        {/* Global Connection Status Pill */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.5rem',
-            padding: '0.35rem 0.85rem',
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          {onToggleDemoMode && (
+            <button
+              onClick={onToggleDemoMode}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.4rem',
+                padding: '0.35rem 0.75rem',
+                borderRadius: '0.375rem',
+                border: demoMode ? '1px solid #38bdf8' : '1px solid #cbd5e1',
+                background: demoMode ? '#0f172a' : '#ffffff',
+                color: demoMode ? '#38bdf8' : '#64748b',
+                fontSize: '0.75rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+              }}
+              title="Toggle Live Real-Time Telemetry Feed"
+            >
+              <span>⚡ Live Telemetry:</span>
+              <span
+                style={{
+                  color: demoMode ? '#10b981' : '#94a3b8',
+                  textTransform: 'uppercase',
+                }}
+              >
+                {demoMode ? 'ON' : 'OFF'}
+              </span>
+            </button>
+          )}
+
+          {/* Global Connection Status Pill */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              padding: '0.35rem 0.85rem',
             borderRadius: '9999px',
             fontSize: '0.775rem',
             fontWeight: 600,
@@ -175,6 +209,7 @@ export const Navbar: React.FC<NavbarProps> = ({ status }) => {
           )}
         </div>
       </div>
-    </header>
+    </div>
+  </header>
   );
 };

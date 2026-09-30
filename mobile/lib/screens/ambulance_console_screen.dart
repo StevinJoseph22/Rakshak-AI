@@ -130,64 +130,94 @@ class _AmbulanceConsoleScreenState extends State<AmbulanceConsoleScreen> {
         backgroundColor: Colors.white,
         elevation: 1,
       ),
-      body: RefreshIndicator(
-        onRefresh: _fetchIncidents,
-        child: _isLoading && _incidents.isEmpty
-            ? const Center(child: CircularProgressIndicator())
-            : _errorMessage != null && _incidents.isEmpty
-                ? Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24.0),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.wifi_off, size: 56, color: Colors.grey.shade400),
-                          const SizedBox(height: 16),
-                          Text(
-                            _errorMessage!,
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(color: Colors.grey),
-                          ),
-                          const SizedBox(height: 16),
-                          ElevatedButton.icon(
-                            onPressed: () {
-                              setState(() => _isLoading = true);
-                              _fetchIncidents();
-                            },
-                            icon: const Icon(Icons.refresh),
-                            label: const Text('Retry Connection'),
-                          ),
-                        ],
+      body: Column(
+        children: [
+          if (_errorMessage != null && _incidents.isNotEmpty)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              color: Colors.amber.shade100,
+              child: Row(
+                children: [
+                  Icon(Icons.wifi_off, size: 16, color: Colors.amber.shade900),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Network connection interrupted. Showing cached dispatch calls. Retrying...',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.amber.shade900,
                       ),
                     ),
-                  )
-                : _incidents.isEmpty
-                    ? Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(32.0),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.check_circle_outline, size: 64, color: Colors.green.shade400),
-                              const SizedBox(height: 16),
-                              const Text(
-                                'No Active Emergencies Nearby',
-                                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                'Ambulance Unit ${widget.ambulanceId} is on standby. Monitoring within 25 km radius...',
-                                textAlign: TextAlign.center,
-                                style: const TextStyle(color: Colors.grey),
-                              ),
-                            ],
+                  ),
+                  const SizedBox(
+                    width: 12,
+                    height: 12,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.brown),
+                  ),
+                ],
+              ),
+            ),
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: _fetchIncidents,
+              child: _isLoading && _incidents.isEmpty
+                  ? const Center(child: CircularProgressIndicator())
+                  : _errorMessage != null && _incidents.isEmpty
+                      ? Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(24.0),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.wifi_off, size: 56, color: Colors.grey.shade400),
+                                const SizedBox(height: 16),
+                                Text(
+                                  _errorMessage!,
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(color: Colors.grey),
+                                ),
+                                const SizedBox(height: 16),
+                                ElevatedButton.icon(
+                                  onPressed: () {
+                                    setState(() => _isLoading = true);
+                                    _fetchIncidents();
+                                  },
+                                  icon: const Icon(Icons.refresh),
+                                  label: const Text('Retry Connection'),
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                      )
-                    : ListView.builder(
-                        padding: const EdgeInsets.all(12),
-                        itemCount: _incidents.length,
-                        itemBuilder: (context, index) {
+                        )
+                      : _incidents.isEmpty
+                          ? Center(
+                              child: Padding(
+                                padding: const EdgeInsets.all(32.0),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.check_circle_outline, size: 64, color: Colors.green.shade400),
+                                    const SizedBox(height: 16),
+                                    const Text(
+                                      'No Active Emergencies Nearby',
+                                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      'Ambulance Unit ${widget.ambulanceId} is on standby. Monitoring within 25 km radius...',
+                                      textAlign: TextAlign.center,
+                                      style: const TextStyle(color: Colors.grey),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            )
+                          : ListView.builder(
+                              padding: const EdgeInsets.all(12),
+                              itemCount: _incidents.length,
+                              itemBuilder: (context, index) {
                           final incident = _incidents[index];
                           final isClaimedByMe = incident.ambulanceId == widget.ambulanceId;
                           final isClaimedByOther = incident.ambulanceId != null && !isClaimedByMe;
@@ -365,6 +395,9 @@ class _AmbulanceConsoleScreenState extends State<AmbulanceConsoleScreen> {
                           );
                         },
                       ),
+            ),
+          ),
+        ],
       ),
     );
   }

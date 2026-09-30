@@ -53,6 +53,7 @@ class _AmbulanceDispatchScreenState extends State<AmbulanceDispatchScreen> {
   io.Socket? _beaconSocket;
   bool _isClaimed = false;
   String? _claimMessage;
+  bool _isSocketConnected = true;
 
   // Real OSRM Roadway Navigation & Live Traffic State
   List<LatLng> _roadwayPoints = [];
@@ -134,11 +135,7 @@ class _AmbulanceDispatchScreenState extends State<AmbulanceDispatchScreen> {
   }
 
   void _startTelemetryBeacon() {
-    final candidates = [
-      'http://127.0.0.1:5000',
-      'http://192.168.1.21:5000',
-      kDefaultBackendUrl,
-    ];
+    final candidates = getBackendCandidates();
 
     for (final url in candidates) {
       try {
@@ -152,7 +149,16 @@ class _AmbulanceDispatchScreenState extends State<AmbulanceDispatchScreen> {
 
         socket.onConnect((_) {
           _beaconSocket = socket;
+          if (mounted) setState(() => _isSocketConnected = true);
           socket.emit('join_incident', widget.incident.id);
+        });
+
+        socket.onDisconnect((_) {
+          if (mounted) setState(() => _isSocketConnected = false);
+        });
+
+        socket.onConnectError((_) {
+          if (mounted) setState(() => _isSocketConnected = false);
         });
 
         // Listen for real-time hospital rejections
@@ -543,6 +549,34 @@ class _AmbulanceDispatchScreenState extends State<AmbulanceDispatchScreen> {
                   ],
                 ),
               ),
+
+              if (!_isSocketConnected)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                  color: Colors.amber.shade100,
+                  child: Row(
+                    children: [
+                      Icon(Icons.sync_problem, size: 16, color: Colors.amber.shade900),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Telemetry link reconnecting to incident room...',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.amber.shade900,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(
+                        width: 12,
+                        height: 12,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.brown),
+                      ),
+                    ],
+                  ),
+                ),
 
               // Interactive Real Roadway FlutterMap with Traffic Overlay
               Expanded(

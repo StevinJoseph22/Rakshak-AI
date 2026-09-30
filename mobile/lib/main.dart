@@ -2,12 +2,16 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 import 'config/lock_screen_config.dart';
+import 'models/emergency_contact_model.dart';
 import 'screens/ambulance_console_screen.dart';
+import 'screens/emergency_contacts_screen.dart';
 import 'screens/locked_screen_alert_screen.dart';
 import 'screens/permission_rationale_screen.dart';
 import 'screens/simulated_lock_screen.dart';
 import 'services/crash_detector_service.dart';
 import 'services/crash_event_service.dart';
+import 'services/emergency_contact_service.dart';
+import 'services/emergency_sms_service.dart';
 import 'services/lock_screen_service.dart';
 
 void main() {
@@ -17,9 +21,12 @@ void main() {
 class RakshakApp extends StatelessWidget {
   const RakshakApp({super.key});
 
+  static final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: RakshakApp.navigatorKey,
       title: 'Rakshak-AI',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.redAccent),
@@ -55,13 +62,29 @@ class _CrashDetectionScreenState extends State<CrashDetectionScreen> {
   double _gyroX = 0.0, _gyroY = 0.0, _gyroZ = 0.0;
   bool _hasReceivedSensorData = false;
 
+  EmergencyContact? _primaryContact;
+  int _contactCount = 0;
+
   @override
   void initState() {
     super.initState();
+    EmergencySmsService.navigatorKey = RakshakApp.navigatorKey;
+    _loadEmergencyContacts();
     _initSensors();
     _initCrashListener();
     if (_isMonitoring) {
       CrashDetectorService.instance.start();
+    }
+  }
+
+  Future<void> _loadEmergencyContacts() async {
+    final contacts = await EmergencyContactService.instance.getContacts();
+    final primary = await EmergencyContactService.instance.getPrimaryContact();
+    if (mounted) {
+      setState(() {
+        _contactCount = contacts.length;
+        _primaryContact = primary;
+      });
     }
   }
 
@@ -155,6 +178,41 @@ class _CrashDetectionScreenState extends State<CrashDetectionScreen> {
   }
 
   void _toggleMonitoring() {
+    if (!_isMonitoring) {
+      final hasContacts = EmergencyContactService.instance.hasContactsSync;
+      if (!hasContacts) {
+        if (mounted) {
+          showDialog(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: const Text('Emergency Contacts Required'),
+              content: const Text(
+                'Rakshak-AI Crash Guard requires at least one registered emergency contact to dispatch automated SMS alerts during an impact.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.of(ctx).pop();
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => const EmergencyContactsScreen(),
+                      ),
+                    ).then((_) => _loadEmergencyContacts());
+                  },
+                  child: const Text('Set Up Contacts'),
+                ),
+              ],
+            ),
+          );
+        }
+        return;
+      }
+    }
+
     setState(() {
       _isMonitoring = !_isMonitoring;
       if (_isMonitoring) {
@@ -219,6 +277,18 @@ class _CrashDetectionScreenState extends State<CrashDetectionScreen> {
         title: const Text('Rakshak-AI Guard'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.quick_contacts_dialer_rounded, color: Colors.blueAccent),
+            tooltip: 'Emergency Contacts & Profile',
+            onPressed: () async {
+              await Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => const EmergencyContactsScreen(),
+                ),
+              );
+              _loadEmergencyContacts();
+            },
+          ),
           TextButton.icon(
             onPressed: () {
               setState(() {
@@ -250,6 +320,55 @@ class _CrashDetectionScreenState extends State<CrashDetectionScreen> {
                   : 'Monitoring Paused',
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.headlineSmall,
+            ),
+            const SizedBox(height: 8),
+            InkWell(
+              onTap: () async {
+                await Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => const EmergencyContactsScreen(),
+                  ),
+                );
+                _loadEmergencyContacts();
+              },
+              borderRadius: BorderRadius.circular(20),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                decoration: BoxDecoration(
+                  color: _contactCount > 0 ? const Color(0xFFF0FDF4) : const Color(0xFFFEF2F2),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: _contactCount > 0 ? const Color(0xFF86EFAC) : const Color(0xFFFECACA),
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      _contactCount > 0 ? Icons.check_circle : Icons.warning_amber_rounded,
+                      size: 14,
+                      color: _contactCount > 0 ? const Color(0xFF16A34A) : const Color(0xFFDC2626),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      _contactCount > 0
+                          ? 'SOS Contact: ${_primaryContact?.name ?? "Priya Sharma"} (${_primaryContact?.phone ?? "+919876543210"})'
+                          : 'No Emergency Contacts Configured — Tap to Setup',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: _contactCount > 0 ? const Color(0xFF166534) : const Color(0xFF991B1B),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Icon(
+                      Icons.chevron_right,
+                      size: 14,
+                      color: _contactCount > 0 ? const Color(0xFF166534) : const Color(0xFF991B1B),
+                    ),
+                  ],
+                ),
+              ),
             ),
             const SizedBox(height: 8),
             const Text(

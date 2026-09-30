@@ -374,10 +374,76 @@ class _IntakeScreenState extends State<IntakeScreen> {
                         ],
                       ),
                     );
+                  } else if (widget.incidentId == null && CrashEventService.instance.lastDispatchedIncidentId == null) {
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 16),
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.shade50,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.amber.shade700, width: 1.5),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.cloud_off, color: Colors.amber.shade800, size: 24),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Offline Dispatch Queued',
+                                  style: TextStyle(
+                                    color: Colors.amber.shade900,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Telemetry preserved locally in volatile memory. Auto-syncing when backend connects...',
+                                  style: TextStyle(
+                                    color: Colors.amber.shade800,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
                   }
                   return const SizedBox.shrink();
                 },
               ),
+              if (!IncidentTrackingService.instance.statusNotifier.value.isConnected &&
+                  IncidentTrackingService.instance.statusNotifier.value.state != TriageState.idle)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.orange.shade400),
+                  ),
+                  child: Row(
+                    children: [
+                      const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.deepOrange),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Reconnecting to trauma dispatch stream...',
+                          style: TextStyle(fontSize: 12, color: Colors.deepOrange.shade900, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
 
               // Privacy Guarantee Banner
               Container(

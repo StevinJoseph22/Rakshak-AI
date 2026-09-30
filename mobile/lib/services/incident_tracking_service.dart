@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:socket_io_client/socket_io_client.dart' as io;
 import 'api_client.dart';
+import 'emergency_sms_service.dart';
 
 enum TriageState {
   idle,
@@ -21,6 +22,7 @@ class TriageStatus {
   final double? hospitalLng;
   final String? searchRadius;
   final String? message;
+  final bool isConnected;
 
   const TriageStatus({
     this.state = TriageState.idle,
@@ -32,6 +34,7 @@ class TriageStatus {
     this.hospitalLng,
     this.searchRadius,
     this.message,
+    this.isConnected = true,
   });
 
   TriageStatus copyWith({
@@ -44,6 +47,7 @@ class TriageStatus {
     double? hospitalLng,
     String? searchRadius,
     String? message,
+    bool? isConnected,
   }) {
     return TriageStatus(
       state: state ?? this.state,
@@ -55,6 +59,7 @@ class TriageStatus {
       hospitalLng: hospitalLng ?? this.hospitalLng,
       searchRadius: searchRadius ?? this.searchRadius,
       message: message ?? this.message,
+      isConnected: isConnected ?? this.isConnected,
     );
   }
 }
@@ -97,15 +102,7 @@ class IncidentTrackingService {
       return;
     }
 
-    final candidates = candidateUrls ??
-        <String>[
-          'http://127.0.0.1:5000',
-          'http://192.168.1.21:5000',
-          if (kDefaultBackendUrl != 'http://10.0.2.2:5000') kDefaultBackendUrl,
-          'http://10.208.188.149:5000',
-          'http://172.22.61.163:5000',
-          'http://10.0.2.2:5000',
-        ].toSet().toList();
+    final candidates = candidateUrls ?? getBackendCandidates();
 
     _connectToSocket(incidentId, candidates);
   }
@@ -128,7 +125,18 @@ class IncidentTrackingService {
 
         socket.onConnect((_) {
           debugPrint('[IncidentTrackingService] Connected to $url, joining incident:$incidentId');
+          statusNotifier.value = statusNotifier.value.copyWith(isConnected: true);
           socket.emit('join_incident', incidentId);
+        });
+
+        socket.onDisconnect((_) {
+          debugPrint('[IncidentTrackingService] Disconnected from socket');
+          statusNotifier.value = statusNotifier.value.copyWith(isConnected: false);
+        });
+
+        socket.onConnectError((err) {
+          debugPrint('[IncidentTrackingService] Connection error: $err');
+          statusNotifier.value = statusNotifier.value.copyWith(isConnected: false);
         });
 
         socket.on('case_accepted', (data) {
@@ -137,15 +145,28 @@ class IncidentTrackingService {
             final incId = data['incident_id']?.toString();
             if (incId == null || incId == _trackedIncidentId) {
               final hosp = data['hospital'] as Map?;
+              final hospName = hosp?['name']?.toString() ?? 'Trauma Center';
+              final hospAddress = hosp?['address']?.toString() ?? 'Emergency Bay';
+              final hospPhone = hosp?['phone']?.toString() ?? '108';
+
               statusNotifier.value = TriageStatus(
                 state: TriageState.accepted,
                 incidentId: _trackedIncidentId,
-                hospitalName: hosp?['name']?.toString() ?? 'Trauma Center',
-                hospitalAddress: hosp?['address']?.toString() ?? 'Emergency Bay',
-                hospitalPhone: hosp?['phone']?.toString() ?? '108',
+                hospitalName: hospName,
+                hospitalAddress: hospAddress,
+                hospitalPhone: hospPhone,
                 hospitalLat: (hosp?['latitude'] as num?)?.toDouble(),
                 hospitalLng: (hosp?['longitude'] as num?)?.toDouble(),
                 message: 'Emergency accepted by trauma center. Ambulance dispatched.',
+              );
+
+              // Privacy note: Emergency contact data is stored locally on-device and only sent
+              // alongside an actual confirmed incident dispatch via victim_metadata.
+              // Dispatch follow-up update SMS: "UPDATE: [victim] has been accepted by [hospital]..."
+              EmergencySmsService.instance.sendHospitalAcceptedAlert(
+                hospitalName: hospName,
+                hospitalAddress: hospAddress,
+                hospitalPhone: hospPhone,
               );
             }
           }

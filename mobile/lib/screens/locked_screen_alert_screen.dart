@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../services/api_client.dart';
 import '../services/crash_detector_service.dart';
 import '../services/crash_event_service.dart';
+import '../services/emergency_contact_service.dart';
+import '../services/emergency_sms_service.dart';
 import '../services/incident_tracking_service.dart';
 import 'intake_screen.dart';
 
@@ -81,11 +83,27 @@ class _LockedScreenAlertScreenState extends State<LockedScreenAlertScreen>
 
     final lat = widget.crashEvent?.latitude ?? CrashDetectorService.instance.lastKnownLatitude;
     final lng = widget.crashEvent?.longitude ?? CrashDetectorService.instance.lastKnownLongitude;
+
+    // Privacy note: Emergency contact data is the victim's own chosen contact,
+    // stored locally on-device and only sent alongside an actual confirmed incident dispatch
+    // via victim_metadata. It is never stored in a standalone contacts table or cached
+    // in Redis alongside temporary photos.
+    final primaryContact = EmergencyContactService.instance.primaryContactSync;
+    final victimName = EmergencyContactService.instance.victimNameSync;
+
     final metadata = {
+      'vehicle_type': 'Two-Wheeler',
+      'rider_status': 'SOS Active (Unresponsive)',
       'deceleration_g': widget.crashEvent?.decelerationG ?? 6.5,
       'speed_drop_kmh': widget.crashEvent?.speedDropKmh ?? 60.0,
       'source': widget.crashEvent?.source ?? 'locked_screen_alert',
       'timestamp': (widget.crashEvent?.timestamp ?? DateTime.now()).toIso8601String(),
+      'victim_name': victimName,
+      if (primaryContact != null) ...{
+        'emergency_contact_name': primaryContact.name,
+        'emergency_contact_phone': primaryContact.phone,
+        'emergency_contact_relationship': primaryContact.relationship,
+      },
     };
 
     // Auto-broadcast alert to backend
@@ -106,6 +124,13 @@ class _LockedScreenAlertScreenState extends State<LockedScreenAlertScreen>
         debugPrint('Incident broadcast queued / offline fallback: ${result.errorMessage}');
       }
     });
+
+    // Auto-dispatch SMS alert to registered emergency contacts (Real SIM SmsManager or WhatsApp fallback)
+    EmergencySmsService.instance.sendCrashAlert(
+      lat: lat,
+      lng: lng,
+      context: mounted ? context : null,
+    );
   }
 
   void _navigateToNext() {

@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { IncidentPayload } from '../types';
-import { ShieldAlert, X } from 'lucide-react';
+import { ShieldAlert, X, Phone } from 'lucide-react';
 
 interface PoliceTacticalMapProps {
   incidents: IncidentPayload[];
@@ -70,7 +70,7 @@ export const PoliceTacticalMap: React.FC<PoliceTacticalMapProps> = ({
     condition: 'Clear' | 'Moderate' | 'Heavy';
   } | null>(null);
 
-  // Sync selectedIncidentId with activeIncident
+  // Sync selectedIncidentId with activeIncident or auto-select first incident
   useEffect(() => {
     if (selectedIncidentId) {
       const match = incidents.find((i) => i.id === selectedIncidentId);
@@ -80,8 +80,18 @@ export const PoliceTacticalMap: React.FC<PoliceTacticalMapProps> = ({
           mapRef.current.flyTo([match.latitude, match.longitude], 14, { duration: 0.8 });
         }
       }
+    } else if (incidents.length > 0 && !activeIncident) {
+      setActiveIncident(incidents[0]);
     }
-  }, [selectedIncidentId, incidents]);
+  }, [selectedIncidentId, incidents, activeIncident]);
+
+  // Ensure map tiles are fully refreshed whenever incidents list updates
+  useEffect(() => {
+    if (mapRef.current) {
+      const timer = setTimeout(() => mapRef.current?.invalidateSize(), 200);
+      return () => clearTimeout(timer);
+    }
+  }, [incidents.length]);
 
   // Initialize Leaflet map
   useEffect(() => {
@@ -241,6 +251,7 @@ export const PoliceTacticalMap: React.FC<PoliceTacticalMapProps> = ({
         })
         .catch(() => {
           // Fallback line
+          console.warn('[PoliceTacticalMap] OSRM route fetch failed or timed out. Falling back to direct line.');
           const fallback = L.polyline(
             [
               [activeIncident.latitude, activeIncident.longitude],
@@ -432,6 +443,58 @@ export const PoliceTacticalMap: React.FC<PoliceTacticalMapProps> = ({
             </div>
           </div>
 
+          {/* Privacy note: Emergency contact data is the victim's own chosen contact,
+              stored locally on-device and only sent alongside an actual incident dispatch via victim_metadata.
+              It is never stored in a standalone contacts table or cached in Redis alongside temporary photos. */}
+          {activeIncident.victim_metadata &&
+            typeof activeIncident.victim_metadata === 'object' &&
+            Boolean((activeIncident.victim_metadata as Record<string, unknown>).emergency_contact_name) && (
+              <div
+                style={{
+                  marginTop: '10px',
+                  padding: '8px 10px',
+                  backgroundColor: '#f0fdf4',
+                  border: '1px solid #86efac',
+                  borderRadius: '6px',
+                  fontSize: '11px',
+                  color: '#14532d',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ fontSize: '10px', fontWeight: 800, color: '#166534', textTransform: 'uppercase' }}>
+                    📞 EMERGENCY CONTACT (FAMILY NOTIFIED)
+                  </div>
+                  <a
+                    href={`tel:${String((activeIncident.victim_metadata as Record<string, unknown>).emergency_contact_phone)}`}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '2px',
+                      fontSize: '10px',
+                      fontWeight: 700,
+                      color: '#15803d',
+                      textDecoration: 'none',
+                    }}
+                  >
+                    <Phone size={10} /> Call
+                  </a>
+                </div>
+                <div style={{ fontSize: '12px', fontWeight: 700, color: '#14532d', marginTop: '3px' }}>
+                  Emergency Contact:{' '}
+                  {String((activeIncident.victim_metadata as Record<string, unknown>).emergency_contact_name)}
+                  {', '}
+                  <span style={{ fontFamily: 'monospace' }}>
+                    {String((activeIncident.victim_metadata as Record<string, unknown>).emergency_contact_phone)}
+                  </span>
+                </div>
+                {Boolean((activeIncident.victim_metadata as Record<string, unknown>).emergency_contact_relationship) && (
+                  <div style={{ fontSize: '10px', color: '#15803d', marginTop: '1px' }}>
+                    Relationship: {String((activeIncident.victim_metadata as Record<string, unknown>).emergency_contact_relationship)}
+                  </div>
+                )}
+              </div>
+            )}
+
           {/* Accepted Hospital Details */}
           {activeIncident.accepted_hospital ? (
             <>
@@ -486,7 +549,7 @@ export const PoliceTacticalMap: React.FC<PoliceTacticalMapProps> = ({
                           color: routeInfo.condition === 'Heavy' ? '#991b1b' : '#92400e',
                         }}
                       >
-                        +{routeInfo.delayMin}m Traffic Delay
+                        +{routeInfo.delayMin}m Profile Delay
                       </span>
                     ) : (
                       <span

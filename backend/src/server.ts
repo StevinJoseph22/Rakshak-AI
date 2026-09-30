@@ -9,6 +9,14 @@ import { initSocketIO } from './socket';
 
 dotenv.config();
 
+// Process-level crash prevention guards for hackathon demo stability
+process.on('unhandledRejection', (reason) => {
+  console.warn('[Process Warning] Handled unhandledRejection:', reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('[Process Warning] Handled uncaughtException:', err);
+});
+
 export const app = express();
 export const httpServer = http.createServer(app);
 export const io = initSocketIO(httpServer);

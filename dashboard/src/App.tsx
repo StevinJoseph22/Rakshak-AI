@@ -3,12 +3,14 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Navbar } from './components/Navbar';
 import { HospitalView } from './views/HospitalView';
 import { PoliceView } from './views/PoliceView';
+import { DemoModeLiveDrawer } from './components/DemoModeLiveDrawer';
 import { getSocket } from './services/socket';
 import { ConnectionStatus } from './types';
 
 export const App: React.FC = () => {
   const [globalStatus, setGlobalStatus] =
     useState<ConnectionStatus>('connected');
+  const [demoMode, setDemoMode] = useState<boolean>(true);
 
   useEffect(() => {
     const socket = getSocket();
@@ -46,7 +48,11 @@ export const App: React.FC = () => {
           color: '#1e293b',
         }}
       >
-        <Navbar status={globalStatus} />
+        <Navbar
+          status={globalStatus}
+          demoMode={demoMode}
+          onToggleDemoMode={() => setDemoMode(!demoMode)}
+        />
 
         <main style={{ flex: 1 }}>
           <Routes>
@@ -56,6 +62,11 @@ export const App: React.FC = () => {
             <Route path="*" element={<Navigate to="/hospital" replace />} />
           </Routes>
         </main>
+
+        <DemoModeLiveDrawer
+          isOpen={demoMode}
+          onClose={() => setDemoMode(false)}
+        />
 
         <footer
           style={{

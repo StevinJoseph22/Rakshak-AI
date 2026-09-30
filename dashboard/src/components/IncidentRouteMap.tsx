@@ -198,6 +198,7 @@ export const IncidentRouteMap: React.FC<IncidentRouteMapProps> = ({
         })
         .catch(() => {
           // Fallback straight line
+          console.warn('[IncidentRouteMap] OSRM route fetch failed or timed out. Falling back to direct line.');
           const fallbackLine = L.polyline(
             [
               [incidentLat, incidentLng],
@@ -284,7 +285,7 @@ export const IncidentRouteMap: React.FC<IncidentRouteMapProps> = ({
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <span>
             🛣️ <b>{routeDistanceKm ? `${routeDistanceKm} km Road` : 'Calculating route...'}</b>
-            {routeDurationMin && ` (~${routeDurationMin} min in Traffic)`}
+            {routeDurationMin && ` (~${routeDurationMin} min Speed-Profile)`}
           </span>
           {trafficDelayMin && trafficDelayMin > 0 ? (
             <span
@@ -296,7 +297,7 @@ export const IncidentRouteMap: React.FC<IncidentRouteMapProps> = ({
                 fontWeight: 700,
               }}
             >
-              +{trafficDelayMin}m Traffic Delay
+              +{trafficDelayMin}m Profile Delay
             </span>
           ) : (
             <span
@@ -313,8 +314,9 @@ export const IncidentRouteMap: React.FC<IncidentRouteMapProps> = ({
           )}
         </div>
 
-        {/* Traffic Color Indicators */}
+        {/* Speed Profile Color Indicators */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '10px', color: '#cbd5e1' }}>
+          <span style={{ color: '#94a3b8', fontWeight: 600 }}>Speed Profile:</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
             <span style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: '#2563eb' }} />
             Fast Flow
