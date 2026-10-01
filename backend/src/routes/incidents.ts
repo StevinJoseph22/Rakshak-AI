@@ -749,6 +749,76 @@ incidentsRouter.get('/:id/image', async (req: Request, res: Response) => {
   }
 });
 
+// POST /incidents/:id/image - Upload ephemeral in-memory photo stream (HTTP fallback for WebSockets)
+incidentsRouter.post('/:id/image', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { image } = req.body;
+
+    if (!image) {
+      return res.status(400).json({ error: 'Missing image payload' });
+    }
+
+    let base64Data: string;
+    if (typeof image === 'string') {
+      base64Data = image.replace(/^data:image\/\w+;base64,/, '');
+    } else {
+      base64Data = Buffer.from(image).toString('base64');
+    }
+
+    const dataUrl = `data:image/jpeg;base64,${base64Data}`;
+
+    // Verify incident ID or auto-heal
+    let effectiveIncidentId = id;
+    try {
+      const checkRes = await query('SELECT id FROM incidents WHERE id = $1;', [id]);
+      if (checkRes.rowCount === 0) {
+        const recentRes = await query<{ id: string }>(
+          `SELECT id FROM incidents WHERE created_at > NOW() - INTERVAL '5 minutes' ORDER BY created_at DESC LIMIT 1;`
+        );
+        if (recentRes.rowCount && recentRes.rowCount > 0) {
+          effectiveIncidentId = recentRes.rows[0].id;
+        }
+      }
+    } catch (_) {}
+
+    // Store in volatile Redis RAM with 15-minute TTL (900 seconds)
+    await redis.setex(`incident_image:${effectiveIncidentId}`, 900, dataUrl);
+    if (effectiveIncidentId !== id) {
+      await redis.setex(`incident_image:${id}`, 900, dataUrl);
+    }
+    console.log(`[Zero-Storage Engine] Stored photo stream via HTTP POST in Redis RAM (TTL 900s): incident_image:${effectiveIncidentId}`);
+
+    // Broadcast image_update via Socket.IO
+    const io = getIO();
+    if (io) {
+      let hospitalIds: string[] = [];
+      try {
+        const cachedHospitals = await redis.get(`incident_hospitals:${effectiveIncidentId}`);
+        if (cachedHospitals) {
+          hospitalIds = JSON.parse(cachedHospitals);
+        }
+      } catch (_) {}
+
+      const updatePayload = {
+        incident_id: effectiveIncidentId,
+        imageUrl: dataUrl,
+      };
+
+      hospitalIds.forEach((hId) => {
+        io!.to(hId).emit('image_update', updatePayload);
+      });
+      io!.to('all_incidents').emit('image_update', updatePayload);
+      console.log(`[Socket.io] Broadcast image_update via HTTP upload for incident: ${effectiveIncidentId}`);
+    }
+
+    return res.json({ status: 'ok', incident_id: effectiveIncidentId });
+  } catch (err) {
+    console.error('[POST /incidents/:id/image Error]', err);
+    return res.status(500).json({ error: 'Failed to store image in volatile cache' });
+  }
+});
+
 // Helper function to execute race-safe accept
 async function handleAcceptIncident(
   incidentId: string,
