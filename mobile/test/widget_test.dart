@@ -41,12 +41,21 @@ void main() {
     await tester.tap(find.text('Activate Guard'));
     await tester.pump();
     expect(find.text('Crash Guard Active: Monitoring Telemetry'), findsOneWidget);
+
+    // Verify professional presentation dashboard is rendered by default
+    expect(find.text('Protection Telemetry'), findsOneWidget);
+    expect(find.text('Speed Monitor'), findsOneWidget);
+    expect(find.text('ONE-TOUCH EMERGENCY SOS'), findsOneWidget);
   });
 
-  testWidgets('Simulation harness renders sliders and trigger button',
+  testWidgets('Simulation harness renders sliders and trigger button in Test Lab',
       (WidgetTester tester) async {
     await tester.pumpWidget(const RakshakApp());
-    await tester.pump();
+    await tester.pumpAndSettle();
+
+    // Switch to Test Lab mode
+    await tester.tap(find.text('Test Lab').first);
+    await tester.pumpAndSettle();
 
     expect(find.text('Crash Simulation Harness'), findsOneWidget);
     expect(find.text('Deceleration:'), findsOneWidget);
@@ -60,7 +69,11 @@ void main() {
   testWidgets('Triggering impact signature navigates to LockedScreenAlertScreen',
       (WidgetTester tester) async {
     await tester.pumpWidget(const RakshakApp());
-    await tester.pump();
+    await tester.pumpAndSettle();
+
+    // Switch to Test Lab mode
+    await tester.tap(find.text('Test Lab').first);
+    await tester.pumpAndSettle();
 
     // Scroll until trigger button is visible in the viewport
     final triggerFinder = find.text('TRIGGER IMPACT SIGNATURE');
