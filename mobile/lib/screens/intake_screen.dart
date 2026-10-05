@@ -90,9 +90,12 @@ class _IntakeScreenState extends State<IntakeScreen> {
               )
               .then((success) {
             if (mounted) {
+              final transport = PhotoStreamService.lastUsedTransport == 'webrtc'
+                  ? 'WebRTC P2P'
+                  : 'WebSocket Fallback';
               setState(() {
                 _statusMessage = success
-                    ? 'Streamed ${(bytes.lengthInBytes / 1024).toStringAsFixed(1)} KB (Zero-Storage RAM Stream Active)'
+                    ? 'Streamed ${(bytes.lengthInBytes / 1024).toStringAsFixed(1)} KB via $transport (Zero-Storage RAM Active)'
                     : 'Stream connection failed. Retained in volatile RAM only.';
               });
             }

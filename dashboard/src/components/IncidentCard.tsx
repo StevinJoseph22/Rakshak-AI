@@ -19,7 +19,7 @@ import {
   Check,
 } from 'lucide-react';
 import { IncidentPayload, Hospital } from '../types';
-import { BACKEND_API_BASE } from '../services/socket';
+import { BACKEND_API_BASE, getSocket } from '../services/socket';
 import { IncidentRouteMap } from './IncidentRouteMap';
 
 const REJECTION_REASONS = [
@@ -52,11 +52,142 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
   const [selectedRejectReason, setSelectedRejectReason] = useState<string>('No ICU capacity');
   const [isSubmittingReject, setIsSubmittingReject] = useState<boolean>(false);
   const [localImageUrl, setLocalImageUrl] = useState<string | null>(incident.imageUrl || null);
+  const [photoTransport, setPhotoTransport] = useState<'webrtc' | 'websocket'>('websocket');
+
+  // Phase 12: WebRTC P2P DataChannel Receiver with WebSocket fallback
+  useEffect(() => {
+    let pc: RTCPeerConnection | null = null;
+    let isMounted = true;
+    const socket = getSocket();
+
+    const handleWebRtcOffer = async (payload: {
+      incident_id: string;
+      sdp: RTCSessionDescriptionInit;
+      sender_id?: string;
+    }) => {
+      if (payload.incident_id !== incident.id || !payload.sdp) return;
+      console.log(`[WebRTC Dashboard] Received offer for incident ${incident.id} from sender ${payload.sender_id}`);
+
+      try {
+        if (pc) {
+          pc.close();
+        }
+
+        // Free public Google STUN servers for NAT traversal.
+        // NOTE: In strict enterprise/symmetric-NAT networks, a TURN relay would be needed.
+        pc = new RTCPeerConnection({
+          iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' },
+          ],
+        });
+
+        pc.ondatachannel = (event) => {
+          const channel = event.channel;
+          console.log(`[WebRTC Dashboard] DataChannel connected: ${channel.label}`);
+
+          let chunkBuffer: string[] = [];
+          channel.onmessage = (msgEvent) => {
+            try {
+              if (typeof msgEvent.data === 'string') {
+                const parsed = JSON.parse(msgEvent.data);
+                if (parsed.type === 'photo_chunk') {
+                  chunkBuffer.push(parsed.data);
+                  if (parsed.isLast) {
+                    const fullDataUrl = chunkBuffer.join('');
+                    if (isMounted) {
+                      setLocalImageUrl(fullDataUrl);
+                      setPhotoTransport('webrtc');
+                    }
+                    chunkBuffer = [];
+                  }
+                } else if (parsed.type === 'photo_data' || parsed.imageUrl) {
+                  const url = parsed.imageUrl || parsed.data;
+                  if (isMounted && url) {
+                    setLocalImageUrl(url);
+                    setPhotoTransport('webrtc');
+                  }
+                }
+              }
+            } catch (err) {
+              console.warn('[WebRTC Dashboard] Error parsing message on DataChannel:', err);
+            }
+          };
+        };
+
+        pc.onicecandidate = (event) => {
+          if (event.candidate && socket.connected) {
+            socket.emit('webrtc_ice_candidate', {
+              incident_id: incident.id,
+              candidate: event.candidate,
+              target_id: payload.sender_id,
+            });
+          }
+        };
+
+        await pc.setRemoteDescription(new RTCSessionDescription(payload.sdp));
+        // Flush any ICE candidates that arrived before remote description was ready
+        while (queuedIceCandidates.length > 0) {
+          const queuedCandidate = queuedIceCandidates.shift();
+          if (queuedCandidate && pc) {
+            try {
+              await pc.addIceCandidate(new RTCIceCandidate(queuedCandidate));
+            } catch {
+              // Non-fatal candidate arrival
+            }
+          }
+        }
+
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+
+        socket.emit('webrtc_answer', {
+          incident_id: incident.id,
+          sdp: answer,
+          target_id: payload.sender_id,
+        });
+        console.log(`[WebRTC Dashboard] Emitted webrtc_answer for incident ${incident.id}`);
+      } catch (err) {
+        console.warn(`[WebRTC Dashboard] Negotiation failed for incident ${incident.id}:`, err);
+      }
+    };
+
+    const queuedIceCandidates: RTCIceCandidateInit[] = [];
+
+    const handleIceCandidate = async (payload: {
+      incident_id: string;
+      candidate: RTCIceCandidateInit;
+    }) => {
+      if (payload.incident_id !== incident.id || !payload.candidate) return;
+      if (!pc || !pc.remoteDescription) {
+        queuedIceCandidates.push(payload.candidate);
+        return;
+      }
+      try {
+        await pc.addIceCandidate(new RTCIceCandidate(payload.candidate));
+      } catch {
+        // Non-fatal candidate arrival
+      }
+    };
+
+    socket.on('webrtc_offer', handleWebRtcOffer);
+    socket.on('webrtc_ice_candidate', handleIceCandidate);
+
+    return () => {
+      isMounted = false;
+      socket.off('webrtc_offer', handleWebRtcOffer);
+      socket.off('webrtc_ice_candidate', handleIceCandidate);
+      if (pc) {
+        pc.close();
+        pc = null;
+      }
+    };
+  }, [incident.id]);
 
   // Auto-fetch ephemeral photo from Redis cache if missing or received after mount
   useEffect(() => {
     if (incident.imageUrl) {
-      setLocalImageUrl(incident.imageUrl);
+      setLocalImageUrl((prev) => prev || incident.imageUrl);
       return;
     }
 
@@ -67,7 +198,7 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
         if (res.ok) {
           const data = await res.json();
           if (isMounted && data.imageUrl) {
-            setLocalImageUrl(data.imageUrl);
+            setLocalImageUrl((prev) => prev || data.imageUrl);
           }
         }
       } catch {
@@ -1126,6 +1257,28 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
                 LIVE INTAKE STREAM (RAM ONLY)
               </span>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span
+                  style={{
+                    background: photoTransport === 'webrtc' ? '#059669' : '#2563eb',
+                    color: '#ffffff',
+                    padding: '0.15rem 0.5rem',
+                    borderRadius: '9999px',
+                    fontSize: '0.65rem',
+                    fontWeight: 700,
+                    letterSpacing: '0.04em',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.25rem',
+                    boxShadow: photoTransport === 'webrtc' ? '0 0 6px rgba(16, 185, 129, 0.4)' : 'none',
+                  }}
+                  title={
+                    photoTransport === 'webrtc'
+                      ? 'P2P DataChannel connection active (WebRTC)'
+                      : 'Zero-storage Redis RAM stream (WebSocket Fallback)'
+                  }
+                >
+                  {photoTransport === 'webrtc' ? '⚡ WebRTC P2P' : '🔄 WebSocket Fallback'}
+                </span>
                 <span
                   style={{
                     background: 'rgba(255, 255, 255, 0.15)',

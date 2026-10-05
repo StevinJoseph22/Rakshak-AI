@@ -265,6 +265,146 @@ export function initSocketIO(httpServer: HttpServer): SocketIOServer {
       }
     );
 
+    // =========================================================================
+    // PHASE 12: WEBRTC SIGNALING LAYER OVER EXISTING SOCKET.IO CONNECTION
+    // -------------------------------------------------------------------------
+    // Handles signaling relays (offer, answer, ICE candidates) between mobile peer
+    // and receiving hospital dashboard(s) for direct P2P photo/video streaming.
+    //
+    // STUN / NAT TRAVERSAL & TURN ARCHITECTURAL LIMITATION NOTE:
+    // Peers utilize free public Google STUN servers (stun:stun.l.google.com:19302)
+    // for standard NAT hole-punching. In symmetric-NAT or highly restrictive
+    // enterprise/hospital Wi-Fi networks, a TURN relay server (e.g. coturn with
+    // credentials) is required for guaranteed peer connectivity.
+    // As external TURN infrastructure is not provisioned for this hackathon, this
+    // is an honest documented limitation: if WebRTC peer negotiation times out (5s),
+    // Rakshak-AI automatically and seamlessly falls back to Phase 6's zero-storage
+    // WebSocket binary streaming pipeline.
+    //
+    // ZERO-STORAGE GUARANTEE:
+    // Signaling payloads strictly contain SDP session descriptors and ICE candidates.
+    // No image bytes or pixel buffers pass through or persist to server storage.
+    // =========================================================================
+
+    socket.on(
+      'webrtc_offer',
+      async (data: {
+        incident_id: string;
+        sdp: unknown;
+      }) => {
+        try {
+          if (!data?.incident_id || !data?.sdp) return;
+          const incidentId = data.incident_id;
+
+          console.log(`[WebRTC Signaling] Received webrtc_offer from ${socket.id} for incident: ${incidentId}`);
+
+          // Resolve matched hospital IDs for room-isolated signaling dispatch
+          let hospitalIds: string[] = [];
+          try {
+            const cachedHospitals = await redis.get(`incident_hospitals:${incidentId}`);
+            if (cachedHospitals) {
+              hospitalIds = JSON.parse(cachedHospitals);
+            }
+          } catch {
+            // Non-fatal cache lookup failure
+          }
+
+          if (hospitalIds.length === 0) {
+            try {
+              const matchRes = await query<{ id: string }>(
+                `SELECT h.id FROM hospitals h
+                 JOIN incidents i ON ST_DWithin(h.location, i.location, 8000)
+                 WHERE i.id = $1 AND h.has_trauma_center = true`,
+                [incidentId]
+              );
+              hospitalIds = matchRes.rows.map((r) => r.id);
+            } catch (dbErr) {
+              console.error('[WebRTC Signaling] Error querying matched hospitals for webrtc_offer:', dbErr);
+            }
+          }
+
+          const offerPayload = {
+            incident_id: incidentId,
+            sdp: data.sdp,
+            sender_id: socket.id,
+          };
+
+          // Relay offer exclusively to matched hospital ER rooms
+          hospitalIds.forEach((hospitalId) => {
+            io!.to(hospitalId).emit('webrtc_offer', offerPayload);
+            console.log(`[WebRTC Signaling] Relayed webrtc_offer to hospital room: ${hospitalId}`);
+          });
+
+          // Relay to police / all_incidents room
+          io!.to('all_incidents').emit('webrtc_offer', offerPayload);
+
+          // Relay to incident-specific room
+          io!.to(`incident:${incidentId}`).emit('webrtc_offer', offerPayload);
+        } catch (err) {
+          console.error('[WebRTC Signaling] Error handling webrtc_offer:', err);
+        }
+      }
+    );
+
+    socket.on(
+      'webrtc_answer',
+      (data: {
+        incident_id: string;
+        sdp: unknown;
+        target_id?: string;
+      }) => {
+        try {
+          if (!data?.incident_id || !data?.sdp) return;
+
+          console.log(`[WebRTC Signaling] Received webrtc_answer from ${socket.id} for incident: ${data.incident_id}`);
+
+          const answerPayload = {
+            incident_id: data.incident_id,
+            sdp: data.sdp,
+            sender_id: socket.id,
+          };
+
+          if (data.target_id) {
+            io!.to(data.target_id).emit('webrtc_answer', answerPayload);
+            console.log(`[WebRTC Signaling] Relayed webrtc_answer to target peer: ${data.target_id}`);
+          } else {
+            io!.to(`incident:${data.incident_id}`).emit('webrtc_answer', answerPayload);
+            io!.to('all_incidents').emit('webrtc_answer', answerPayload);
+          }
+        } catch (err) {
+          console.error('[WebRTC Signaling] Error handling webrtc_answer:', err);
+        }
+      }
+    );
+
+    socket.on(
+      'webrtc_ice_candidate',
+      (data: {
+        incident_id: string;
+        candidate: unknown;
+        target_id?: string;
+      }) => {
+        try {
+          if (!data?.incident_id || !data?.candidate) return;
+
+          const candidatePayload = {
+            incident_id: data.incident_id,
+            candidate: data.candidate,
+            sender_id: socket.id,
+          };
+
+          if (data.target_id) {
+            io!.to(data.target_id).emit('webrtc_ice_candidate', candidatePayload);
+          } else {
+            socket.to(`incident:${data.incident_id}`).emit('webrtc_ice_candidate', candidatePayload);
+            socket.to('all_incidents').emit('webrtc_ice_candidate', candidatePayload);
+          }
+        } catch (err) {
+          console.error('[WebRTC Signaling] Error handling webrtc_ice_candidate:', err);
+        }
+      }
+    );
+
     socket.on('disconnect', (reason) => {
       console.log(`[Socket.io] Client disconnected: ${socket.id} (${reason})`);
     });

@@ -780,7 +780,9 @@ incidentsRouter.post('/:id/image', async (req: Request, res: Response) => {
           effectiveIncidentId = recentRes.rows[0].id;
         }
       }
-    } catch (_) {}
+    } catch (_) {
+      // Non-fatal incident auto-healing check failure
+    }
 
     // Store in volatile Redis RAM with 15-minute TTL (900 seconds)
     await redis.setex(`incident_image:${effectiveIncidentId}`, 900, dataUrl);
@@ -798,7 +800,9 @@ incidentsRouter.post('/:id/image', async (req: Request, res: Response) => {
         if (cachedHospitals) {
           hospitalIds = JSON.parse(cachedHospitals);
         }
-      } catch (_) {}
+      } catch (_) {
+        // Non-fatal cache read failure
+      }
 
       const updatePayload = {
         incident_id: effectiveIncidentId,
