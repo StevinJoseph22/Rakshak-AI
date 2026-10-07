@@ -24,6 +24,7 @@ import {
   clearAllEscalations,
   triggerImmediateEscalation,
 } from '../escalation';
+import { authenticateJWT, optionalAuth } from '../middleware/auth';
 
 export const incidentsRouter = Router();
 
@@ -161,10 +162,15 @@ incidentsRouter.post('/', async (req: Request, res: Response) => {
 });
 
 // GET /incidents - Retrieve recent incidents with matched trauma hospitals (for Police & Hospital views)
-incidentsRouter.get('/', async (req: Request, res: Response) => {
+incidentsRouter.get('/', optionalAuth, async (req: Request, res: Response) => {
   try {
     const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 20, 1), 100);
-    const hospitalId = typeof req.query.hospital_id === 'string' ? req.query.hospital_id : undefined;
+    let hospitalId = typeof req.query.hospital_id === 'string' ? req.query.hospital_id : undefined;
+
+    // Phase 13: Automatically scope incident queries to authenticated hospital_staff's hospital_id
+    if (!hospitalId && req.user?.role === 'hospital_staff' && req.user.hospital_id) {
+      hospitalId = req.user.hospital_id;
+    }
 
     let sql = '';
     const params: unknown[] = [];
@@ -556,8 +562,17 @@ incidentsRouter.get('/nearby', async (req: Request, res: Response) => {
 });
 
 // POST /incidents/:id/claim - Ambulance claims the emergency case
-incidentsRouter.post('/:id/claim', async (req: Request, res: Response) => {
+// Scope Limitation Note: Mobile ambulance console uses device-UUID claiming from Phase 8
+// without full personnel login. If an auth token is provided, ambulance/hospital_staff/police roles are allowed.
+incidentsRouter.post('/:id/claim', optionalAuth, async (req: Request, res: Response) => {
   try {
+    if (req.user && !['ambulance', 'hospital_staff', 'police'].includes(req.user.role)) {
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: `Role '${req.user.role}' is not authorized to claim incidents.`,
+      });
+    }
+
     const paramsResult = incidentIdParamsSchema.safeParse(req.params);
     if (!paramsResult.success) {
       return res.status(400).json({
@@ -944,7 +959,14 @@ async function handleAcceptIncident(
 }
 
 // POST /incidents/:id/accept - Hospital accepts the emergency case
-incidentsRouter.post('/:id/accept', async (req: Request, res: Response) => {
+incidentsRouter.post('/:id/accept', authenticateJWT, async (req: Request, res: Response) => {
+  if (req.user?.role === 'police') {
+    return res.status(403).json({
+      error: 'Forbidden',
+      message: 'Police role may view incidents but is not authorized to accept or reject hospital triage cases.',
+    });
+  }
+
   const paramsResult = incidentIdParamsSchema.safeParse(req.params);
   if (!paramsResult.success) {
     return res.status(400).json({
@@ -961,11 +983,25 @@ incidentsRouter.post('/:id/accept', async (req: Request, res: Response) => {
     });
   }
 
+  if (req.user?.role === 'hospital_staff' && req.user.hospital_id !== hospitalId) {
+    return res.status(403).json({
+      error: 'Forbidden',
+      message: `Hospital staff may only accept incidents on behalf of their assigned hospital (${req.user.hospital_id}).`,
+    });
+  }
+
   return handleAcceptIncident(paramsResult.data.id, hospitalId, res);
 });
 
 // POST /incidents/:id/reject - Hospital rejects the emergency case
-incidentsRouter.post('/:id/reject', async (req: Request, res: Response) => {
+incidentsRouter.post('/:id/reject', authenticateJWT, async (req: Request, res: Response) => {
+  if (req.user?.role === 'police') {
+    return res.status(403).json({
+      error: 'Forbidden',
+      message: 'Police role may view incidents but is not authorized to accept or reject hospital triage cases.',
+    });
+  }
+
   try {
     const paramsResult = incidentIdParamsSchema.safeParse(req.params);
     if (!paramsResult.success) {
@@ -989,6 +1025,13 @@ incidentsRouter.post('/:id/reject', async (req: Request, res: Response) => {
 
     const { id } = paramsResult.data;
     const { hospital_id, reason } = bodyResult.data;
+
+    if (req.user?.role === 'hospital_staff' && req.user.hospital_id !== hospital_id) {
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: `Hospital staff may only reject incidents on behalf of their assigned hospital (${req.user.hospital_id}).`,
+      });
+    }
 
     // Check incident exists and check status
     const incCheck = await query<{ id: string; status: string }>(
@@ -1089,7 +1132,14 @@ incidentsRouter.post('/:id/reject', async (req: Request, res: Response) => {
 });
 
 // PATCH /incidents/:id/status - Update status (and accepted_hospital_id if status=accepted)
-incidentsRouter.patch('/:id/status', async (req: Request, res: Response) => {
+incidentsRouter.patch('/:id/status', authenticateJWT, async (req: Request, res: Response) => {
+  if (req.user?.role === 'police') {
+    return res.status(403).json({
+      error: 'Forbidden',
+      message: 'Police role may view incidents but is not authorized to accept or reject hospital triage cases.',
+    });
+  }
+
   const paramsResult = incidentIdParamsSchema.safeParse(req.params);
   if (!paramsResult.success) {
     return res.status(400).json({
@@ -1112,6 +1162,18 @@ incidentsRouter.patch('/:id/status', async (req: Request, res: Response) => {
 
   const { id } = paramsResult.data;
   const { status, accepted_hospital_id } = bodyResult.data;
+
+  // RBAC: hospital_staff may ONLY accept on behalf of their own assigned hospital
+  if (req.user?.role === 'hospital_staff') {
+    if (status === 'accepted') {
+      if (!accepted_hospital_id || accepted_hospital_id !== req.user.hospital_id) {
+        return res.status(403).json({
+          error: 'Forbidden',
+          message: `Hospital staff may only accept incidents on behalf of their assigned hospital (${req.user.hospital_id}).`,
+        });
+      }
+    }
+  }
 
   // If status is 'accepted', route through race-safe handleAcceptIncident
   if (status === 'accepted' && accepted_hospital_id) {

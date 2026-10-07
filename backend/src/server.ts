@@ -5,6 +5,7 @@ import helmet from 'helmet';
 import dotenv from 'dotenv';
 import { hospitalsRouter } from './routes/hospitals';
 import { incidentsRouter } from './routes/incidents';
+import { authRouter } from './routes/auth';
 import { initSocketIO } from './socket';
 
 dotenv.config();
@@ -58,6 +59,7 @@ app.get('/', (_req: Request, res: Response) => {
 });
 
 // Mount Domain Routers
+app.use('/auth', authRouter);
 app.use('/hospitals', hospitalsRouter);
 app.use('/incidents', incidentsRouter);
 

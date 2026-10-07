@@ -7,18 +7,28 @@ import {
   Trash2,
   Volume2,
   VolumeX,
+  LogOut,
 } from 'lucide-react';
 import { Hospital, IncidentPayload, ConnectionStatus } from '../types';
 import { SEEDED_HOSPITALS } from '../config/hospitals';
-import { getSocket, BACKEND_API_BASE } from '../services/socket';
+import { getSocket, BACKEND_API_BASE, updateSocketAuth } from '../services/socket';
+import { getStoredUser, clearStoredSession, AuthUser, authFetch } from '../services/auth';
+import { LoginView } from '../components/LoginView';
 import { IncidentCard } from '../components/IncidentCard';
 import { ReconnectingBanner } from '../components/ReconnectingBanner';
 
 export const HospitalView: React.FC = () => {
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(() => {
+    const user = getStoredUser();
+    return user && user.role === 'hospital_staff' ? user : null;
+  });
   const [hospitals, setHospitals] = useState<Hospital[]>(SEEDED_HOSPITALS);
-  const [selectedHospitalId, setSelectedHospitalId] = useState<string>(
-    SEEDED_HOSPITALS[0].id
-  );
+  const [selectedHospitalId, setSelectedHospitalId] = useState<string>(() => {
+    const user = getStoredUser();
+    return (user && user.role === 'hospital_staff' && user.hospital_id)
+      ? user.hospital_id
+      : SEEDED_HOSPITALS[0].id;
+  });
   const [incidentsByHospital, setIncidentsByHospital] = useState<
     Record<string, IncidentPayload[]>
   >(() => {
@@ -98,7 +108,7 @@ export const HospitalView: React.FC = () => {
   // Fetch incidents within 8km of the selected hospital on mount or hospital change
   useEffect(() => {
     let isMounted = true;
-    fetch(`${BACKEND_API_BASE}/incidents?hospital_id=${selectedHospitalId}&limit=20`)
+    authFetch(`${BACKEND_API_BASE}/incidents?hospital_id=${selectedHospitalId}&limit=20`)
       .then((res) => {
         if (!res.ok) throw new Error(`HTTP error ${res.status}`);
         return res.json();
@@ -548,7 +558,7 @@ export const HospitalView: React.FC = () => {
   const handleAcceptEmergency = async (incidentId: string) => {
     setAcceptingIncidentId(incidentId);
     try {
-      const res = await fetch(`${BACKEND_API_BASE}/incidents/${incidentId}/accept`, {
+      const res = await authFetch(`${BACKEND_API_BASE}/incidents/${incidentId}/accept`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ hospital_id: selectedHospitalId }),
@@ -616,7 +626,7 @@ export const HospitalView: React.FC = () => {
 
   const handleRejectEmergency = async (incidentId: string, reason: string) => {
     try {
-      const res = await fetch(`${BACKEND_API_BASE}/incidents/${incidentId}/reject`, {
+      const res = await authFetch(`${BACKEND_API_BASE}/incidents/${incidentId}/reject`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -665,6 +675,28 @@ export const HospitalView: React.FC = () => {
     });
   };
 
+  const handleLoginSuccess = (user: AuthUser) => {
+    setCurrentUser(user);
+    if (user.hospital_id) {
+      setSelectedHospitalId(user.hospital_id);
+    }
+  };
+
+  const handleLogout = () => {
+    clearStoredSession();
+    updateSocketAuth();
+    setCurrentUser(null);
+  };
+
+  if (!currentUser || !currentUser.hospital_id) {
+    return (
+      <LoginView
+        requiredRole="hospital_staff"
+        onLoginSuccess={handleLoginSuccess}
+      />
+    );
+  }
+
   const handleManualReconnect = () => {
     const socket = getSocket();
     setConnectionStatus('reconnecting');
@@ -699,44 +731,35 @@ export const HospitalView: React.FC = () => {
         }}
       >
         <div style={{ flex: '1 1 350px' }}>
-          <label
-            htmlFor="hospital-selector"
+          <div
             style={{
-              display: 'block',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.35rem',
               fontSize: '0.75rem',
               fontWeight: 700,
               textTransform: 'uppercase',
-              color: '#64748b',
+              color: '#059669',
+              background: '#ecfdf5',
+              padding: '0.2rem 0.5rem',
+              borderRadius: '0.25rem',
               marginBottom: '0.35rem',
+              border: '1px solid #a7f3d0',
             }}
           >
-            Active Trauma Facility Receptor
-          </label>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <HospitalIcon size={22} color="#059669" />
-            <select
-              id="hospital-selector"
-              value={selectedHospitalId}
-              onChange={(e) => setSelectedHospitalId(e.target.value)}
-              style={{
-                width: '100%',
-                maxWidth: '480px',
-                padding: '0.55rem 0.85rem',
-                borderRadius: '0.375rem',
-                border: '1px solid #cbd5e1',
-                fontSize: '0.925rem',
-                fontWeight: 600,
-                color: '#0f172a',
-                background: '#f8fafc',
-                cursor: 'pointer',
-              }}
-            >
-              {hospitals.map((h) => (
-                <option key={h.id} value={h.id}>
-                  {h.name} {h.has_trauma_center ? '(Trauma Level 1)' : '(Secondary Care)'}
-                </option>
-              ))}
-            </select>
+            <CheckCircle2 size={12} />
+            <span>Verified Facility Staff</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+            <HospitalIcon size={24} color="#059669" />
+            <div>
+              <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#0f172a' }}>
+                {currentUser.hospital_name || selectedHospital?.name || 'Assigned Trauma Facility'}
+              </div>
+              <div style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                Logged in as <strong style={{ color: '#0f172a' }}>@{currentUser.username}</strong>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -785,6 +808,27 @@ export const HospitalView: React.FC = () => {
               <span>Clear Feed</span>
             </button>
           )}
+
+          <button
+            onClick={handleLogout}
+            title="Sign out of hospital terminal"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.35rem',
+              padding: '0.5rem 0.75rem',
+              background: '#f8fafc',
+              border: '1px solid #cbd5e1',
+              borderRadius: '0.375rem',
+              color: '#475569',
+              cursor: 'pointer',
+              fontSize: '0.8rem',
+              fontWeight: 600,
+            }}
+          >
+            <LogOut size={16} />
+            <span>Sign Out</span>
+          </button>
         </div>
       </div>
 

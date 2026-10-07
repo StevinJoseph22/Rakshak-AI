@@ -10,14 +10,22 @@ import {
   List as ListIcon,
   LayoutGrid,
   X,
+  LogOut,
+  CheckCircle2,
 } from 'lucide-react';
 import { IncidentPayload, ConnectionStatus } from '../types';
-import { getSocket, BACKEND_API_BASE } from '../services/socket';
+import { getSocket, BACKEND_API_BASE, updateSocketAuth } from '../services/socket';
+import { getStoredUser, clearStoredSession, AuthUser, authFetch } from '../services/auth';
+import { LoginView } from '../components/LoginView';
 import { IncidentCard } from '../components/IncidentCard';
 import { ReconnectingBanner } from '../components/ReconnectingBanner';
 import { PoliceTacticalMap } from '../components/PoliceTacticalMap';
 
 export const PoliceView: React.FC = () => {
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(() => {
+    const user = getStoredUser();
+    return user && user.role === 'police' ? user : null;
+  });
   const [incidents, setIncidents] = useState<IncidentPayload[]>(() => {
     try {
       const saved = localStorage.getItem('rakshak_police_feed');
@@ -74,7 +82,7 @@ export const PoliceView: React.FC = () => {
   const fetchPoliceIncidents = useCallback(async () => {
     try {
       localStorage.removeItem('rakshak_police_cleared');
-      const res = await fetch(`${BACKEND_API_BASE}/incidents?limit=20`);
+      const res = await authFetch(`${BACKEND_API_BASE}/incidents?limit=20`);
       if (!res.ok) return;
       const data = await res.json();
       if (data.incidents && Array.isArray(data.incidents)) {
@@ -452,11 +460,26 @@ export const PoliceView: React.FC = () => {
     try {
       localStorage.setItem('rakshak_police_feed', '[]');
       // Purge test incidents from database so they do not resurrect
-      await fetch(`${BACKEND_API_BASE}/incidents`, { method: 'DELETE' });
+      await authFetch(`${BACKEND_API_BASE}/incidents`, { method: 'DELETE' });
     } catch {
       // ignore
     }
   };
+
+  const handleLogout = () => {
+    clearStoredSession();
+    updateSocketAuth();
+    setCurrentUser(null);
+  };
+
+  if (!currentUser || currentUser.role !== 'police') {
+    return (
+      <LoginView
+        requiredRole="police"
+        onLoginSuccess={(user) => setCurrentUser(user)}
+      />
+    );
+  }
 
   const handleManualReconnect = () => {
     const socket = getSocket();
@@ -503,16 +526,35 @@ export const PoliceView: React.FC = () => {
             <Activity size={26} />
           </div>
           <div>
-            <h2
-              style={{
-                margin: 0,
-                fontSize: '1.25rem',
-                fontWeight: 800,
-                color: '#0f172a',
-              }}
-            >
-              City-Wide Police Control Room
-            </h2>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', marginBottom: '0.2rem' }}>
+              <h2
+                style={{
+                  margin: 0,
+                  fontSize: '1.25rem',
+                  fontWeight: 800,
+                  color: '#0f172a',
+                }}
+              >
+                City-Wide Police Control Room
+              </h2>
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.25rem',
+                  fontSize: '0.725rem',
+                  fontWeight: 700,
+                  color: '#1d4ed8',
+                  background: '#dbeafe',
+                  padding: '0.15rem 0.5rem',
+                  borderRadius: '0.25rem',
+                  border: '1px solid #bfdbfe',
+                }}
+              >
+                <CheckCircle2 size={12} />
+                <span>Verified Dispatcher: @{currentUser.username}</span>
+              </span>
+            </div>
             <p style={{ margin: 0, color: '#64748b', fontSize: '0.825rem' }}>
               Monitoring all collisions across Bengaluru jurisdiction in real
               time via <code>all_incidents</code> WebSocket broadcast.
@@ -565,6 +607,27 @@ export const PoliceView: React.FC = () => {
               <span>Clear Feed</span>
             </button>
           )}
+
+          <button
+            onClick={handleLogout}
+            title="Sign out of police control terminal"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.35rem',
+              padding: '0.5rem 0.75rem',
+              background: '#f8fafc',
+              border: '1px solid #cbd5e1',
+              borderRadius: '0.375rem',
+              color: '#475569',
+              cursor: 'pointer',
+              fontSize: '0.8rem',
+              fontWeight: 600,
+            }}
+          >
+            <LogOut size={16} />
+            <span>Sign Out</span>
+          </button>
         </div>
       </div>
 

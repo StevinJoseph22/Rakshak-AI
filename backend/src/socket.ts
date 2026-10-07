@@ -3,6 +3,7 @@ import { Server as HttpServer } from 'http';
 import { Hospital } from './types';
 import { redis, registerPurgeVerification } from './redis';
 import { query } from './db';
+import { verifyToken } from './utils/jwt';
 
 let io: SocketIOServer | null = null;
 
@@ -34,17 +35,76 @@ export function initSocketIO(httpServer: HttpServer): SocketIOServer {
     },
   });
 
+  // Phase 13: Socket.IO Handshake Authentication Middleware
+  io.use((socket: Socket, next) => {
+    const rawToken =
+      socket.handshake.auth?.token ||
+      socket.handshake.headers?.authorization?.replace(/^Bearer\s+/i, '');
+
+    if (rawToken && typeof rawToken === 'string') {
+      try {
+        const decoded = verifyToken(rawToken);
+        socket.data.user = decoded;
+      } catch (err) {
+        console.warn(`[Socket.io Auth] Invalid JWT presented on connection ${socket.id}:`, err);
+        socket.data.user = null;
+      }
+    } else {
+      socket.data.user = null;
+    }
+    next();
+  });
+
   io.on('connection', (socket: Socket) => {
     console.log(`[Socket.io] Client connected: ${socket.id}`);
 
-    // Hospital ER view joins its dedicated room
+    // Phase 13: Automatically join rooms based on verified JWT role
+    const user = socket.data.user;
+    if (user) {
+      if (user.role === 'hospital_staff' && user.hospital_id) {
+        socket.join(user.hospital_id);
+        console.log(
+          `[Socket.io Auth] Authenticated hospital_staff '${user.username}' auto-joined hospital room: ${user.hospital_id}`
+        );
+        socket.emit('authenticated', {
+          role: user.role,
+          hospitalId: user.hospital_id,
+          username: user.username,
+        });
+      } else if (user.role === 'police') {
+        socket.join('all_incidents');
+        console.log(
+          `[Socket.io Auth] Authenticated police '${user.username}' auto-joined police room: all_incidents`
+        );
+        socket.emit('authenticated', {
+          role: user.role,
+          room: 'all_incidents',
+          username: user.username,
+        });
+      }
+    }
+
+    // Hospital ER view joins its dedicated room (Protected: requires matching hospital_staff role)
     socket.on('join_hospital', (hospitalId: string) => {
       if (hospitalId) {
-        // Leave any previously joined rooms (including all_incidents and other hospitals)
+        if (
+          socket.data.user?.role !== 'hospital_staff' ||
+          socket.data.user?.hospital_id !== hospitalId
+        ) {
+          console.warn(
+            `[Socket.io RBAC] Unauthorized join_hospital attempt by socket ${socket.id} (User: ${socket.data.user?.username || 'anonymous'}) for hospital ${hospitalId}`
+          );
+          socket.emit('error', {
+            code: 'FORBIDDEN',
+            message: 'Authentication required: You can only join your assigned hospital room.',
+          });
+          return;
+        }
+
+        // Leave any previously joined rooms
         for (const room of socket.rooms) {
           if (room !== socket.id) {
             socket.leave(room);
-            console.log(`[Socket.io] Socket ${socket.id} left room: ${room}`);
           }
         }
         socket.join(hospitalId);
@@ -53,13 +113,22 @@ export function initSocketIO(httpServer: HttpServer): SocketIOServer {
       }
     });
 
-    // Police Control Room joins the city-wide all_incidents room
+    // Police Control Room joins the city-wide all_incidents room (Protected: requires police role)
     socket.on('join_police', () => {
-      // Leave any hospital rooms so police only listens to all_incidents
+      if (socket.data.user?.role !== 'police') {
+        console.warn(
+          `[Socket.io RBAC] Unauthorized join_police attempt by socket ${socket.id} (User: ${socket.data.user?.username || 'anonymous'})`
+        );
+        socket.emit('error', {
+          code: 'FORBIDDEN',
+          message: 'Authentication required: Police role is required to join police room.',
+        });
+        return;
+      }
+
       for (const room of socket.rooms) {
         if (room !== socket.id && room !== 'all_incidents') {
           socket.leave(room);
-          console.log(`[Socket.io] Socket ${socket.id} left room: ${room}`);
         }
       }
       socket.join('all_incidents');

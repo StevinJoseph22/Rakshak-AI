@@ -1,4 +1,5 @@
 import { io, Socket } from 'socket.io-client';
+import { getStoredToken } from './auth';
 
 const BACKEND_URL =
   import.meta.env.VITE_BACKEND_URL ||
@@ -10,7 +11,9 @@ let socketInstance: Socket | null = null;
 
 export const getSocket = (): Socket => {
   if (!socketInstance) {
+    const token = getStoredToken();
     socketInstance = io(BACKEND_URL, {
+      auth: { token },
       transports: ['websocket', 'polling'],
       reconnection: true,
       reconnectionAttempts: Infinity,
@@ -22,4 +25,18 @@ export const getSocket = (): Socket => {
   return socketInstance;
 };
 
+/**
+ * Updates socket auth credentials and reconnects to trigger backend auto-room assignment.
+ */
+export const updateSocketAuth = (token: string | null = getStoredToken()): void => {
+  const socket = getSocket();
+  socket.auth = { token };
+  if (socket.connected) {
+    socket.disconnect().connect();
+  } else {
+    socket.connect();
+  }
+};
+
 export const BACKEND_API_BASE = BACKEND_URL;
+

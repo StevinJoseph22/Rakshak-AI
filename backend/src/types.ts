@@ -55,3 +55,32 @@ export interface CreateIncidentResponse {
   incident: Incident;
   matched_hospitals: Hospital[];
 }
+
+// Phase 13: Role-Based Access Control & Authentication Types
+export type UserRole = 'hospital_staff' | 'police' | 'ambulance';
+
+export interface User {
+  id: string;
+  username: string;
+  password_hash: string;
+  role: UserRole;
+  hospital_id: string | null;
+  created_at: string;
+}
+
+export interface AuthUser {
+  id: string;
+  username: string;
+  role: UserRole;
+  hospital_id: string | null;
+  hospital_name?: string | null;
+}
+
+declare global {
+  // eslint-disable-next-line @typescript-eslint/no-namespace
+  namespace Express {
+    interface Request {
+      user?: AuthUser;
+    }
+  }
+}
