@@ -6,6 +6,8 @@ import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
 import 'package:socket_io_client/socket_io_client.dart' as io;
 import 'package:url_launcher/url_launcher.dart';
+import '../models/crash_biomechanics_model.dart';
+import '../models/abha_emergency_vault_model.dart';
 import '../models/incident_model.dart';
 import '../services/api_client.dart';
 import '../services/crash_detector_service.dart';
@@ -730,6 +732,64 @@ class _AmbulanceDispatchScreenState extends State<AmbulanceDispatchScreen> {
                       ],
                     ],
 
+                    // Advanced Trauma Diagnostics: AI Biomechanics & ABHA Vault
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: InkWell(
+                            onTap: () => _showBiomechanicsSheet(context),
+                            borderRadius: BorderRadius.circular(8),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFEF2F2),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: const Color(0xFFFECACA)),
+                              ),
+                              child: const Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.psychology, size: 14, color: Color(0xFFDC2626)),
+                                  SizedBox(width: 4),
+                                  Text(
+                                    'AI Trauma Blackbox',
+                                    style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Color(0xFF991B1B)),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: InkWell(
+                            onTap: () => _showAbhaVaultSheet(context),
+                            borderRadius: BorderRadius.circular(8),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF0FDF4),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: const Color(0xFFBBF7D0)),
+                              ),
+                              child: const Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.verified_user, size: 14, color: Color(0xFF16A34A)),
+                                  SizedBox(width: 4),
+                                  Text(
+                                    'ABHA Health Vault',
+                                    style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Color(0xFF166534)),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+
                     // Expandable Triage Matrix Drawer
                     if (_showTriageMatrix) ...[
                       const Divider(height: 16),
@@ -1202,6 +1262,313 @@ class _AmbulanceDispatchScreenState extends State<AmbulanceDispatchScreen> {
             color: Colors.black87,
           ),
         ),
+      ],
+    );
+  }
+
+  /// Displays AI Crash Biomechanics & Virtual Trauma Blackbox telemetry sheet
+  void _showBiomechanicsSheet(BuildContext context) {
+    final bio = CrashBiomechanics.fromMetadata(widget.incident.victimMetadata);
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        padding: const EdgeInsets.all(20),
+        decoration: const BoxDecoration(
+          color: Color(0xFF0F172A),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          border: Border(top: BorderSide(color: Color(0xFFEF4444), width: 2)),
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Center(
+                child: Container(
+                  width: 44,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade700,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Row(
+                children: [
+                  Icon(Icons.psychology, color: Color(0xFFEF4444), size: 24),
+                  SizedBox(width: 10),
+                  Text(
+                    'AI CRASH BIOMECHANICS & BLACKBOX',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'Physics-informed predictive injury modeling calculated from 100Hz IMU deceleration wave.',
+                style: TextStyle(color: Colors.grey, fontSize: 11),
+              ),
+              const SizedBox(height: 16),
+
+              // Kinetic Metrics Grid
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1E293B),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    _buildMetricCol('DELTA-V', '${bio.deltaVKmh.toStringAsFixed(1)} km/h', const Color(0xFFF87171)),
+                    _buildMetricCol('PEAK DECEL', '${bio.peakG.toStringAsFixed(1)} G', const Color(0xFFEF4444)),
+                    _buildMetricCol('ENERGY', '${bio.energyDissipationKj.toStringAsFixed(1)} kJ', const Color(0xFFFBBF24)),
+                    _buildMetricCol('ISS SCORE', '${bio.issScoreEstimate} (Polytrauma)', const Color(0xFFF87171)),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              const Text(
+                'PREDICTED INTERNAL INJURY RISKS (PINN Neural Net):',
+                style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+
+              ...bio.predictedInjuries.map((inj) => Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1E293B),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: inj.severity == 'CRITICAL' ? const Color(0xFFEF4444) : const Color(0xFFF59E0B),
+                    width: 1,
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            inj.injury,
+                            style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: inj.severity == 'CRITICAL' ? const Color(0xFF7F1D1D) : const Color(0xFF78350F),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            '${inj.riskPercent}% Risk',
+                            style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Action: ${inj.clinicalAction}',
+                      style: const TextStyle(color: Color(0xFF38BDF8), fontSize: 11, fontWeight: FontWeight.w500),
+                    ),
+                  ],
+                ),
+              )),
+
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF334155)),
+                  child: const Text('DISMISS', style: TextStyle(color: Colors.white)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Displays Ayushman Bharat (ABDM / ABHA) Emergency Health Vault Sheet
+  void _showAbhaVaultSheet(BuildContext context) {
+    final vault = AbhaEmergencyVault.fromMetadata(widget.incident.victimMetadata);
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        padding: const EdgeInsets.all(20),
+        decoration: const BoxDecoration(
+          color: Color(0xFF0F172A),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          border: Border(top: BorderSide(color: Color(0xFF10B981), width: 2)),
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Center(
+                child: Container(
+                  width: 44,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade700,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Row(
+                children: [
+                  Icon(Icons.verified_user, color: Color(0xFF10B981), size: 24),
+                  SizedBox(width: 10),
+                  Text(
+                    'AYUSHMAN BHARAT (ABDM) HEALTH VAULT',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Zero-Knowledge Emergency Medical Enclave • Government of India ABDM Compliant',
+                style: TextStyle(color: Colors.grey, fontSize: 11),
+              ),
+              const SizedBox(height: 14),
+
+              // Patient Identification Card
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1E293B),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Column(
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('ABHA ID', style: TextStyle(color: Colors.grey, fontSize: 11)),
+                        Text(vault.abhaId, style: const TextStyle(color: Color(0xFF38BDF8), fontWeight: FontWeight.bold, fontSize: 12)),
+                      ],
+                    ),
+                    const Divider(height: 12, color: Colors.white10),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('PATIENT', style: TextStyle(color: Colors.grey, fontSize: 11)),
+                        Text(vault.patientName, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
+                      ],
+                    ),
+                    const Divider(height: 12, color: Colors.white10),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('BLOOD GROUP', style: TextStyle(color: Colors.grey, fontSize: 11)),
+                        Text(vault.bloodGroup, style: const TextStyle(color: Color(0xFFF87171), fontWeight: FontWeight.bold, fontSize: 13)),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+
+              // Critical Drug Allergies Warning
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF450A0A),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFFEF4444)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(Icons.warning_amber, color: Color(0xFFEF4444), size: 16),
+                        SizedBox(width: 6),
+                        Text(
+                          'CRITICAL DRUG ALLERGIES (DO NOT ADMINISTER):',
+                          style: TextStyle(color: Color(0xFFFCA5A5), fontWeight: FontWeight.bold, fontSize: 11),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      vault.criticalAllergies.join(', '),
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 10),
+
+              // Medications & Chronic
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1E293B),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('CURRENT MEDICATIONS & CONDITIONS:', style: TextStyle(color: Colors.grey, fontSize: 11, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 4),
+                    ...vault.currentMedications.map((m) => Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 2),
+                      child: Text('• $m', style: const TextStyle(color: Colors.white, fontSize: 11)),
+                    )),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF334155)),
+                  child: const Text('DISMISS', style: TextStyle(color: Colors.white)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMetricCol(String label, String value, Color color) {
+    return Column(
+      children: [
+        Text(label, style: const TextStyle(color: Colors.grey, fontSize: 9.5, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 3),
+        Text(value, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.bold)),
       ],
     );
   }

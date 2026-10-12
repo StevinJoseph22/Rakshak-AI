@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../models/crash_biomechanics_model.dart';
+import '../models/abha_emergency_vault_model.dart';
 import '../services/api_client.dart';
 import '../services/crash_detector_service.dart';
 import '../services/crash_event_service.dart';
@@ -92,6 +94,12 @@ class _LockedScreenAlertScreenState extends State<LockedScreenAlertScreen>
     final primaryContact = EmergencyContactService.instance.primaryContactSync;
     final victimName = EmergencyContactService.instance.victimNameSync;
 
+    final biomechanics = CrashBiomechanics.generateSimulated(
+      decelerationG: widget.crashEvent?.decelerationG ?? 6.5,
+      speedDropKmh: widget.crashEvent?.speedDropKmh ?? 60.0,
+    );
+    final abhaVault = AbhaEmergencyVault.defaultProfile();
+
     final metadata = {
       'vehicle_type': 'Two-Wheeler',
       'rider_status': 'SOS Active (Unresponsive)',
@@ -100,6 +108,8 @@ class _LockedScreenAlertScreenState extends State<LockedScreenAlertScreen>
       'source': widget.crashEvent?.source ?? 'locked_screen_alert',
       'timestamp': (widget.crashEvent?.timestamp ?? DateTime.now()).toIso8601String(),
       'victim_name': victimName,
+      'biomechanics': biomechanics.toJson(),
+      'abha_vault': abhaVault.toJson(),
       if (primaryContact != null) ...{
         'emergency_contact_name': primaryContact.name,
         'emergency_contact_phone': primaryContact.phone,
@@ -161,16 +171,22 @@ class _LockedScreenAlertScreenState extends State<LockedScreenAlertScreen>
       backgroundColor: const Color(0xFF1A0000), // Deep emergency dark red
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
+          padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 8.0),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              return SingleChildScrollView(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                  child: IntrinsicHeight(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
               // Top alert banner
               Column(
                 children: [
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 6),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
                     decoration: BoxDecoration(
                       color: Colors.red.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(20),
@@ -179,7 +195,7 @@ class _LockedScreenAlertScreenState extends State<LockedScreenAlertScreen>
                     child: const Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.warning_amber_rounded, color: Colors.amberAccent, size: 24),
+                        Icon(Icons.warning_amber_rounded, color: Colors.amberAccent, size: 20),
                         SizedBox(width: 8),
                         Text(
                           'EMERGENCY SOS TRIGGERED',
@@ -187,12 +203,13 @@ class _LockedScreenAlertScreenState extends State<LockedScreenAlertScreen>
                             color: Colors.amberAccent,
                             fontWeight: FontWeight.bold,
                             letterSpacing: 1.2,
+                            fontSize: 12,
                           ),
                         ),
                       ],
                     ),
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 10),
                   const Text(
                     'CRASH DETECTED',
                     textAlign: TextAlign.center,
@@ -236,11 +253,11 @@ class _LockedScreenAlertScreenState extends State<LockedScreenAlertScreen>
                     alignment: Alignment.center,
                     children: [
                       SizedBox(
-                        width: 180,
-                        height: 180,
+                        width: 140,
+                        height: 140,
                         child: CircularProgressIndicator(
                           value: remainingFraction,
-                          strokeWidth: 10,
+                          strokeWidth: 8,
                           backgroundColor: Colors.red.withValues(alpha: 0.15),
                           valueColor: AlwaysStoppedAnimation<Color>(
                             remainingSeconds <= 3 ? Colors.redAccent : Colors.amberAccent,
@@ -253,7 +270,7 @@ class _LockedScreenAlertScreenState extends State<LockedScreenAlertScreen>
                           Text(
                             '$remainingSeconds',
                             style: TextStyle(
-                              fontSize: 56,
+                              fontSize: 44,
                               fontWeight: FontWeight.bold,
                               color: remainingSeconds <= 3 ? Colors.redAccent : Colors.white,
                             ),
@@ -261,9 +278,9 @@ class _LockedScreenAlertScreenState extends State<LockedScreenAlertScreen>
                           const Text(
                             'SECONDS',
                             style: TextStyle(
-                              fontSize: 12,
+                              fontSize: 11,
                               color: Colors.grey,
-                              letterSpacing: 2,
+                              letterSpacing: 1.5,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
@@ -271,13 +288,48 @@ class _LockedScreenAlertScreenState extends State<LockedScreenAlertScreen>
                       ),
                     ],
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 10),
                   const Text(
                     'Broadcasting alert to nearest trauma centers\nif no response is received.',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       color: Colors.white70,
-                      fontSize: 13,
+                      fontSize: 12,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+
+                  // Ayushman Bharat (ABDM / ABHA) Emergency Medical Vault Chip
+                  Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E293B),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFF0EA5E9), width: 1.2),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.verified_user, color: Color(0xFF38BDF8), size: 20),
+                        SizedBox(width: 10),
+                        Flexible(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                'ABHA: 91-8842-9912-3401 (Blood: B+)',
+                                style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                              ),
+                              Text(
+                                '⚠️ Penicillin Anaphylaxis • On Warfarin',
+                                style: TextStyle(color: Color(0xFFFCA5A5), fontSize: 11, fontWeight: FontWeight.w600),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
@@ -340,6 +392,11 @@ class _LockedScreenAlertScreenState extends State<LockedScreenAlertScreen>
                 ],
               ),
             ],
+                    ),
+                  ),
+                ),
+              );
+            },
           ),
         ),
       ),

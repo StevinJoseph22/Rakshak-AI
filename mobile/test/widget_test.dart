@@ -94,6 +94,7 @@ void main() {
     expect(find.text("I'm Okay — Cancel SOS"), findsOneWidget);
 
     // Tap cancel to return
+    await tester.ensureVisible(find.text("I'm Okay — Cancel SOS"));
     await tester.tap(find.text("I'm Okay — Cancel SOS"));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));

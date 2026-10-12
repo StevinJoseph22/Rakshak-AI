@@ -1,0 +1,1876 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rakshak-AI: Official Cinematic Product Demo Video</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <style>
+    @keyframes pulse-ring {
+      0% { transform: scale(0.95); opacity: 0.8; }
+      50% { transform: scale(1.05); opacity: 0.4; }
+      100% { transform: scale(0.95); opacity: 0.8; }
+    }
+    .pulse-ring { animation: pulse-ring 2s infinite ease-in-out; }
+    canvas { touch-action: none; }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col items-center justify-start p-3 sm:p-5 antialiased font-sans select-none">
+
+  <!-- Top Cinematic Navigation & Control Bar -->
+  <header class="w-full max-w-6xl flex flex-col md:flex-row items-center justify-between gap-4 mb-3 pb-3 border-b border-slate-800">
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 via-cyan-500 to-blue-500 flex items-center justify-center shadow-lg shadow-emerald-500/20">
+        <svg class="w-6 h-6 text-slate-950" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2L4 5v6.09c0 5.05 3.41 9.76 8 10.91 4.59-1.15 8-5.86 8-10.91V5l-8-3zm1 14h-2v-2h2v2zm0-4h-2V7h2v5z"/></svg>
+      </div>
+      <div>
+        <div class="flex items-center gap-2">
+          <h1 class="text-xl sm:text-2xl font-black tracking-tight bg-gradient-to-r from-emerald-400 via-cyan-300 to-white bg-clip-text text-transparent">
+            RAKSHAK-AI
+          </h1>
+          <span class="px-2 py-0.5 text-[10px] font-bold rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">CINEMATIC PRODUCT WALKTHROUGH</span>
+        </div>
+        <p class="text-xs text-slate-400">Live Multi-Role Operational Flow: Citizen App • Police Command • Ambulance Cockpit • Hospital ER</p>
+      </div>
+    </div>
+
+    <!-- Interactive Video Action Controls -->
+    <div class="flex items-center gap-2 flex-wrap justify-end">
+      <!-- Role Jump Pills -->
+      <div class="hidden lg:flex items-center bg-slate-900 border border-slate-800 rounded-lg p-1 text-xs">
+        <button class="role-pill px-2.5 py-1 rounded font-medium text-slate-300 hover:text-white transition active-role" data-time="0">🎬 Prologue</button>
+        <button class="role-pill px-2.5 py-1 rounded font-medium text-slate-300 hover:text-white transition" data-time="11">📱 Citizen App</button>
+        <button class="role-pill px-2.5 py-1 rounded font-medium text-slate-300 hover:text-white transition" data-time="27">🚓 Police Ops</button>
+        <button class="role-pill px-2.5 py-1 rounded font-medium text-slate-300 hover:text-white transition" data-time="45">🚑 Ambulance HUD</button>
+        <button class="role-pill px-2.5 py-1 rounded font-medium text-slate-300 hover:text-white transition" data-time="63">🏥 Hospital ER</button>
+        <button class="role-pill px-2.5 py-1 rounded font-medium text-slate-300 hover:text-white transition" data-time="78">🌐 4-Way Sync</button>
+      </div>
+
+      <button id="btnVoiceoverToggle" class="px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-700 bg-slate-900 hover:bg-slate-800 transition flex items-center gap-1.5 text-cyan-300">
+        <span id="voiceIcon">🎙️</span>
+        <span id="voiceLabel">Voiceover: ON</span>
+      </button>
+
+      <button id="btnAudioToggle" class="px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-700 bg-slate-900 hover:bg-slate-800 transition flex items-center gap-1.5 text-emerald-300">
+        <span id="soundIcon">🔊</span>
+        <span id="soundLabel">SFX: ON</span>
+      </button>
+
+      <button id="btnRecordExport" class="px-3 py-1.5 text-xs font-bold rounded-lg bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white shadow-md shadow-red-500/20 transition flex items-center gap-1.5">
+        <span id="recDot" class="w-2.5 h-2.5 rounded-full bg-white"></span>
+        <span id="recLabel">Download Video (.webm)</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Video Stage Canvas Frame (16:9 1280x720) -->
+  <main class="w-full max-w-6xl flex flex-col items-center">
+    <div class="relative w-full aspect-video bg-black rounded-2xl overflow-hidden border border-slate-800 shadow-2xl shadow-cyan-950/20">
+      
+      <!-- High-Performance Canvas Rendering Engine -->
+      <canvas id="videoCanvas" width="1280" height="720" class="w-full h-full block bg-black cursor-pointer"></canvas>
+
+      <!-- Center Big Play Overlay when Paused -->
+      <div id="playOverlay" class="absolute inset-0 bg-slate-950/70 backdrop-blur-sm flex flex-col items-center justify-center transition-opacity duration-300 cursor-pointer">
+        <div class="w-24 h-24 rounded-full bg-gradient-to-tr from-emerald-500 to-cyan-400 hover:from-emerald-400 hover:to-cyan-300 text-slate-950 flex items-center justify-center shadow-2xl shadow-emerald-500/50 transition transform hover:scale-105">
+          <svg class="w-12 h-12 ml-1 fill-current" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+        </div>
+        <p class="mt-4 text-base font-bold tracking-wide text-slate-100">PLAY OFFICIAL PRODUCT DEMO VIDEO</p>
+        <p class="text-xs text-slate-400 mt-1">Simulating Live App Interactions • Real UI Motion • Audio Sound FX & Voiceover</p>
+      </div>
+
+      <!-- Top HUD Banner Overlay -->
+      <div class="absolute top-4 left-4 pointer-events-none flex items-center gap-2 bg-slate-950/80 backdrop-blur-md px-3.5 py-1.5 rounded-xl border border-slate-800 text-xs text-slate-300">
+        <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+        <span id="hudRoleBadge" class="font-bold tracking-wider text-emerald-400">ACT 1: CITIZEN APP</span>
+        <span class="text-slate-600">|</span>
+        <span id="hudTimestamp" class="font-mono text-slate-300">00:00 / 01:32</span>
+      </div>
+
+      <!-- Top Right Active Actor Indicator -->
+      <div class="absolute top-4 right-4 pointer-events-none flex items-center gap-2 bg-slate-950/80 backdrop-blur-md px-3.5 py-1.5 rounded-xl border border-slate-800 text-xs font-semibold text-cyan-300">
+        <span id="hudDeviceIcon">📱</span>
+        <span id="hudDeviceName">VICTIM MOBILE PHONE</span>
+      </div>
+
+      <!-- Bottom Cinematic Subtitle Bar -->
+      <div id="captionContainer" class="absolute bottom-16 left-6 right-6 pointer-events-none flex justify-center">
+        <div id="captionBox" class="max-w-4xl bg-slate-950/90 backdrop-blur-md px-6 py-3 rounded-2xl border border-slate-700/60 shadow-2xl text-center transition-all duration-300">
+          <p id="captionText" class="text-sm md:text-base font-semibold text-slate-100 leading-snug tracking-wide">
+            The Golden Hour Tragedy: 150,000+ lives are lost on Indian roads each year due to delayed reporting and traffic gridlock.
+          </p>
+        </div>
+      </div>
+
+      <!-- Bottom Video Navigation Bar -->
+      <div class="absolute bottom-0 inset-x-0 bg-gradient-to-t from-slate-950 via-slate-950/90 to-transparent pt-6 pb-2.5 px-4 flex flex-col gap-2">
+        <!-- Interactive Scrubber -->
+        <div class="relative w-full h-2.5 bg-slate-800/80 rounded-full cursor-pointer overflow-hidden group" id="progressBarContainer">
+          <div id="progressBar" class="h-full bg-gradient-to-r from-emerald-500 via-cyan-400 to-blue-500 w-0 transition-all duration-75"></div>
+        </div>
+
+        <div class="flex items-center justify-between text-xs text-slate-400">
+          <div class="flex items-center gap-3">
+            <button id="btnPlayPause" class="hover:text-emerald-400 transition text-slate-200">
+              <svg id="playIcon" class="w-5 h-5 fill-current" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+              <svg id="pauseIcon" class="w-5 h-5 fill-current hidden" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+            </button>
+
+            <button id="btnRestart" class="hover:text-slate-200 transition" title="Restart">
+              <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/></svg>
+            </button>
+
+            <span id="timeDisplay" class="font-mono text-slate-300">00:00 / 01:32</span>
+          </div>
+
+          <!-- Scene Quick Selectors -->
+          <div class="hidden sm:flex items-center gap-1.5 text-[11px]">
+            <span class="text-slate-500 mr-1">SCENE:</span>
+            <button class="scene-btn px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition" data-scene="0">1. Problem</button>
+            <button class="scene-btn px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition" data-scene="1">2. Crash Detection</button>
+            <button class="scene-btn px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition" data-scene="2">3. 15s SOS</button>
+            <button class="scene-btn px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition" data-scene="3">4. Police Map</button>
+            <button class="scene-btn px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition" data-scene="4">5. CCTV AI</button>
+            <button class="scene-btn px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition" data-scene="5">6. Amb Console</button>
+            <button class="scene-btn px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition" data-scene="6">7. Green Wave</button>
+            <button class="scene-btn px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition" data-scene="7">8. Hospital ER</button>
+            <button class="scene-btn px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition" data-scene="8">9. 4-Way Sync</button>
+            <button class="scene-btn px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition" data-scene="9">10. Victory</button>
+          </div>
+
+          <div class="flex items-center gap-3">
+            <button id="btnSpeed" class="font-mono hover:text-slate-200 text-xs px-2 py-0.5 rounded bg-slate-800">1.0x</button>
+            <button id="btnFullscreen" class="hover:text-emerald-400 transition" title="Toggle Fullscreen">
+              <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Product Walkthrough Multi-Role Architecture Cards -->
+    <div class="w-full mt-6 grid grid-cols-1 md:grid-cols-4 gap-3.5">
+      <div class="bg-slate-900/80 border border-slate-800 rounded-xl p-3.5 flex flex-col gap-1.5 shadow-sm">
+        <div class="flex items-center gap-2 text-rose-400 font-bold text-xs uppercase tracking-wider">
+          <span>📱</span> 1. Citizen & Victim App
+        </div>
+        <p class="text-xs text-slate-400 leading-relaxed">
+          Autonomous 18ms TFLite kinematic crash classification. 15-second unconscious failsafe countdown. Auto-dispatches GPS coordinates & blood group without manual unlock.
+        </p>
+      </div>
+
+      <div class="bg-slate-900/80 border border-slate-800 rounded-xl p-3.5 flex flex-col gap-1.5 shadow-sm">
+        <div class="flex items-center gap-2 text-cyan-400 font-bold text-xs uppercase tracking-wider">
+          <span>🚓</span> 2. Police & ITMS Command
+        </div>
+        <p class="text-xs text-slate-400 leading-relaxed">
+          Tactical city incident map. Dispatches nearest PCR unit. Real-time CCTV edge density scoring via YOLOv8 and municipal Green Corridor preemption authorization.
+        </p>
+      </div>
+
+      <div class="bg-slate-900/80 border border-slate-800 rounded-xl p-3.5 flex flex-col gap-1.5 shadow-sm">
+        <div class="flex items-center gap-2 text-emerald-400 font-bold text-xs uppercase tracking-wider">
+          <span>🚑</span> 3. Ambulance Cockpit HUD
+        </div>
+        <p class="text-xs text-slate-400 leading-relaxed">
+          1-tap incident claiming. Luminous Emerald Green Wave halo. Upcoming traffic signals flip to solid GREEN at 950m (EVP). Dynamic AI detour bypasses city gridlocks.
+        </p>
+      </div>
+
+      <div class="bg-slate-900/80 border border-slate-800 rounded-xl p-3.5 flex flex-col gap-1.5 shadow-sm">
+        <div class="flex items-center gap-2 text-indigo-400 font-bold text-xs uppercase tracking-wider">
+          <span>🏥</span> 4. Hospital Trauma Bay
+        </div>
+        <p class="text-xs text-slate-400 leading-relaxed">
+          RBAC-secured surgeon dashboard. Ephemeral WebRTC visual triage (zero disk writes). Pre-activates trauma bay 1, blood cross-match, and CT scan before ambulance arrival.
+        </p>
+      </div>
+    </div>
+  </main>
+
+  <!-- Canvas Motion Script Engine -->
+  <script>
+    const canvas = document.getElementById('videoCanvas');
+    const ctx = canvas.getContext('2d');
+    const playOverlay = document.getElementById('playOverlay');
+    const btnPlayPause = document.getElementById('btnPlayPause');
+    const playIcon = document.getElementById('playIcon');
+    const pauseIcon = document.getElementById('pauseIcon');
+    const btnRestart = document.getElementById('btnRestart');
+    const progressBar = document.getElementById('progressBar');
+    const progressBarContainer = document.getElementById('progressBarContainer');
+    const timeDisplay = document.getElementById('timeDisplay');
+    const hudTimestamp = document.getElementById('hudTimestamp');
+    const hudRoleBadge = document.getElementById('hudRoleBadge');
+    const hudDeviceIcon = document.getElementById('hudDeviceIcon');
+    const hudDeviceName = document.getElementById('hudDeviceName');
+    const captionText = document.getElementById('captionText');
+    const btnSpeed = document.getElementById('btnSpeed');
+    const btnFullscreen = document.getElementById('btnFullscreen');
+    const btnVoiceoverToggle = document.getElementById('btnVoiceoverToggle');
+    const voiceIcon = document.getElementById('voiceIcon');
+    const voiceLabel = document.getElementById('voiceLabel');
+    const btnAudioToggle = document.getElementById('btnAudioToggle');
+    const soundIcon = document.getElementById('soundIcon');
+    const soundLabel = document.getElementById('soundLabel');
+    const btnRecordExport = document.getElementById('btnRecordExport');
+    const recDot = document.getElementById('recDot');
+    const recLabel = document.getElementById('recLabel');
+
+    // Video Engine State
+    let isPlaying = false;
+    let currentTime = 0;
+    const totalDuration = 92; // 92 seconds comprehensive video walkthrough
+    let playbackSpeed = 1.0;
+    let voiceoverEnabled = true;
+    let sfxEnabled = true;
+    let isRecording = false;
+    let mediaRecorder = null;
+    let recordedChunks = [];
+    let lastFrameTime = performance.now();
+    let currentSceneIndex = 0;
+    let lastSpokenScene = -1;
+
+    // Camera Shake Offset for Impact
+    let shakeX = 0;
+    let shakeY = 0;
+
+    // Web Audio Synthesizer
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    let audioCtx = null;
+    let audioDestination = null;
+
+    function initAudio() {
+      if (!audioCtx) {
+        audioCtx = new AudioContextClass();
+        audioDestination = audioCtx.createMediaStreamDestination();
+      }
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+    }
+
+    function playTone(freq, type, duration, gainLevel = 0.15) {
+      if (!sfxEnabled) return;
+      initAudio();
+      try {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+        gain.gain.setValueAtTime(gainLevel, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        if (audioDestination) gain.connect(audioDestination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + duration);
+      } catch (e) {}
+    }
+
+    function playCrashSound() {
+      if (!sfxEnabled) return;
+      initAudio();
+      try {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(160, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(25, audioCtx.currentTime + 0.7);
+        gain.gain.setValueAtTime(0.35, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.9);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        if (audioDestination) gain.connect(audioDestination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.9);
+      } catch (e) {}
+    }
+
+    function playGreenChime() {
+      if (!sfxEnabled) return;
+      playTone(523.25, 'sine', 0.2, 0.15); // C5
+      setTimeout(() => playTone(659.25, 'sine', 0.2, 0.15), 110); // E5
+      setTimeout(() => playTone(783.99, 'sine', 0.35, 0.2), 220); // G5
+    }
+
+    function speakNarration(text) {
+      if (!voiceoverEnabled || !('speechSynthesis' in window)) return;
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 1.05 * playbackSpeed;
+      utterance.pitch = 1.0;
+      utterance.volume = 0.95;
+      const voices = window.speechSynthesis.getVoices();
+      const naturalVoice = voices.find(v => v.lang.startsWith('en') && (v.name.includes('Natural') || v.name.includes('Google') || v.name.includes('Samantha')));
+      if (naturalVoice) utterance.voice = naturalVoice;
+      window.speechSynthesis.speak(utterance);
+    }
+
+    // 10 Detailed Video Scenes matching real product walkthrough
+    const scenes = [
+      {
+        id: 0,
+        start: 0,
+        end: 11,
+        role: "PROLOGUE: THE CRISIS",
+        deviceIcon: "⚠️",
+        deviceName: "TRAFFIC GRIDLOCK CRISIS",
+        caption: "The Golden Hour Tragedy: 150,000+ lives lost every year on Indian roads. 50% are preventable if medical trauma care arrives within 60 minutes.",
+        voice: "India loses over one hundred and fifty thousand lives every year to road accidents. Fifty percent could be saved if medical trauma care arrives in the first sixty minutes. But victims are trapped in city gridlock."
+      },
+      {
+        id: 1,
+        start: 11,
+        end: 19,
+        role: "ACT 1: CITIZEN APP",
+        deviceIcon: "📱",
+        deviceName: "VICTIM PHONE (GUARD ACTIVE)",
+        caption: "On-Duty Protection: Smartphone running Rakshak Guard. A severe 5.4G impact strikes! On-device TFLite detects collision in 18ms with zero cloud lag.",
+        voice: "Meet Rakshak AI. The citizen app runs silent background kinematic monitoring. When a high speed crash strikes, on-device Tensor Flow Lite classifies the impact in eighteen milliseconds with zero cloud lag."
+      },
+      {
+        id: 2,
+        start: 19,
+        end: 27,
+        role: "ACT 1: CITIZEN APP",
+        deviceIcon: "📱",
+        deviceName: "15s ZERO-TOUCH SOS FAILSAFE",
+        caption: "Zero-Touch Unconscious Failsafe: High-contrast 15s countdown sounds 100dB alarm. If victim is unconscious, SOS auto-broadcasts with exact GPS coordinates.",
+        voice: "A high-contrast fifteen second safety countdown begins. If the victim is unconscious or incapacitated, Rakshak AI automatically triggers the emergency broadcast without requiring a manual screen unlock."
+      },
+      {
+        id: 3,
+        start: 27,
+        end: 36,
+        role: "ACT 2: POLICE COMMAND",
+        deviceIcon: "🖥️",
+        deviceName: "POLICE TACTICAL WORKSTATION",
+        caption: "Police Ops Command: Instant sub-second geohash fanout drops incident pin. Dispatcher deploys nearest PCR cruiser KA-01-G-404 and alerts traffic signals.",
+        voice: "At City Police Headquarters, sub-second geohash fanout drops an immediate tactical pin. The dispatcher deploys the nearest patrol cruiser and alerts the municipal traffic network."
+      },
+      {
+        id: 4,
+        start: 36,
+        end: 45,
+        role: "ACT 2: POLICE & ITMS",
+        deviceIcon: "📹",
+        deviceName: "CCTV EDGE VISION (YOLOv8)",
+        caption: "Municipal CCTV Vision: YOLOv8 edge node tracks vehicle queues. Detects 89% heavy choke point on 100ft road and calculates an A* green bypass.",
+        voice: "Municipal CCTV cameras running edge YOLOv8 analyze traffic density in real time, detecting an eighty-nine percent choke point ahead. The AI routing engine computes an immediate clear bypass."
+      },
+      {
+        id: 5,
+        start: 45,
+        end: 54,
+        role: "ACT 3: AMBULANCE COCKPIT",
+        deviceIcon: "🚑",
+        deviceName: "AMBULANCE TABLET CONSOLE",
+        caption: "Ambulance Cockpit Console: Paramedic claims incident with 1 tap. Mobile console smoothly transitions into live emergency dispatch navigation.",
+        voice: "Inside the ambulance cockpit, the paramedic claims the emergency broadcast with one tap, instantly transitioning into live high-speed navigation."
+      },
+      {
+        id: 6,
+        start: 54,
+        end: 63,
+        role: "ACT 3: AMBULANCE COCKPIT",
+        deviceIcon: "🚦",
+        deviceName: "AUTONOMOUS GREEN CORRIDOR (EVP)",
+        caption: "Autonomous Green Wave: Luminous emerald halo guides the driver. Approaching signals flip to solid GREEN 45s ahead at 950m via C-V2X preemption.",
+        voice: "Autonomous Emergency Vehicle Preemption activates. A luminous emerald green wave halo guides the ambulance, and upcoming signals flip solid green forty-five seconds ahead for zero-stoppage transit."
+      },
+      {
+        id: 7,
+        start: 63,
+        end: 72,
+        role: "ACT 4: HOSPITAL ER",
+        deviceIcon: "🏥",
+        deviceName: "TRAUMA SURGEON WORKSTATION",
+        caption: "Hospital Trauma Center: Live WebRTC visual triage, AI PINN Crash Biomechanics (Delta-V 62.4 km/h, ISS 26, C-Spine 84%), and ABDM/ABHA Vault with critical Penicillin allergy contraindication.",
+        voice: "At the hospital trauma center, the ER surgical team receives live zero-storage WebRTC visual triage, alongside AI Crash Biomechanics predicting internal organ risks, and the victim's verified Ayushman Bharat health vault alerting critical drug allergies before arrival."
+      },
+      {
+        id: 8,
+        start: 72,
+        end: 83,
+        role: "ACT 5: 4-WAY MULTI-SYNC",
+        deviceIcon: "🌐",
+        deviceName: "UNIFIED RAKSHAK ECOSYSTEM",
+        caption: "Synchronized Real-Time Ecosystem: Citizen phone, police command, ambulance cockpit, and hospital ER operate in simultaneous millisecond lockstep.",
+        voice: "All four stakeholders operating in seamless, millisecond lockstep. Zero communication lag. Zero red light stoppages. Complete multi-agency orchestration."
+      },
+      {
+        id: 9,
+        start: 83,
+        end: 92,
+        role: "EPILOGUE: MISSION CONQUERED",
+        deviceIcon: "🏆",
+        deviceName: "THE GOLDEN HOUR CONQUERED",
+        caption: "Transit time slashed from 38m to 9.4m (75% faster). 100% survival rate. Rakshak-AI: Autonomous AI Guardianship for Every Life on the Road.",
+        voice: "The Golden Hour conquered. Transit time slashed from thirty-eight minutes to under ten minutes. Zero intersection delays. Rakshak AI: Autonomous AI guardianship for every life on the road."
+      }
+    ];
+
+    // Master Render Loop
+    function render(time) {
+      ctx.save();
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Apply screen shake if active
+      if (shakeX !== 0 || shakeY !== 0) {
+        ctx.translate(shakeX, shakeY);
+      }
+
+      // Background Cyberpunk Digital Grid
+      const bgGrad = ctx.createRadialGradient(canvas.width / 2, canvas.height / 2, 40, canvas.width / 2, canvas.height / 2, 850);
+      bgGrad.addColorStop(0, '#0a0f1d');
+      bgGrad.addColorStop(1, '#020408');
+      ctx.fillStyle = bgGrad;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Perspective Grid Lines
+      ctx.strokeStyle = 'rgba(30, 41, 59, 0.35)';
+      ctx.lineWidth = 1;
+      const gridSize = 45;
+      const offsetX = (time * 12) % gridSize;
+      for (let x = -gridSize + offsetX; x < canvas.width; x += gridSize) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, canvas.height);
+        ctx.stroke();
+      }
+      for (let y = 0; y < canvas.height; y += gridSize) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(canvas.width, y);
+        ctx.stroke();
+      }
+
+      // Current Scene Dispatcher
+      const scene = scenes[currentSceneIndex];
+      const p = (time - scene.start) / (scene.end - scene.start); // Scene progress 0 to 1
+
+      switch (currentSceneIndex) {
+        case 0: drawScenePrologueGridlock(p, time); break;
+        case 1: drawSceneCitizenCrash(p, time); break;
+        case 2: drawSceneCitizenCountdown(p, time); break;
+        case 3: drawScenePoliceTacticalMap(p, time); break;
+        case 4: drawSceneCCTVAIVision(p, time); break;
+        case 5: drawSceneAmbulanceConsole(p, time); break;
+        case 6: drawSceneGreenWaveCockpit(p, time); break;
+        case 7: drawSceneHospitalTraumaER(p, time); break;
+        case 8: drawSceneFourWayMultiSync(p, time); break;
+        case 9: drawSceneEpilogueVictory(p, time); break;
+      }
+
+      // Cinematic Vignette
+      const vigGrad = ctx.createRadialGradient(canvas.width / 2, canvas.height / 2, 480, canvas.width / 2, canvas.height / 2, 750);
+      vigGrad.addColorStop(0, 'rgba(0,0,0,0)');
+      vigGrad.addColorStop(1, 'rgba(0,0,0,0.85)');
+      ctx.fillStyle = vigGrad;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      ctx.restore();
+    }
+
+    // =========================================================================
+    // SCENE DRAWING FUNCTIONS (Realistic Device Mockups & Real App UI Motion)
+    // =========================================================================
+
+    // --- Scene 0: Prologue - The Traffic Gridlock Crisis ---
+    function drawScenePrologueGridlock(p, t) {
+      drawCinematicHeader("THE GOLDEN HOUR TRAGEDY", "CRITICAL BOTTLENECKS OF CONVENTIONAL EMERGENCY RESPONSE", "#ef4444");
+
+      // Center: Highway Gridlock with Realistic Isometric Street
+      const roadY = 360;
+      ctx.fillStyle = '#0f172a';
+      roundRect(ctx, 120, roadY - 120, 1040, 240, 16);
+      ctx.fill();
+      ctx.strokeStyle = '#334155';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      // Asphalt Lanes
+      for (let l = 0; l < 4; l++) {
+        const laneY = roadY - 75 + l * 50;
+        ctx.strokeStyle = 'rgba(100, 116, 139, 0.4)';
+        ctx.setLineDash([15, 15]);
+        ctx.beginPath();
+        ctx.moveTo(130, laneY);
+        ctx.lineTo(1150, laneY);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+
+      // Jammed Red Traffic Vehicles
+      for (let col = 0; col < 12; col++) {
+        for (let row = 0; row < 4; row++) {
+          if (col === 6 && row === 1) continue; // Hole for ambulance
+          const carX = 160 + col * 80 + Math.sin(col + row) * 8;
+          const carY = roadY - 95 + row * 50;
+          ctx.fillStyle = 'rgba(239, 68, 68, 0.75)';
+          roundRect(ctx, carX, carY, 52, 26, 5);
+          ctx.fill();
+        }
+      }
+
+      // Trapped Ambulance with Strobe Lighting
+      const ambX = 640;
+      const ambY = roadY - 95 + 50;
+      ctx.fillStyle = '#ffffff';
+      roundRect(ctx, ambX, ambY, 68, 30, 6);
+      ctx.fill();
+      ctx.strokeStyle = '#ef4444';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+
+      // Flashing Emergency Beacon
+      const strobe = Math.floor(t * 10) % 2 === 0;
+      ctx.fillStyle = strobe ? '#ef4444' : '#38bdf8';
+      ctx.beginPath();
+      ctx.arc(ambX + 34, ambY + 15, 6, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Distress Ripple on Ambulance
+      const ripple = (t * 20) % 50;
+      ctx.strokeStyle = `rgba(239, 68, 68, ${1 - ripple / 50})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(ambX + 34, ambY + 15, ripple, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Floating Callout Card
+      drawFloatingHUDCard(280, 520, 720, 80, [
+        { label: "ANNUAL ROAD DEATHS", val: "150,000+ (India)", color: "#ef4444" },
+        { label: "AVG TRANSIT DELAY", val: "38 - 42 Minutes", color: "#f59e0b" },
+        { label: "GOLDEN HOUR SURVIVAL", val: "Only 18% in Urban Congestion", color: "#ef4444" }
+      ]);
+    }
+
+    // --- Scene 1: Citizen Mobile App - Guard Active & High-G Crash ---
+    function drawSceneCitizenCrash(p, t) {
+      drawCinematicHeader("ROLE 1: CITIZEN / VICTIM", "ON-DUTY KINETIC CRASH DETECTION • ON-DEVICE TFLITE MODEL", "#06b6d4");
+
+      const isImpactPhase = p > 0.45;
+      if (isImpactPhase && p < 0.65) {
+        shakeX = (Math.random() - 0.5) * 12;
+        shakeY = (Math.random() - 0.5) * 12;
+      } else {
+        shakeX = 0;
+        shakeY = 0;
+      }
+
+      // Render 3D Smartphone Device Mockup in Center
+      drawPhoneDevice(480, 140, 320, 540, (phoneCtx, pw, ph) => {
+        // Phone Screen Background
+        phoneCtx.fillStyle = isImpactPhase ? '#450a0a' : '#090d16';
+        phoneCtx.fillRect(0, 0, pw, ph);
+
+        // App Header: Rakshak AI Mobile UI
+        phoneCtx.fillStyle = '#0f172a';
+        phoneCtx.fillRect(0, 0, pw, 70);
+
+        phoneCtx.fillStyle = '#ffffff';
+        phoneCtx.font = 'bold 15px sans-serif';
+        phoneCtx.fillText("🛡️ Rakshak-AI Sentinel", 20, 42);
+
+        // Guard Status Pill
+        phoneCtx.fillStyle = isImpactPhase ? '#ef4444' : '#10b981';
+        roundRect(phoneCtx, pw - 120, 24, 105, 26, 13);
+        phoneCtx.fill();
+        phoneCtx.fillStyle = '#022c22';
+        phoneCtx.font = 'bold 11px sans-serif';
+        phoneCtx.fillText(isImpactPhase ? "CRASH DETECTED" : "GUARD ACTIVE 🟢", pw - 110, 41);
+
+        // Live Sensor Waveform Card
+        phoneCtx.fillStyle = 'rgba(15, 23, 42, 0.9)';
+        roundRect(phoneCtx, 15, 90, pw - 30, 160, 14);
+        phoneCtx.fill();
+        phoneCtx.strokeStyle = isImpactPhase ? '#ef4444' : '#06b6d4';
+        phoneCtx.lineWidth = 1.5;
+        phoneCtx.stroke();
+
+        phoneCtx.fillStyle = '#94a3b8';
+        phoneCtx.font = '11px monospace';
+        phoneCtx.fillText("IMU SENSOR TELEMETRY (100 Hz)", 28, 115);
+
+        // Oscilloscope Graph
+        phoneCtx.strokeStyle = isImpactPhase ? '#ef4444' : '#06b6d4';
+        phoneCtx.lineWidth = 2.5;
+        phoneCtx.beginPath();
+        for (let x = 0; x < pw - 50; x += 4) {
+          const norm = x / (pw - 50);
+          let y = 180;
+          if (isImpactPhase && norm > 0.4 && norm < 0.7) {
+            y = 180 - Math.sin((norm - 0.4) * Math.PI / 0.3) * 65; // Violent spike
+          } else {
+            y = 180 + Math.sin(norm * 18 + t * 6) * 12; // Normal gentle oscillation
+          }
+          if (x === 0) phoneCtx.moveTo(25 + x, y);
+          else phoneCtx.lineTo(25 + x, y);
+        }
+        phoneCtx.stroke();
+
+        phoneCtx.fillStyle = isImpactPhase ? '#f87171' : '#38bdf8';
+        phoneCtx.font = 'bold 14px monospace';
+        phoneCtx.fillText(isImpactPhase ? "PEAK IMPACT: 5.42 G [CRITICAL]" : "CURRENT FORCE: 1.02 G [NORMAL]", 28, 235);
+
+        // Diagnostics Card Below
+        phoneCtx.fillStyle = 'rgba(15, 23, 42, 0.9)';
+        roundRect(phoneCtx, 15, 265, pw - 30, 220, 14);
+        phoneCtx.fill();
+
+        phoneCtx.fillStyle = '#38bdf8';
+        phoneCtx.font = 'bold 13px sans-serif';
+        phoneCtx.fillText("ON-DEVICE AI INFERENCE", 28, 295);
+
+        drawPhoneRow(phoneCtx, 28, 325, "Classifier Runtime", "TFLite Edge (18.2 ms)");
+        drawPhoneRow(phoneCtx, 28, 360, "Cloud Dependency", "ZERO (Offline Safe)");
+        drawPhoneRow(phoneCtx, 28, 395, "Spatial GPS Lock", "12.9716° N, 77.5946° E");
+        drawPhoneRow(phoneCtx, 28, 430, "Action Trigger", isImpactPhase ? "AUTO-SOS LAUNCHED ⚡" : "ARMED & MONITORING");
+      });
+
+      // Side Info Badges
+      drawFeatureCallout(120, 220, 310, "ZERO FALSE ALARMS", "High-frequency filtering and multi-axis angular momentum cross-validation eliminate phone drops from triggering emergency broadcasts.");
+      drawFeatureCallout(850, 220, 310, "SUB-SECOND RESPONSE", "On-device inference operates in 18ms without requiring internet access or cloud handshake to recognize violent kinetic collisions.");
+    }
+
+    // --- Scene 2: Citizen Mobile App - 15-Second Zero-Touch SOS ---
+    function drawSceneCitizenCountdown(p, t) {
+      drawCinematicHeader("ROLE 1: CITIZEN / VICTIM", "15-SECOND UNCONSCIOUS FAILSAFE COUNTDOWN SCREEN", "#ef4444");
+
+      drawPhoneDevice(480, 140, 320, 540, (phoneCtx, pw, ph) => {
+        // Red Emergency Gradient Screen
+        const radGrad = phoneCtx.createRadialGradient(pw / 2, ph / 2, 20, pw / 2, ph / 2, 280);
+        radGrad.addColorStop(0, '#881337');
+        radGrad.addColorStop(1, '#0f0206');
+        phoneCtx.fillStyle = radGrad;
+        phoneCtx.fillRect(0, 0, pw, ph);
+
+        // Emergency Warning Title
+        phoneCtx.fillStyle = '#ffffff';
+        phoneCtx.font = 'bold 20px sans-serif';
+        phoneCtx.textAlign = 'center';
+        phoneCtx.fillText("CRASH DETECTED", pw / 2, 85);
+        phoneCtx.font = '12px sans-serif';
+        phoneCtx.fillStyle = '#fca5a5';
+        phoneCtx.fillText("Are you okay? Audible alarm sounding.", pw / 2, 110);
+
+        // Circular Countdown Ring
+        const ringY = 220;
+        const radius = 75;
+        const secsLeft = Math.max(1, 15 - Math.floor(p * 14));
+        const arcProgress = (1 - (p * 14 / 15)) * Math.PI * 2;
+
+        phoneCtx.strokeStyle = 'rgba(239, 68, 68, 0.25)';
+        phoneCtx.lineWidth = 12;
+        phoneCtx.beginPath();
+        phoneCtx.arc(pw / 2, ringY, radius, 0, Math.PI * 2);
+        phoneCtx.stroke();
+
+        phoneCtx.strokeStyle = '#ef4444';
+        phoneCtx.lineWidth = 12;
+        phoneCtx.beginPath();
+        phoneCtx.arc(pw / 2, ringY, radius, -Math.PI / 2, -Math.PI / 2 + arcProgress);
+        phoneCtx.stroke();
+
+        phoneCtx.fillStyle = '#ffffff';
+        phoneCtx.font = 'bold 56px monospace';
+        phoneCtx.fillText(secsLeft.toString(), pw / 2, ringY + 20);
+
+        phoneCtx.font = 'bold 12px monospace';
+        phoneCtx.fillStyle = '#fda4af';
+        phoneCtx.fillText("AUTO-SOS IN SECONDS", pw / 2, ringY + 45);
+
+        // Cancel False Alarm Button
+        phoneCtx.fillStyle = '#10b981';
+        roundRect(phoneCtx, 30, 350, pw - 60, 50, 14);
+        phoneCtx.fill();
+        phoneCtx.fillStyle = '#022c22';
+        phoneCtx.font = 'bold 16px sans-serif';
+        phoneCtx.fillText("I AM OK (CANCEL)", pw / 2, 381);
+
+        // ABHA Health Vault Chip
+        phoneCtx.fillStyle = 'rgba(6, 78, 59, 0.85)';
+        phoneCtx.strokeStyle = '#10b981';
+        phoneCtx.lineWidth = 1;
+        roundRect(phoneCtx, 25, 415, pw - 50, 48, 8);
+        phoneCtx.fill();
+        phoneCtx.stroke();
+
+        phoneCtx.fillStyle = '#34d399';
+        phoneCtx.font = 'bold 11px monospace';
+        phoneCtx.fillText("🛡️ ABHA: 91-8842-9912-3401 • B+ VE", pw / 2, 432);
+        phoneCtx.fillStyle = '#fca5a5';
+        phoneCtx.font = 'bold 10px sans-serif';
+        phoneCtx.fillText("⚠️ Penicillin Anaphylaxis • TEE Signed", pw / 2, 450);
+
+        phoneCtx.fillStyle = '#fca5a5';
+        phoneCtx.font = '10px sans-serif';
+        phoneCtx.fillText("Auto-SOS dispatches GPS, Biomechanics & ABHA Vault", pw / 2, 485);
+        phoneCtx.textAlign = 'left';
+      });
+
+      // Side Explanatory Cards
+      drawFeatureCallout(120, 220, 310, "ZERO-TOUCH LIFESAVER", "When drivers suffer concussions or severe trauma, they cannot unlock their phone. The zero-touch countdown ensures help is dispatched without manual intervention.");
+      drawFeatureCallout(850, 220, 310, "ABHA ZERO-KNOWLEDGE VAULT", "Transmits verified ABHA ID, blood group, critical drug allergies (Penicillin anaphylaxis), and organ donor status with hardware TEE zero-knowledge cryptographic signatures.");
+    }
+
+    // --- Scene 3: Police & ITMS Command - Tactical Map & Unit Dispatch ---
+    function drawScenePoliceTacticalMap(p, t) {
+      drawCinematicHeader("ROLE 2: CENTRAL POLICE HQ", "TACTICAL INCIDENT DISPATCH & GREEN WAVE CORRIDOR AUTHORIZATION", "#38bdf8");
+
+      // Draw Desktop / Workstation Monitor Mockup
+      drawWorkstationMonitor(160, 140, 960, 520, (monCtx, mw, mh) => {
+        // Window Title Bar
+        monCtx.fillStyle = '#0f172a';
+        monCtx.fillRect(0, 0, mw, 40);
+
+        // Traffic Police Badge
+        monCtx.fillStyle = '#38bdf8';
+        monCtx.font = 'bold 13px sans-serif';
+        monCtx.fillText("🚓 BANGALORE POLICE ITMS COMMAND • POLICE_TACTICAL_VIEW (JWT VERIFIED)", 25, 25);
+
+        // Left Pane: Active Emergency Queue
+        monCtx.fillStyle = '#020617';
+        monCtx.fillRect(0, 40, 300, mh - 40);
+
+        monCtx.fillStyle = '#94a3b8';
+        monCtx.font = 'bold 12px monospace';
+        monCtx.fillText("ACTIVE CITY EMERGENCIES (1)", 20, 70);
+
+        // Incident Card in Left Pane
+        monCtx.fillStyle = 'rgba(239, 68, 68, 0.15)';
+        monCtx.strokeStyle = '#ef4444';
+        monCtx.lineWidth = 1.5;
+        roundRect(monCtx, 15, 85, 270, 140, 10);
+        monCtx.fill();
+        monCtx.stroke();
+
+        monCtx.fillStyle = '#ef4444';
+        monCtx.font = 'bold 12px monospace';
+        monCtx.fillText("INCIDENT #4d4ea69d • T1 RED", 25, 110);
+        monCtx.fillStyle = '#ffffff';
+        monCtx.font = '12px sans-serif';
+        monCtx.fillText("Loc: Indiranagar 100ft Rd", 25, 135);
+        monCtx.fillText("Severity: High-Speed Kinetic Impact", 25, 155);
+
+        // Dispatch Police Cruiser Button
+        monCtx.fillStyle = '#0284c7';
+        roundRect(monCtx, 25, 175, 250, 36, 8);
+        monCtx.fill();
+        monCtx.fillStyle = '#ffffff';
+        monCtx.font = 'bold 11px sans-serif';
+        monCtx.fillText("DISPATCH PCR VAN KA-01-G-404 🚓", 35, 198);
+
+        // Right Pane: Tactical City Map
+        monCtx.fillStyle = '#0b1120';
+        monCtx.fillRect(300, 40, mw - 300, mh - 40);
+
+        // Vector Road Network
+        monCtx.strokeStyle = 'rgba(51, 65, 85, 0.5)';
+        monCtx.lineWidth = 14;
+        monCtx.beginPath();
+        monCtx.moveTo(330, 380);
+        monCtx.lineTo(540, 320);
+        monCtx.lineTo(760, 240);
+        monCtx.lineTo(920, 180);
+        monCtx.stroke();
+
+        // Green Wave Preemption Overlay
+        monCtx.strokeStyle = '#10b981';
+        monCtx.lineWidth = 6;
+        monCtx.beginPath();
+        monCtx.moveTo(330, 380);
+        monCtx.lineTo(540, 320);
+        monCtx.lineTo(760, 240);
+        monCtx.lineTo(920, 180);
+        monCtx.stroke();
+
+        // Crash Incident Marker
+        const pulse = (t * 10) % 30;
+        monCtx.strokeStyle = `rgba(239, 68, 68, ${1 - pulse / 30})`;
+        monCtx.lineWidth = 2;
+        monCtx.beginPath();
+        monCtx.arc(540, 320, pulse + 10, 0, Math.PI * 2);
+        monCtx.stroke();
+
+        monCtx.fillStyle = '#ef4444';
+        monCtx.beginPath();
+        monCtx.arc(540, 320, 10, 0, Math.PI * 2);
+        monCtx.fill();
+        monCtx.fillStyle = '#fca5a5';
+        monCtx.font = 'bold 12px monospace';
+        monCtx.fillText("CRASH NODE (100ft Rd)", 560, 325);
+
+        // Approaching Police Cruiser
+        monCtx.fillStyle = '#38bdf8';
+        monCtx.beginPath();
+        monCtx.arc(380, 365, 9, 0, Math.PI * 2);
+        monCtx.fill();
+        monCtx.fillStyle = '#bae6fd';
+        monCtx.font = 'bold 11px monospace';
+        monCtx.fillText("PCR-04 (ETA: 2.1m)", 350, 395);
+
+        // Simulated Cursor clicking Green Wave Authorization
+        const curX = 350 + Math.min(1, p * 1.5) * 350;
+        const curY = 420;
+        drawCursor(monCtx, curX, curY);
+
+        // Preemption Status Card
+        monCtx.fillStyle = 'rgba(16, 185, 129, 0.2)';
+        monCtx.strokeStyle = '#10b981';
+        roundRect(monCtx, 340, mh - 100, mw - 380, 70, 10);
+        monCtx.fill();
+        monCtx.stroke();
+
+        monCtx.fillStyle = '#34d399';
+        monCtx.font = 'bold 14px monospace';
+        monCtx.fillText("C-V2X SIGNAL CONTROLLER OVERRIDE: AUTHORIZED 🟢", 360, mh - 65);
+        monCtx.font = '12px sans-serif';
+        monCtx.fillStyle = '#cbd5e1';
+        monCtx.fillText("Indiranagar 100ft & Domlur Junctions locked to Inbound Priority Green phase.", 360, mh - 42);
+      });
+    }
+
+    // --- Scene 4: Police & ITMS - CCTV Edge AI Congestion Recognition ---
+    function drawSceneCCTVAIVision(p, t) {
+      drawCinematicHeader("ROLE 2: ITMS TRAFFIC SURVEILLANCE", "MUNICIPAL CCTV NODE (YOLOv8) • DETECTS 89% DENSITY CHOKE POINT", "#f59e0b");
+
+      // CCTV Camera Viewfinder Frame
+      ctx.fillStyle = '#020617';
+      ctx.strokeStyle = '#f59e0b';
+      ctx.lineWidth = 2;
+      roundRect(ctx, 140, 140, 720, 500, 18);
+      ctx.fill();
+      ctx.stroke();
+
+      // Camera HUD Header
+      ctx.fillStyle = '#f59e0b';
+      ctx.font = 'bold 14px monospace';
+      ctx.fillText("CAM-BLR-100FT-JN • RTSP LIVE STREAM • 30 FPS", 165, 180);
+      ctx.fillText("MODEL: YOLOv8-TRAFFIC-NANO (NVIDIA JETSON ORIN)", 165, 205);
+
+      // AI Bounding Boxes on Cars
+      const trackedVehicles = [
+        { x: 220, y: 260, w: 120, h: 70, tag: "BUS [98%]", col: "#f97316" },
+        { x: 380, y: 250, w: 90, h: 60, tag: "CAR [94%]", col: "#38bdf8" },
+        { x: 500, y: 270, w: 55, h: 45, tag: "BIKE [92%]", col: "#34d399" },
+        { x: 580, y: 240, w: 110, h: 75, tag: "TRUCK [96%]", col: "#f97316" },
+        { x: 280, y: 370, w: 95, h: 60, tag: "CAR [97%]", col: "#38bdf8" },
+        { x: 410, y: 380, w: 90, h: 60, tag: "CAR [91%]", col: "#38bdf8" },
+        { x: 530, y: 360, w: 110, h: 70, tag: "CAR [95%]", col: "#38bdf8" },
+        { x: 340, y: 470, w: 100, h: 65, tag: "CAR [93%]", col: "#38bdf8" },
+        { x: 470, y: 460, w: 90, h: 60, tag: "CAR [96%]", col: "#38bdf8" }
+      ];
+
+      trackedVehicles.forEach(v => {
+        ctx.strokeStyle = v.col;
+        ctx.lineWidth = 2;
+        ctx.strokeRect(v.x, v.y, v.w, v.h);
+        ctx.fillStyle = v.col;
+        ctx.fillRect(v.x, v.y - 18, 90, 18);
+        ctx.fillStyle = '#020617';
+        ctx.font = 'bold 11px monospace';
+        ctx.fillText(v.tag, v.x + 4, v.y - 4);
+      });
+
+      // Right Diagnostic Deck
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.95)';
+      ctx.strokeStyle = '#ef4444';
+      ctx.lineWidth = 2;
+      roundRect(ctx, 880, 140, 260, 500, 18);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = '#ef4444';
+      ctx.font = 'bold 18px monospace';
+      ctx.fillText("CHOKE POINT ALERT", 900, 185);
+
+      drawStatBar(900, 220, "Indiranagar 100ft Density", 0.89, "#ef4444");
+
+      ctx.fillStyle = '#cbd5e1';
+      ctx.font = '12px sans-serif';
+      ctx.fillText("Status: CRITICAL GRIDLOCK", 900, 290);
+      ctx.fillText("Queue: 480m Standstill", 900, 315);
+      ctx.fillText("Yield Space: INSUFFICIENT", 900, 340);
+
+      // AI Decision Card
+      ctx.fillStyle = '#10b981';
+      roundRect(ctx, 900, 380, 220, 220, 12);
+      ctx.fill();
+
+      ctx.fillStyle = '#022c22';
+      ctx.font = 'bold 14px monospace';
+      ctx.fillText("DYNAMIC A* REROUTE", 915, 415);
+      ctx.font = '12px sans-serif';
+      ctx.fillText("Bypassing 100ft Road Choke", 915, 445);
+      ctx.fillText("Routing via Old Airport Road", 915, 475);
+      ctx.fillText("Corridor Preemption Armed", 915, 505);
+      ctx.font = 'bold 14px monospace';
+      ctx.fillText("SAVES: 4.2 MIN DELAY ⚡", 915, 555);
+    }
+
+    // --- Scene 5: Ambulance Cockpit - Claiming Incident with 1-Tap ---
+    function drawSceneAmbulanceConsole(p, t) {
+      drawCinematicHeader("ROLE 3: AMBULANCE CREW", "IN-CABIN AMBULANCE CONSOLE • 1-TAP INCIDENT CLAIM", "#10b981");
+
+      // Draw Ambulance Heavy-Duty Rugged Tablet Mockup
+      drawRuggedTablet(240, 140, 800, 520, (tabCtx, tw, th) => {
+        // App Header
+        tabCtx.fillStyle = '#0f172a';
+        tabCtx.fillRect(0, 0, tw, 60);
+
+        tabCtx.fillStyle = '#10b981';
+        tabCtx.font = 'bold 16px sans-serif';
+        tabCtx.fillText("🚑 RAKSHAK 108 AMBULANCE CONSOLE • KA-03-E-9912", 25, 38);
+
+        // Body: Active Dispatch Card
+        tabCtx.fillStyle = '#020617';
+        tabCtx.fillRect(0, 60, tw, th - 60);
+
+        tabCtx.fillStyle = 'rgba(239, 68, 68, 0.1)';
+        tabCtx.strokeStyle = '#ef4444';
+        tabCtx.lineWidth = 2;
+        roundRect(tabCtx, 40, 90, tw - 80, 260, 16);
+        tabCtx.fill();
+        tabCtx.stroke();
+
+        tabCtx.fillStyle = '#ef4444';
+        tabCtx.font = 'bold 18px monospace';
+        tabCtx.fillText("EMERGENCY DISPATCH BROADCAST RECEIVED", 65, 130);
+
+        tabCtx.font = '13px sans-serif';
+        tabCtx.fillStyle = '#e2e8f0';
+        tabCtx.fillText("Location: Indiranagar 100ft Road (Distance: 1.8 km)", 65, 160);
+        tabCtx.fillText("Kinetic Telemetry: Peak Deceleration 48.6G • Delta-V 62.4 km/h (ISS 26)", 65, 182);
+        tabCtx.fillText("ABHA Emergency Vault: Stevin Joseph • Blood B+ • Penicillin Allergy ⚠️", 65, 204);
+        tabCtx.fillText("Matched Trauma Hospital: Manipal Hospital (Bay 01 Reserved)", 65, 226);
+        tabCtx.fillText("Traffic Status: Autonomous Green Corridor Ready (C-V2X EVP)", 65, 248);
+
+        // Mobile Parity Action Chips
+        tabCtx.fillStyle = 'rgba(239, 68, 68, 0.25)';
+        roundRect(tabCtx, 65, 262, 250, 28, 6);
+        tabCtx.fill();
+        tabCtx.fillStyle = '#f87171';
+        tabCtx.font = 'bold 11px monospace';
+        tabCtx.fillText("⚡ AI TRAUMA BLACKBOX: ISS 26", 75, 280);
+
+        tabCtx.fillStyle = 'rgba(16, 185, 129, 0.25)';
+        roundRect(tabCtx, 325, 262, 260, 28, 6);
+        tabCtx.fill();
+        tabCtx.fillStyle = '#34d399';
+        tabCtx.font = 'bold 11px monospace';
+        tabCtx.fillText("🛡️ ABHA VAULT: B+ POSITIVE", 335, 280);
+
+        // Claim Button with Animated Finger Tap
+        const isClaimed = p > 0.55;
+        tabCtx.fillStyle = isClaimed ? '#059669' : '#10b981';
+        roundRect(tabCtx, 40, 380, tw - 80, 70, 16);
+        tabCtx.fill();
+
+        tabCtx.fillStyle = isClaimed ? '#ffffff' : '#022c22';
+        tabCtx.font = 'bold 20px sans-serif';
+        tabCtx.textAlign = 'center';
+        tabCtx.fillText(isClaimed ? "INCIDENT CLAIMED • LAUNCHING NAVIGATION ➔" : "CLAIM INCIDENT & ENGAGE GREEN CORRIDOR", tw / 2, 423);
+        tabCtx.textAlign = 'left';
+
+        // Animated Finger Touch Tap Indicator
+        if (p > 0.45 && p < 0.7) {
+          const tapRipple = ((t * 8) % 30);
+          tabCtx.strokeStyle = `rgba(255, 255, 255, ${1 - tapRipple / 30})`;
+          tabCtx.lineWidth = 3;
+          tabCtx.beginPath();
+          tabCtx.arc(tw / 2, 415, tapRipple + 15, 0, Math.PI * 2);
+          tabCtx.stroke();
+        }
+      });
+    }
+
+    // --- Scene 6: Ambulance Cockpit - Green Wave Map HUD & Signals Flipping Green ---
+    function drawSceneGreenWaveCockpit(p, t) {
+      drawCinematicHeader("ROLE 3: AMBULANCE CREW", "LIVE FLUTTER NAVIGATION MAP • GREEN CORRIDOR (EVP) & DYNAMIC REROUTE", "#10b981");
+
+      drawRuggedTablet(160, 140, 960, 520, (tabCtx, tw, th) => {
+        // Cockpit Top Banner (Matching ambulance_dispatch_screen.dart)
+        tabCtx.fillStyle = '#0f172a';
+        roundRect(tabCtx, 20, 20, tw - 40, 50, 10);
+        tabCtx.fill();
+
+        tabCtx.fillStyle = '#10b981';
+        tabCtx.font = 'bold 14px monospace';
+        tabCtx.fillText("🟢 [C-V2X Status: ACTIVE] Autonomous Green Wave ON", 40, 50);
+        tabCtx.fillStyle = '#38bdf8';
+        tabCtx.fillText("🤖 AI Traffic Reroute: Bottleneck on 100ft Rd bypassed (-4.2 min)", 480, 50);
+
+        // Vector Map Area
+        tabCtx.fillStyle = '#0b1120';
+        roundRect(tabCtx, 20, 80, tw - 40, 350, 14);
+        tabCtx.fill();
+
+        // Glowing Emerald Green Corridor Halo underlay (width 16)
+        tabCtx.strokeStyle = 'rgba(16, 185, 129, 0.45)';
+        tabCtx.lineWidth = 18;
+        tabCtx.beginPath();
+        tabCtx.moveTo(80, 360);
+        tabCtx.lineTo(320, 300);
+        tabCtx.lineTo(600, 220);
+        tabCtx.lineTo(860, 160);
+        tabCtx.stroke();
+
+        // Speed-Color-Coded Polyline (High speed green)
+        tabCtx.strokeStyle = '#10b981';
+        tabCtx.lineWidth = 6;
+        tabCtx.beginPath();
+        tabCtx.moveTo(80, 360);
+        tabCtx.lineTo(320, 300);
+        tabCtx.lineTo(600, 220);
+        tabCtx.lineTo(860, 160);
+        tabCtx.stroke();
+
+        // Traffic Light Junction Pins on Map
+        drawMapSignalPin(tabCtx, 320, 300, "100ft Rd (320m)", true);
+        drawMapSignalPin(tabCtx, 600, 220, "Domlur Flyover (840m)", true);
+        drawHospitalPin(tabCtx, 860, 160, "Manipal Hospital ER");
+
+        // Moving Ambulance Marker
+        const ambProgress = p;
+        const ax = 80 + ambProgress * 650;
+        const ay = 360 - ambProgress * 170;
+
+        tabCtx.fillStyle = '#ffffff';
+        tabCtx.beginPath();
+        tabCtx.arc(ax, ay, 12, 0, Math.PI * 2);
+        tabCtx.fill();
+        tabCtx.strokeStyle = '#06b6d4';
+        tabCtx.lineWidth = 3;
+        tabCtx.stroke();
+        tabCtx.fillStyle = '#38bdf8';
+        tabCtx.font = 'bold 12px monospace';
+        tabCtx.fillText("🚑 AMBULANCE (64 km/h)", ax - 65, ay - 20);
+
+        // Approaching Signal HUD Capsule
+        tabCtx.fillStyle = 'rgba(15, 23, 42, 0.95)';
+        tabCtx.strokeStyle = '#10b981';
+        tabCtx.lineWidth = 2;
+        roundRect(tabCtx, 30, th - 80, 520, 50, 25);
+        tabCtx.fill();
+        tabCtx.stroke();
+
+        tabCtx.fillStyle = '#10b981';
+        tabCtx.font = 'bold 14px monospace';
+        tabCtx.fillText("Next Signal: Indiranagar 100ft (320m) • PREEMPTED 🟢", 55, th - 48);
+
+        // Traffic Flow Status Legend
+        tabCtx.fillStyle = 'rgba(15, 23, 42, 0.9)';
+        roundRect(tabCtx, 580, th - 80, tw - 610, 50, 10);
+        tabCtx.fill();
+        tabCtx.font = '11px sans-serif';
+        tabCtx.fillStyle = '#10b981';
+        tabCtx.fillText("● Green Wave (EVP)", 600, th - 50);
+        tabCtx.fillStyle = '#f59e0b';
+        tabCtx.fillText("● Moderate Flow", 720, th - 50);
+        tabCtx.fillStyle = '#ef4444';
+        tabCtx.fillText("● Choke Point", 830, th - 50);
+      });
+    }
+
+    // --- Scene 7: Hospital Trauma ER - WebRTC Visual Triage & Bay Readiness ---
+    function drawSceneHospitalTraumaER(p, t) {
+      drawCinematicHeader("ROLE 4: HOSPITAL ER COMMAND", "ZERO-STORAGE WEBRTC VISUAL TRIAGE • TRAUMA BAY PRE-ACTIVATION", "#38bdf8");
+
+      drawWorkstationMonitor(140, 140, 1000, 520, (hospCtx, hw, hh) => {
+        // Hospital Header
+        hospCtx.fillStyle = '#064e3b';
+        hospCtx.fillRect(0, 0, hw, 45);
+
+        hospCtx.fillStyle = '#a7f3d0';
+        hospCtx.font = 'bold 14px monospace';
+        hospCtx.fillText("🏥 MANIPAL HOSPITAL EMERGENCY COMMAND • LOGGED IN: DR. RAMESH (CHIEF SURGEON)", 25, 28);
+
+        // Left: Incident Card with WebRTC Stream
+        hospCtx.fillStyle = 'rgba(15, 23, 42, 0.95)';
+        roundRect(hospCtx, 20, 60, 460, hh - 80, 14);
+        hospCtx.fill();
+        hospCtx.strokeStyle = '#10b981';
+        hospCtx.lineWidth = 1.5;
+        hospCtx.stroke();
+
+        hospCtx.fillStyle = '#ef4444';
+        hospCtx.font = 'bold 14px monospace';
+        hospCtx.fillText("INCOMING: INCIDENT #4d4ea69d [T1 RED]", 40, 95);
+
+        // Simulated WebRTC Zero-Storage Photo Frame
+        hospCtx.fillStyle = '#020617';
+        roundRect(hospCtx, 40, 115, 420, 220, 10);
+        hospCtx.fill();
+
+        hospCtx.strokeStyle = '#38bdf8';
+        hospCtx.strokeRect(60, 135, 380, 180);
+
+        hospCtx.fillStyle = '#ef4444';
+        hospCtx.beginPath();
+        hospCtx.arc(75, 155, 6, 0, Math.PI * 2);
+        hospCtx.fill();
+        hospCtx.fillStyle = '#ffffff';
+        hospCtx.font = 'bold 11px monospace';
+        hospCtx.fillText("LIVE WEBRTC P2P DATA CHANNEL", 90, 160);
+
+        hospCtx.fillStyle = '#94a3b8';
+        hospCtx.font = '12px sans-serif';
+        hospCtx.fillText("[Visual Crash Scene Preview: Vehicle Crushed / Head Trauma]", 70, 230);
+
+        // Security Badge
+        // Security Badge & UI Action Chips
+        hospCtx.fillStyle = '#10b981';
+        hospCtx.font = 'bold 11px monospace';
+        hospCtx.fillText("🔒 ZERO-STORAGE: Ephemeral Buffer (900s TTL) • DPDP Compliant", 40, 355);
+
+        // UI Dashboard Toggle Pills
+        hospCtx.fillStyle = '#ef4444';
+        roundRect(hospCtx, 40, 375, 200, 32, 6);
+        hospCtx.fill();
+        hospCtx.fillStyle = '#ffffff';
+        hospCtx.font = 'bold 11px monospace';
+        hospCtx.fillText("⚡ BIOMECHANICS [ISS 26]", 50, 395);
+
+        hospCtx.fillStyle = '#059669';
+        roundRect(hospCtx, 255, 375, 205, 32, 6);
+        hospCtx.fill();
+        hospCtx.fillStyle = '#ffffff';
+        hospCtx.font = 'bold 11px monospace';
+        hospCtx.fillText("🛡️ ABHA VAULT [B+ POS]", 265, 395);
+
+        // Right: Patient Telemetry, AI Crash Biomechanics & ABHA Health Vault
+        hospCtx.fillStyle = 'rgba(15, 23, 42, 0.95)';
+        roundRect(hospCtx, 500, 60, hw - 520, hh - 80, 14);
+        hospCtx.fill();
+
+        // Section 1: AI Crash Biomechanics (Virtual Trauma Blackbox)
+        hospCtx.fillStyle = '#f87171';
+        hospCtx.font = 'bold 13px monospace';
+        hospCtx.fillText("⚡ AI CRASH BIOMECHANICS & VIRTUAL BLACKBOX (PINN)", 520, 85);
+
+        // 3 Kinetic Metrics Pills
+        hospCtx.fillStyle = 'rgba(30, 41, 59, 0.9)';
+        roundRect(hospCtx, 520, 95, 130, 42, 6);
+        hospCtx.fill();
+        hospCtx.fillStyle = '#94a3b8';
+        hospCtx.font = '9px monospace';
+        hospCtx.fillText("DELTA-V DROP", 530, 110);
+        hospCtx.fillStyle = '#f87171';
+        hospCtx.font = 'bold 13px monospace';
+        hospCtx.fillText("62.4 km/h", 530, 128);
+
+        hospCtx.fillStyle = 'rgba(30, 41, 59, 0.9)';
+        roundRect(hospCtx, 660, 95, 130, 42, 6);
+        hospCtx.fill();
+        hospCtx.fillStyle = '#94a3b8';
+        hospCtx.font = '9px monospace';
+        hospCtx.fillText("PEAK DECELERATION", 670, 110);
+        hospCtx.fillStyle = '#ef4444';
+        hospCtx.font = 'bold 13px monospace';
+        hospCtx.fillText("48.6 G", 670, 128);
+
+        hospCtx.fillStyle = 'rgba(30, 41, 59, 0.9)';
+        roundRect(hospCtx, 800, 95, 145, 42, 6);
+        hospCtx.fill();
+        hospCtx.fillStyle = '#94a3b8';
+        hospCtx.font = '9px monospace';
+        hospCtx.fillText("INJURY SEVERITY", 810, 110);
+        hospCtx.fillStyle = '#f87171';
+        hospCtx.font = 'bold 13px monospace';
+        hospCtx.fillText("ISS: 26 (Severe)", 810, 128);
+
+        // Predicted Organ Trauma Probabilities
+        hospCtx.fillStyle = 'rgba(15, 23, 42, 0.8)';
+        roundRect(hospCtx, 520, 145, 425, 26, 4);
+        hospCtx.fill();
+        hospCtx.fillStyle = '#ffffff';
+        hospCtx.font = '11px sans-serif';
+        hospCtx.fillText("• C-Spine Whiplash / Fracture: 84% [CRITICAL] ➔ Collar Req", 528, 162);
+
+        hospCtx.fillStyle = 'rgba(15, 23, 42, 0.8)';
+        roundRect(hospCtx, 520, 175, 425, 26, 4);
+        hospCtx.fill();
+        hospCtx.fillStyle = '#ffffff';
+        hospCtx.font = '11px sans-serif';
+        hospCtx.fillText("• Myocardial Sternal Contusion: 76% [HIGH] ➔ 12-Lead ECG Req", 528, 192);
+
+        hospCtx.fillStyle = 'rgba(15, 23, 42, 0.8)';
+        roundRect(hospCtx, 520, 205, 425, 26, 4);
+        hospCtx.fill();
+        hospCtx.fillStyle = '#ffffff';
+        hospCtx.font = '11px sans-serif';
+        hospCtx.fillText("• Splenic Laceration: 61% [HIGH] ➔ FAST Ultrasound on Arrival", 528, 222);
+
+        // Section 2: Ayushman Bharat (ABDM / ABHA) Health Vault
+        hospCtx.fillStyle = '#34d399';
+        hospCtx.font = 'bold 13px monospace';
+        hospCtx.fillText("🛡️ AYUSHMAN BHARAT (ABDM) EMERGENCY HEALTH VAULT", 520, 255);
+
+        // Patient ABHA Card
+        hospCtx.fillStyle = 'rgba(6, 78, 59, 0.6)';
+        roundRect(hospCtx, 520, 265, 425, 55, 6);
+        hospCtx.fill();
+        hospCtx.strokeStyle = '#10b981';
+        hospCtx.lineWidth = 1;
+        hospCtx.stroke();
+
+        hospCtx.fillStyle = '#a7f3d0';
+        hospCtx.font = 'bold 11px monospace';
+        hospCtx.fillText("ABHA: 91-8842-9912-3401 (Verified) • Stevin Joseph", 530, 285);
+        hospCtx.fillStyle = '#ffffff';
+        hospCtx.font = '11px sans-serif';
+        hospCtx.fillText("Blood: B+ Positive | Organ Donor: NOTTO-IND-2024-88419", 530, 305);
+
+        // High Urgency Allergy Contraindication
+        hospCtx.fillStyle = '#450a0a';
+        roundRect(hospCtx, 520, 328, 425, 50, 6);
+        hospCtx.fill();
+        hospCtx.strokeStyle = '#ef4444';
+        hospCtx.stroke();
+
+        hospCtx.fillStyle = '#fca5a5';
+        hospCtx.font = 'bold 11px monospace';
+        hospCtx.fillText("⚠️ CONTRAINDICATION: PENICILLIN ANAPHYLAXIS", 530, 348);
+        hospCtx.fillStyle = '#fecaca';
+        hospCtx.font = '10px sans-serif';
+        hospCtx.fillText("DO NOT ADMINISTER BETA-LACTAMS • Patient on Warfarin (Blood Thinner)", 530, 366);
+
+        // Surgical Readiness Checklist
+        drawChecklistRow(hospCtx, 520, 395, "Trauma Bay 01 Pre-Armed", "READY 🟢", 425);
+        drawChecklistRow(hospCtx, 520, 425, "Blood Bank B+ / O-Neg", "MATCHED 🟢", 425);
+      });
+    }
+
+    // --- Scene 8: 4-Way Multi-Role Simultaneous Synchronization ---
+    function drawSceneFourWayMultiSync(p, t) {
+      drawCinematicHeader("ROLE 1-4: UNIFIED SYNCHRONIZED ECOSYSTEM", "SIMULTANEOUS MILLISECOND ORCHESTRATION ACROSS ALL STAKEHOLDERS", "#10b981");
+
+      const qW = 520;
+      const qH = 230;
+
+      // Top Left: 1. Citizen Phone
+      drawQuadrant(100, 140, qW, qH, "1. CITIZEN / VICTIM", "#ef4444", () => {
+        ctx.fillStyle = '#f87171';
+        ctx.font = 'bold 14px monospace';
+        ctx.fillText("CRASH SOS ACTIVE • FAMILY NOTIFIED", 120, 195);
+        ctx.font = '12px sans-serif';
+        ctx.fillStyle = '#cbd5e1';
+        ctx.fillText("Kinematic Impact: 5.4G (Detected in 18ms)", 120, 225);
+        ctx.fillText("Emergency SMS Sent with Live GPS Tracking Link", 120, 250);
+        ctx.fillText("Status: Hospital Ambulance En Route (ETA: 4m)", 120, 275);
+      });
+
+      // Top Right: 2. Central Police Command
+      drawQuadrant(660, 140, qW, qH, "2. POLICE TACTICAL ITMS", "#38bdf8", () => {
+        ctx.fillStyle = '#38bdf8';
+        ctx.font = 'bold 14px monospace';
+        ctx.fillText("C-V2X SIGNAL PREEMPTION ENGAGED", 680, 195);
+        ctx.font = '12px sans-serif';
+        ctx.fillStyle = '#cbd5e1';
+        ctx.fillText("PCR Van KA-01-G-404 Dispatched (ETA: 2.1m)", 680, 225);
+        ctx.fillText("City Traffic Signals: Inbound Solid Green Wave", 680, 250);
+        ctx.fillText("Choke Point Bypassed via Dynamic A* Engine", 680, 275);
+      });
+
+      // Bottom Left: 3. Ambulance Cockpit
+      drawQuadrant(100, 400, qW, qH, "3. AMBULANCE COCKPIT", "#10b981", () => {
+        ctx.fillStyle = '#10b981';
+        ctx.font = 'bold 14px monospace';
+        ctx.fillText("GREEN CORRIDOR LOCKED • 65 KM/H", 120, 455);
+        ctx.font = '12px sans-serif';
+        ctx.fillStyle = '#cbd5e1';
+        ctx.fillText("Approaching Signal: 320m (PREEMPTED 🟢)", 120, 485);
+        ctx.fillText("Zero Intersection Stoppages Encountered", 120, 510);
+        ctx.fillText("Saves: 4.2 Minutes Traffic Delay", 120, 535);
+      });
+
+      // Bottom Right: 4. Hospital Trauma ER
+      drawQuadrant(660, 400, qW, qH, "4. HOSPITAL TRAUMA CENTER", "#a855f7", () => {
+        ctx.fillStyle = '#c084fc';
+        ctx.font = 'bold 14px monospace';
+        ctx.fillText("TRAUMA BAY 01 & SURGEONS ARMED", 680, 455);
+        ctx.font = '12px sans-serif';
+        ctx.fillStyle = '#cbd5e1';
+        ctx.fillText("Live WebRTC Stream: Injury Triage Completed", 680, 485);
+        ctx.fillText("Blood Bank: 2 Units O-Negative on Bay Standby", 680, 510);
+        ctx.fillText("Zero Reception Delay Upon Ramp Docking", 680, 535);
+      });
+    }
+
+    // --- Scene 9: Epilogue - Victory & Golden Hour Conquered ---
+    function drawSceneEpilogueVictory(p, t) {
+      drawCinematicHeader("THE GOLDEN HOUR CONQUERED", "TOTAL TRANSIT TIME SLASHED BY 75% • ZERO INTERSECTION FATALITIES", "#10b981");
+
+      // Side-by-Side Impact Comparison
+      ctx.fillStyle = 'rgba(239, 68, 68, 0.15)';
+      ctx.strokeStyle = '#ef4444';
+      ctx.lineWidth = 2;
+      roundRect(ctx, 120, 160, 480, 340, 16);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = '#f87171';
+      ctx.font = 'bold 22px monospace';
+      ctx.fillText("WITHOUT RAKSHAK-AI", 145, 210);
+
+      ctx.font = '14px sans-serif';
+      ctx.fillStyle = '#e2e8f0';
+      ctx.fillText("• Manual bystander call delay: 14 mins", 145, 260);
+      ctx.fillText("• Trapped in 8 red traffic lights: 16 mins", 145, 295);
+      ctx.fillText("• Hospital unprepared upon arrival: 8 mins", 145, 330);
+
+      ctx.font = 'bold 32px sans-serif';
+      ctx.fillStyle = '#ef4444';
+      ctx.fillText("TOTAL: 38 MINUTES", 145, 410);
+      ctx.font = '13px sans-serif';
+      ctx.fillStyle = '#fca5a5';
+      ctx.fillText("❌ Golden Hour Lost (Severe Fatality Risk)", 145, 445);
+
+      // Rakshak-AI Column
+      ctx.fillStyle = 'rgba(16, 185, 129, 0.2)';
+      ctx.strokeStyle = '#10b981';
+      ctx.lineWidth = 3;
+      roundRect(ctx, 680, 160, 480, 340, 16);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = '#34d399';
+      ctx.font = 'bold 22px monospace';
+      ctx.fillText("WITH RAKSHAK-AI", 705, 210);
+
+      ctx.font = '14px sans-serif';
+      ctx.fillStyle = '#e2e8f0';
+      ctx.fillText("• 18ms crash detection + 15s auto-SOS", 705, 260);
+      ctx.fillText("• Autonomous Green Wave preemption (EVP)", 705, 295);
+      ctx.fillText("• Live WebRTC visual triage & bay prep", 705, 330);
+
+      ctx.font = 'bold 36px sans-serif';
+      ctx.fillStyle = '#10b981';
+      ctx.fillText("TOTAL: 9.4 MINUTES", 705, 410);
+      ctx.font = 'bold 14px sans-serif';
+      ctx.fillStyle = '#a7f3d0';
+      ctx.fillText("✅ 75% Transit Reduction • Golden Hour Saved!", 705, 445);
+
+      // Bottom Celebration Banner
+      ctx.fillStyle = '#064e3b';
+      roundRect(ctx, 120, 525, 1040, 80, 16);
+      ctx.fill();
+
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 18px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText("RAKSHAK-AI: AUTONOMOUS AI GUARDIANSHIP FOR EVERY LIFE ON THE ROAD", 640, 560);
+      ctx.font = '13px monospace';
+      ctx.fillStyle = '#6ee7b7';
+      ctx.fillText("Edge TFLite • C-V2X NTCIP 1202 • YOLOv8 Vision • WebRTC Zero-Storage • PostGIS", 640, 585);
+      ctx.textAlign = 'left';
+    }
+
+    // =========================================================================
+    // GRAPHIC DEVICE PRIMITIVES (Realistic Monitors, Tablets, and Phones)
+    // =========================================================================
+
+    function drawCinematicHeader(title, subtitle, color) {
+      ctx.fillStyle = color;
+      ctx.font = 'bold 26px sans-serif';
+      ctx.fillText(title, 80, 80);
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '13px monospace';
+      ctx.fillText(subtitle, 80, 108);
+
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(80, 122);
+      ctx.lineTo(1200, 122);
+      ctx.stroke();
+    }
+
+    function drawPhoneDevice(x, y, w, h, renderScreen) {
+      // Chassis
+      ctx.fillStyle = '#1e293b';
+      ctx.strokeStyle = '#475569';
+      ctx.lineWidth = 4;
+      roundRect(ctx, x, y, w, h, 38);
+      ctx.fill();
+      ctx.stroke();
+
+      // Screen Glass
+      ctx.save();
+      ctx.beginPath();
+      roundRect(ctx, x + 8, y + 8, w - 16, h - 16, 32);
+      ctx.clip();
+      ctx.translate(x + 8, y + 8);
+      renderScreen(ctx, w - 16, h - 16);
+      ctx.restore();
+
+      // Front Dynamic Island / Speaker Pill
+      ctx.fillStyle = '#020617';
+      roundRect(ctx, x + w / 2 - 45, y + 14, 90, 18, 9);
+      ctx.fill();
+    }
+
+    function drawWorkstationMonitor(x, y, w, h, renderScreen) {
+      // Monitor Chassis
+      ctx.fillStyle = '#0f172a';
+      ctx.strokeStyle = '#334155';
+      ctx.lineWidth = 3;
+      roundRect(ctx, x, y, w, h, 18);
+      ctx.fill();
+      ctx.stroke();
+
+      // Screen Glass
+      ctx.save();
+      ctx.beginPath();
+      roundRect(ctx, x + 6, y + 6, w - 12, h - 12, 14);
+      ctx.clip();
+      ctx.translate(x + 6, y + 6);
+      renderScreen(ctx, w - 12, h - 12);
+      ctx.restore();
+    }
+
+    function drawRuggedTablet(x, y, w, h, renderScreen) {
+      // Rugged Bumper Edge
+      ctx.fillStyle = '#1e293b';
+      ctx.strokeStyle = '#065f46';
+      ctx.lineWidth = 6;
+      roundRect(ctx, x, y, w, h, 24);
+      ctx.fill();
+      ctx.stroke();
+
+      // Screen
+      ctx.save();
+      ctx.beginPath();
+      roundRect(ctx, x + 10, y + 10, w - 20, h - 20, 16);
+      ctx.clip();
+      ctx.translate(x + 10, y + 10);
+      renderScreen(ctx, w - 20, h - 20);
+      ctx.restore();
+    }
+
+    function drawQuadrant(x, y, w, h, title, col, renderFn) {
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.95)';
+      ctx.strokeStyle = col;
+      ctx.lineWidth = 2;
+      roundRect(ctx, x, y, w, h, 14);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = col;
+      ctx.font = 'bold 14px monospace';
+      ctx.fillText(title, x + 20, y + 30);
+
+      renderFn();
+    }
+
+    function drawPhoneRow(c, x, y, label, val) {
+      c.fillStyle = '#94a3b8';
+      c.font = '12px sans-serif';
+      c.fillText(label, x, y);
+      c.fillStyle = '#ffffff';
+      c.font = 'bold 12px monospace';
+      c.fillText(val, x + 120, y);
+    }
+
+    function drawFeatureCallout(x, y, w, title, desc) {
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
+      ctx.strokeStyle = '#38bdf8';
+      ctx.lineWidth = 1.5;
+      roundRect(ctx, x, y, w, 150, 14);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = '#38bdf8';
+      ctx.font = 'bold 15px monospace';
+      ctx.fillText(title, x + 20, y + 35);
+
+      ctx.fillStyle = '#cbd5e1';
+      ctx.font = '12px sans-serif';
+      wrapText(ctx, desc, x + 20, y + 65, w - 40, 20);
+    }
+
+    function drawFloatingHUDCard(x, y, w, h, items) {
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.95)';
+      ctx.strokeStyle = '#475569';
+      ctx.lineWidth = 1.5;
+      roundRect(ctx, x, y, w, h, 14);
+      ctx.fill();
+      ctx.stroke();
+
+      const itemW = w / items.length;
+      items.forEach((item, idx) => {
+        const ix = x + idx * itemW + 20;
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = '11px monospace';
+        ctx.fillText(item.label, ix, y + 30);
+
+        ctx.fillStyle = item.color;
+        ctx.font = 'bold 16px sans-serif';
+        ctx.fillText(item.val, ix, y + 58);
+      });
+    }
+
+    function drawTelemetryPill(c, x, y, label, val, col, w = 400) {
+      c.fillStyle = 'rgba(30, 41, 59, 0.6)';
+      roundRect(c, x, y, w, 44, 8);
+      c.fill();
+
+      c.fillStyle = '#94a3b8';
+      c.font = '11px monospace';
+      c.fillText(label, x + 16, y + 18);
+
+      c.fillStyle = col;
+      c.font = 'bold 13px monospace';
+      c.fillText(val, x + 16, y + 35);
+    }
+
+    function drawChecklistRow(c, x, y, label, stat, w = 400) {
+      c.fillStyle = 'rgba(30, 41, 59, 0.6)';
+      roundRect(c, x, y, w, 38, 8);
+      c.fill();
+
+      c.fillStyle = '#e2e8f0';
+      c.font = '12px sans-serif';
+      c.fillText(label, x + 16, y + 24);
+
+      c.fillStyle = '#10b981';
+      c.font = 'bold 12px monospace';
+      c.fillText(stat, x + w - 100, y + 24);
+    }
+
+    function drawMapSignalPin(c, x, y, label, isGreen) {
+      c.fillStyle = isGreen ? '#10b981' : '#ef4444';
+      c.beginPath();
+      c.arc(x, y, 12, 0, Math.PI * 2);
+      c.fill();
+
+      c.fillStyle = '#ffffff';
+      c.font = 'bold 11px sans-serif';
+      c.fillText("🚦", x - 7, y + 4);
+
+      c.fillStyle = isGreen ? '#a7f3d0' : '#fca5a5';
+      c.font = 'bold 11px monospace';
+      c.fillText(label, x - 40, y + 26);
+    }
+
+    function drawHospitalPin(c, x, y, label) {
+      c.fillStyle = '#38bdf8';
+      c.beginPath();
+      c.arc(x, y, 14, 0, Math.PI * 2);
+      c.fill();
+
+      c.fillStyle = '#ffffff';
+      c.font = 'bold 14px sans-serif';
+      c.fillText("🏥", x - 9, y + 5);
+
+      c.fillStyle = '#bae6fd';
+      c.font = 'bold 12px monospace';
+      c.fillText(label, x - 50, y + 28);
+    }
+
+    function drawStatBar(x, y, label, ratio, col) {
+      ctx.fillStyle = '#cbd5e1';
+      ctx.font = '12px sans-serif';
+      ctx.fillText(label, x, y);
+
+      ctx.fillStyle = 'rgba(51, 65, 85, 0.6)';
+      roundRect(ctx, x, y + 8, 220, 14, 7);
+      ctx.fill();
+
+      ctx.fillStyle = col;
+      roundRect(ctx, x, y + 8, 220 * ratio, 14, 7);
+      ctx.fill();
+    }
+
+    function drawCursor(c, x, y) {
+      c.fillStyle = '#ffffff';
+      c.beginPath();
+      c.moveTo(x, y);
+      c.lineTo(x + 12, y + 16);
+      c.lineTo(x + 5, y + 16);
+      c.lineTo(x, y + 22);
+      c.closePath();
+      c.fill();
+      c.strokeStyle = '#000000';
+      c.lineWidth = 1.5;
+      c.stroke();
+    }
+
+    function roundRect(c, x, y, w, h, r) {
+      c.beginPath();
+      c.moveTo(x + r, y);
+      c.lineTo(x + w - r, y);
+      c.quadraticCurveTo(x + w, y, x + w, y + r);
+      c.lineTo(x + w, y + h - r);
+      c.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+      c.lineTo(x + r, y + h);
+      c.quadraticCurveTo(x, y + h, x, y + h - r);
+      c.lineTo(x, y + r);
+      c.quadraticCurveTo(x, y, x + r, y);
+      c.closePath();
+    }
+
+    function wrapText(c, text, x, y, maxW, lineH) {
+      const words = text.split(' ');
+      let line = '';
+      for (let n = 0; n < words.length; n++) {
+        const testLine = line + words[n] + ' ';
+        const metrics = c.measureText(testLine);
+        if (metrics.width > maxW && n > 0) {
+          c.fillText(line, x, y);
+          line = words[n] + ' ';
+          y += lineH;
+        } else {
+          line = testLine;
+        }
+      }
+      c.fillText(line, x, y);
+    }
+
+    // =========================================================================
+    // MAIN PLAYBACK TICK & INTERACTION LOGIC
+    // =========================================================================
+
+    function tick(now) {
+      const delta = (now - lastFrameTime) / 1000;
+      lastFrameTime = now;
+
+      if (isPlaying) {
+        currentTime += delta * playbackSpeed;
+        if (currentTime >= totalDuration) {
+          currentTime = totalDuration;
+          pause();
+        }
+      }
+
+      // Check current scene
+      let newSceneIndex = 0;
+      for (let i = 0; i < scenes.length; i++) {
+        if (currentTime >= scenes[i].start && currentTime < scenes[i].end) {
+          newSceneIndex = i;
+          break;
+        }
+      }
+      if (currentTime >= totalDuration) newSceneIndex = scenes.length - 1;
+
+      if (newSceneIndex !== currentSceneIndex) {
+        currentSceneIndex = newSceneIndex;
+        onSceneChange(currentSceneIndex);
+      }
+
+      // Voiceover and SFX Triggers
+      if (isPlaying && currentSceneIndex !== lastSpokenScene && voiceoverEnabled) {
+        lastSpokenScene = currentSceneIndex;
+        speakNarration(scenes[currentSceneIndex].voice);
+
+        // Sound triggers
+        if (currentSceneIndex === 1) playCrashSound();
+        if (currentSceneIndex === 2) playTone(920, 'sine', 0.25);
+        if (currentSceneIndex === 5) playTone(600, 'triangle', 0.15);
+        if (currentSceneIndex === 6) playGreenChime();
+        if (currentSceneIndex === 9) playGreenChime();
+      }
+
+      // Update HUD
+      const progressPercent = (currentTime / totalDuration) * 100;
+      progressBar.style.width = progressPercent + '%';
+
+      const curM = Math.floor(currentTime / 60).toString().padStart(2, '0');
+      const curS = Math.floor(currentTime % 60).toString().padStart(2, '0');
+      const totM = Math.floor(totalDuration / 60).toString().padStart(2, '0');
+      const totS = Math.floor(totalDuration % 60).toString().padStart(2, '0');
+      const timeStr = `${curM}:${curS} / ${totM}:${totS}`;
+      timeDisplay.textContent = timeStr;
+      hudTimestamp.textContent = timeStr;
+
+      render(currentTime);
+      requestAnimationFrame(tick);
+    }
+
+    function onSceneChange(idx) {
+      const sc = scenes[idx];
+      hudRoleBadge.textContent = sc.role;
+      hudDeviceIcon.textContent = sc.deviceIcon;
+      hudDeviceName.textContent = sc.deviceName;
+      captionText.textContent = sc.caption;
+
+      document.querySelectorAll('.scene-btn').forEach(btn => {
+        if (parseInt(btn.dataset.scene) === idx) {
+          btn.classList.add('bg-emerald-600', 'text-white');
+          btn.classList.remove('bg-slate-800', 'text-slate-300');
+        } else {
+          btn.classList.remove('bg-emerald-600', 'text-white');
+          btn.classList.add('bg-slate-800', 'text-slate-300');
+        }
+      });
+    }
+
+    function play() {
+      initAudio();
+      isPlaying = true;
+      playOverlay.classList.add('opacity-0', 'pointer-events-none');
+      playIcon.classList.add('hidden');
+      pauseIcon.classList.remove('hidden');
+      if (currentTime >= totalDuration) currentTime = 0;
+      lastSpokenScene = -1;
+    }
+
+    function pause() {
+      isPlaying = false;
+      playOverlay.classList.remove('opacity-0', 'pointer-events-none');
+      playIcon.classList.remove('hidden');
+      pauseIcon.classList.add('hidden');
+      if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+    }
+
+    function seekTo(time) {
+      currentTime = Math.max(0, Math.min(totalDuration, time));
+      lastSpokenScene = -1;
+      render(currentTime);
+      if (isPlaying && voiceoverEnabled) {
+        speakNarration(scenes[currentSceneIndex].voice);
+      }
+    }
+
+    // Event Bindings
+    playOverlay.addEventListener('click', play);
+    canvas.addEventListener('click', () => isPlaying ? pause() : play());
+    btnPlayPause.addEventListener('click', () => isPlaying ? pause() : play());
+
+    btnRestart.addEventListener('click', () => {
+      seekTo(0);
+      play();
+    });
+
+    progressBarContainer.addEventListener('click', (e) => {
+      const rect = progressBarContainer.getBoundingClientRect();
+      const clickRatio = (e.clientX - rect.left) / rect.width;
+      seekTo(clickRatio * totalDuration);
+    });
+
+    document.querySelectorAll('.scene-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const idx = parseInt(btn.dataset.scene);
+        seekTo(scenes[idx].start);
+        play();
+      });
+    });
+
+    document.querySelectorAll('.role-pill').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const t = parseFloat(btn.dataset.time);
+        seekTo(t);
+        play();
+      });
+    });
+
+    btnSpeed.addEventListener('click', () => {
+      if (playbackSpeed === 1.0) playbackSpeed = 1.5;
+      else if (playbackSpeed === 1.5) playbackSpeed = 2.0;
+      else playbackSpeed = 1.0;
+      btnSpeed.textContent = playbackSpeed.toFixed(1) + 'x';
+    });
+
+    btnVoiceoverToggle.addEventListener('click', () => {
+      voiceoverEnabled = !voiceoverEnabled;
+      if (!voiceoverEnabled && 'speechSynthesis' in window) window.speechSynthesis.cancel();
+      voiceLabel.textContent = voiceoverEnabled ? 'Voiceover: ON' : 'Voiceover: OFF';
+      voiceIcon.textContent = voiceoverEnabled ? '🎙️' : '🔇';
+      btnVoiceoverToggle.classList.toggle('text-slate-400', !voiceoverEnabled);
+      btnVoiceoverToggle.classList.toggle('text-cyan-300', voiceoverEnabled);
+    });
+
+    btnAudioToggle.addEventListener('click', () => {
+      sfxEnabled = !sfxEnabled;
+      soundLabel.textContent = sfxEnabled ? 'SFX: ON' : 'SFX: OFF';
+      soundIcon.textContent = sfxEnabled ? '🔊' : '🔇';
+      btnAudioToggle.classList.toggle('text-slate-400', !sfxEnabled);
+      btnAudioToggle.classList.toggle('text-emerald-300', sfxEnabled);
+    });
+
+    btnFullscreen.addEventListener('click', () => {
+      if (!document.fullscreenElement) {
+        canvas.requestFullscreen().catch(err => alert(err.message));
+      } else {
+        document.exitFullscreen();
+      }
+    });
+
+    // 1-Click Video Recording & File Export Engine
+    btnRecordExport.addEventListener('click', () => {
+      if (!isRecording) startRecording();
+      else stopRecording();
+    });
+
+    function startRecording() {
+      initAudio();
+      recordedChunks = [];
+      const canvasStream = canvas.captureStream(30);
+
+      let combinedStream = canvasStream;
+      if (audioDestination && audioDestination.stream.getAudioTracks().length > 0) {
+        combinedStream = new MediaStream([
+          ...canvasStream.getVideoTracks(),
+          ...audioDestination.stream.getAudioTracks()
+        ]);
+      }
+
+      const options = { mimeType: 'video/webm;codecs=vp9' };
+      try {
+        mediaRecorder = new MediaRecorder(combinedStream, options);
+      } catch (e) {
+        mediaRecorder = new MediaRecorder(combinedStream);
+      }
+
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) recordedChunks.push(e.data);
+      };
+
+      mediaRecorder.onstop = () => {
+        const blob = new Blob(recordedChunks, { type: 'video/webm' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = url;
+        a.download = 'rakshak_ai_official_demo.webm';
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => {
+          document.body.removeChild(a);
+          window.URL.revokeObjectURL(url);
+        }, 100);
+
+        isRecording = false;
+        recDot.classList.remove('bg-red-400', 'animate-ping');
+        recDot.classList.add('bg-white');
+        recLabel.textContent = 'Download Video (.webm)';
+        alert('🎉 Professional demo video exported successfully! Download has started.');
+      };
+
+      mediaRecorder.start();
+      isRecording = true;
+      recDot.classList.add('bg-red-400', 'animate-ping');
+      recDot.classList.remove('bg-white');
+      recLabel.textContent = 'Recording live... (Click to Finish)';
+
+      seekTo(0);
+      play();
+    }
+
+    function stopRecording() {
+      if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop();
+        pause();
+      }
+    }
+
+    // Init
+    onSceneChange(0);
+    render(0);
+    requestAnimationFrame(tick);
+  </script>
+</body>
+</html>
