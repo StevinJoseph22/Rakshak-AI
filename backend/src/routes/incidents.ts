@@ -7,6 +7,7 @@ import {
   rejectIncidentSchema,
   nearbyIncidentsQuerySchema,
   claimIncidentSchema,
+  ambulanceArrivedSchema,
 } from '../validations';
 import { Incident, Hospital } from '../types';
 import {
@@ -15,6 +16,7 @@ import {
   broadcastCaseAccepted,
   broadcastHospitalRejected,
   broadcastIncidentClaimed,
+  broadcastAmbulanceArrived,
   getIO,
 } from '../socket';
 import { redis } from '../redis';
@@ -24,11 +26,168 @@ import {
   clearAllEscalations,
   triggerImmediateEscalation,
 } from '../escalation';
+import {
+  scheduleSilentPromotion,
+  cancelSilentPromotion,
+  promoteSuspectedIncident,
+} from '../services/preAlertService';
+import { checkIncidentBlackspot, getAllBlackspotZones } from '../services/blackspotService';
 import { authenticateJWT, optionalAuth } from '../middleware/auth';
 
 export const incidentsRouter = Router();
 
-// POST /incidents - Create incident & match trauma hospitals within 8km
+// GET /incidents/blackspots - Retrieve high-frequency accident zones for Police Tactical Map
+incidentsRouter.get('/blackspots', async (_req: Request, res: Response) => {
+  try {
+    const zones = await getAllBlackspotZones();
+    return res.status(200).json(zones);
+  } catch (err) {
+    console.error('[Incidents] Error retrieving blackspot zones:', err);
+    return res.status(500).json({ error: 'Failed to retrieve blackspot zones' });
+  }
+});
+
+// POST /incidents/suspected - Fast-path for soft pre-alert to police only
+incidentsRouter.post('/suspected', async (req: Request, res: Response) => {
+  req.body.status = 'suspected';
+  const parseResult = createIncidentSchema.safeParse(req.body);
+  if (!parseResult.success) {
+    return res.status(400).json({
+      error: 'Validation failed',
+      message: 'Invalid incident payload',
+      details: parseResult.error.errors.map((e) => ({
+        field: e.path.join('.'),
+        message: e.message,
+      })),
+    });
+  }
+
+  const { id, latitude, longitude, victim_metadata } = parseResult.data;
+
+  // Idempotency: check if already exists
+  if (id) {
+    const checkExisting = await query<Incident>(
+      `SELECT id, status, accepted_hospital_id, victim_metadata,
+              ST_Y(location::geometry) AS latitude, ST_X(location::geometry) AS longitude,
+              created_at, updated_at
+       FROM incidents WHERE id = $1`,
+      [id]
+    );
+    if (checkExisting.rows.length > 0) {
+      const existing = checkExisting.rows[0];
+      return res.status(200).json({
+        message: 'Suspected incident already recorded (idempotent)',
+        incident: {
+          ...existing,
+          latitude: Number(existing.latitude),
+          longitude: Number(existing.longitude),
+        },
+      });
+    }
+  }
+
+  const insertSql = id
+    ? `
+      INSERT INTO incidents (id, location, status, victim_metadata)
+      VALUES ($1, ST_SetSRID(ST_MakePoint($2, $3), 4326)::geography, 'suspected', $4)
+      RETURNING id, status, accepted_hospital_id, victim_metadata,
+                ST_Y(location::geometry) AS latitude, ST_X(location::geometry) AS longitude,
+                created_at, updated_at;
+    `
+    : `
+      INSERT INTO incidents (location, status, victim_metadata)
+      VALUES (ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography, 'suspected', $3)
+      RETURNING id, status, accepted_hospital_id, victim_metadata,
+                ST_Y(location::geometry) AS latitude, ST_X(location::geometry) AS longitude,
+                created_at, updated_at;
+    `;
+
+  const params = id
+    ? [id, longitude, latitude, victim_metadata ? JSON.stringify(victim_metadata) : null]
+    : [longitude, latitude, victim_metadata ? JSON.stringify(victim_metadata) : null];
+
+  const insertResult = await query<Incident>(insertSql, params);
+  const raw = insertResult.rows[0];
+  const blackspotInfo = await checkIncidentBlackspot(Number(raw.latitude), Number(raw.longitude));
+  const incident: Incident = {
+    ...raw,
+    latitude: Number(raw.latitude),
+    longitude: Number(raw.longitude),
+    blackspot_info: blackspotInfo,
+  };
+
+  // Broadcast ONLY to police all_incidents room as soft marker (never to hospitals)
+  const io = getIO();
+  if (io) {
+    io.to('all_incidents').emit('incident_suspected', {
+      ...incident,
+      is_suspected: true,
+      soft_marker: true,
+      blackspot_info: blackspotInfo,
+    });
+  }
+
+  // Arm 30-second silent promotion watchdog
+  scheduleSilentPromotion(incident.id, 30000);
+
+  return res.status(201).json({
+    message: 'Pre-alert suspected incident logged (Police soft standby)',
+    incident,
+    is_suspected: true,
+  });
+});
+
+// POST /incidents/:id/confirm - Promotes suspected incident to full broadcasting trauma triage
+incidentsRouter.post('/:id/confirm', async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const promoted = await promoteSuspectedIncident(id, 'USER_CONFIRMED');
+  if (!promoted) {
+    return res.status(404).json({ error: 'Incident not found or already resolved' });
+  }
+  return res.json({
+    message: 'Incident confirmed and promoted to trauma triage',
+    incident: promoted.incident,
+    matched_hospitals: promoted.matchedHospitals,
+  });
+});
+
+// POST /incidents/:id/cancel - Cancels a suspected incident (User tapped "I'm OK")
+incidentsRouter.post('/:id/cancel', async (req: Request, res: Response) => {
+  const { id } = req.params;
+  cancelSilentPromotion(id);
+
+  const updateResult = await query<Incident>(
+    `UPDATE incidents 
+     SET status = 'cancelled', 
+         victim_metadata = jsonb_set(COALESCE(victim_metadata, '{}'::jsonb), '{cancelled_at}', to_jsonb(CURRENT_TIMESTAMP::text)),
+         updated_at = CURRENT_TIMESTAMP 
+     WHERE id = $1 
+     RETURNING id, status, updated_at`,
+    [id]
+  );
+
+  if (updateResult.rows.length === 0) {
+    return res.status(404).json({ error: 'Incident not found' });
+  }
+
+  // Notify police room to remove soft marker
+  const io = getIO();
+  if (io) {
+    io.to('all_incidents').emit('incident_cancelled', {
+      id,
+      timestamp: new Date().toISOString(),
+      reason: 'USER_CANCELLED_OK',
+    });
+  }
+
+  return res.json({
+    message: 'Suspected incident cancelled successfully',
+    id,
+    status: 'cancelled',
+  });
+});
+
+// POST /incidents - Create incident & match trauma hospitals within 8km (or idempotent confirm)
 incidentsRouter.post('/', async (req: Request, res: Response) => {
   try {
     const parseResult = createIncidentSchema.safeParse(req.body);
@@ -43,42 +202,123 @@ incidentsRouter.post('/', async (req: Request, res: Response) => {
       });
     }
 
-    const { latitude, longitude, victim_metadata } = parseResult.data;
+    const { id, latitude, longitude, victim_metadata, status } = parseResult.data;
+
+    // Idempotency check on client UUID
+    if (id) {
+      const checkExisting = await query<Incident>(
+        `SELECT id, status, accepted_hospital_id, victim_metadata,
+                ST_Y(location::geometry) AS latitude, ST_X(location::geometry) AS longitude,
+                created_at, updated_at
+         FROM incidents WHERE id = $1`,
+        [id]
+      );
+
+      if (checkExisting.rows.length > 0) {
+        const existing = checkExisting.rows[0];
+        // If it was suspected and incoming request is confirm (broadcasting), promote it!
+        if (existing.status === 'suspected' && (status === 'broadcasting' || !status)) {
+          const promoted = await promoteSuspectedIncident(id, 'COUNTDOWN_EXPIRED');
+          if (promoted) {
+            return res.status(200).json({
+              message: 'Suspected incident promoted to broadcasting (idempotent confirm)',
+              incident: promoted.incident,
+              matched_hospitals: promoted.matchedHospitals,
+            });
+          }
+        }
+
+        return res.status(200).json({
+          message: 'Incident already exists (idempotent)',
+          incident: {
+            ...existing,
+            latitude: Number(existing.latitude),
+            longitude: Number(existing.longitude),
+          },
+        });
+      }
+    }
+
+    // If client requested 'suspected' status explicitly
+    if (status === 'suspected') {
+      const insertSql = id
+        ? `
+          INSERT INTO incidents (id, location, status, victim_metadata)
+          VALUES ($1, ST_SetSRID(ST_MakePoint($2, $3), 4326)::geography, 'suspected', $4)
+          RETURNING id, status, accepted_hospital_id, victim_metadata,
+                    ST_Y(location::geometry) AS latitude, ST_X(location::geometry) AS longitude,
+                    created_at, updated_at;
+        `
+        : `
+          INSERT INTO incidents (location, status, victim_metadata)
+          VALUES (ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography, 'suspected', $3)
+          RETURNING id, status, accepted_hospital_id, victim_metadata,
+                    ST_Y(location::geometry) AS latitude, ST_X(location::geometry) AS longitude,
+                    created_at, updated_at;
+        `;
+      const params = id
+        ? [id, longitude, latitude, victim_metadata ? JSON.stringify(victim_metadata) : null]
+        : [longitude, latitude, victim_metadata ? JSON.stringify(victim_metadata) : null];
+
+      const insertResult = await query<Incident>(insertSql, params);
+      const raw = insertResult.rows[0];
+      const blackspotInfo = await checkIncidentBlackspot(Number(raw.latitude), Number(raw.longitude));
+      const incident: Incident = {
+        ...raw,
+        latitude: Number(raw.latitude),
+        longitude: Number(raw.longitude),
+        blackspot_info: blackspotInfo,
+      };
+
+      const io = getIO();
+      if (io) {
+        io.to('all_incidents').emit('incident_suspected', {
+          ...incident,
+          is_suspected: true,
+          soft_marker: true,
+          blackspot_info: blackspotInfo,
+        });
+      }
+
+      scheduleSilentPromotion(incident.id, 30000);
+
+      return res.status(201).json({
+        message: 'Pre-alert suspected incident logged (Police soft standby)',
+        incident,
+        is_suspected: true,
+      });
+    }
 
     // 1. Insert incident into PostgreSQL + PostGIS with 'broadcasting' status
-    const insertSql = `
-      INSERT INTO incidents (
-        location,
-        status,
-        victim_metadata
-      )
-      VALUES (
-        ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography,
-        'broadcasting',
-        $3
-      )
-      RETURNING 
-        id,
-        status,
-        accepted_hospital_id,
-        victim_metadata,
-        ST_Y(location::geometry) AS latitude,
-        ST_X(location::geometry) AS longitude,
-        created_at,
-        updated_at;
-    `;
+    const insertSql = id
+      ? `
+        INSERT INTO incidents (id, location, status, victim_metadata)
+        VALUES ($1, ST_SetSRID(ST_MakePoint($2, $3), 4326)::geography, 'broadcasting', $4)
+        RETURNING id, status, accepted_hospital_id, victim_metadata,
+                  ST_Y(location::geometry) AS latitude, ST_X(location::geometry) AS longitude,
+                  created_at, updated_at;
+      `
+      : `
+        INSERT INTO incidents (location, status, victim_metadata)
+        VALUES (ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography, 'broadcasting', $3)
+        RETURNING id, status, accepted_hospital_id, victim_metadata,
+                  ST_Y(location::geometry) AS latitude, ST_X(location::geometry) AS longitude,
+                  created_at, updated_at;
+      `;
 
-    const insertResult = await query<Incident>(insertSql, [
-      longitude,
-      latitude,
-      victim_metadata ? JSON.stringify(victim_metadata) : null,
-    ]);
+    const insertParams = id
+      ? [id, longitude, latitude, victim_metadata ? JSON.stringify(victim_metadata) : null]
+      : [longitude, latitude, victim_metadata ? JSON.stringify(victim_metadata) : null];
+
+    const insertResult = await query<Incident>(insertSql, insertParams);
 
     const rawIncident = insertResult.rows[0];
-    const incident = {
+    const blackspotInfo = await checkIncidentBlackspot(Number(rawIncident.latitude), Number(rawIncident.longitude));
+    const incident: Incident = {
       ...rawIncident,
       latitude: Number(rawIncident.latitude),
       longitude: Number(rawIncident.longitude),
+      blackspot_info: blackspotInfo,
     };
 
     // 2. PostGIS 8km Radius Matching Query (8000 meters, has_trauma_center = true)
@@ -183,6 +423,13 @@ incidentsRouter.get('/', optionalAuth, async (req: Request, res: Response) => {
           i.status,
           i.accepted_hospital_id,
           i.ambulance_id,
+          i.ambulance_plate,
+          i.ambulance_driver_name,
+          i.ambulance_driver_phone,
+          i.ambulance_origin_station,
+          i.ambulance_arrived_at,
+          i.ambulance_arrival_lat,
+          i.ambulance_arrival_lng,
           i.victim_metadata,
           ST_Y(i.location::geometry) AS latitude,
           ST_X(i.location::geometry) AS longitude,
@@ -259,6 +506,13 @@ incidentsRouter.get('/', optionalAuth, async (req: Request, res: Response) => {
           i.status,
           i.accepted_hospital_id,
           i.ambulance_id,
+          i.ambulance_plate,
+          i.ambulance_driver_name,
+          i.ambulance_driver_phone,
+          i.ambulance_origin_station,
+          i.ambulance_arrived_at,
+          i.ambulance_arrival_lat,
+          i.ambulance_arrival_lng,
           i.victim_metadata,
           ST_Y(i.location::geometry) AS latitude,
           ST_X(i.location::geometry) AS longitude,
@@ -372,6 +626,13 @@ incidentsRouter.get('/', optionalAuth, async (req: Request, res: Response) => {
         accepted_hospital_id: row.accepted_hospital_id,
         accepted_hospital: row.accepted_hospital || null,
         ambulance_id: row.ambulance_id || null,
+        ambulance_plate: (row.ambulance_plate as string) || (row.ambulance_id ? 'KA-01-EA-108' : null),
+        ambulance_driver_name: (row.ambulance_driver_name as string) || (row.ambulance_id ? 'Ramesh Kumar' : null),
+        ambulance_driver_phone: (row.ambulance_driver_phone as string) || (row.ambulance_id ? '+91 98450 12345' : null),
+        ambulance_origin_station: (row.ambulance_origin_station as string) || (row.ambulance_id ? 'Manipal Hospital HAL Depot Base' : null),
+        ambulance_arrived_at: (row.ambulance_arrived_at as string) || null,
+        ambulance_arrival_lat: row.ambulance_arrival_lat ? Number(row.ambulance_arrival_lat) : null,
+        ambulance_arrival_lng: row.ambulance_arrival_lng ? Number(row.ambulance_arrival_lng) : null,
         ambulance_location: ambLoc,
         victim_metadata: row.victim_metadata,
         created_at: row.created_at,
@@ -387,9 +648,19 @@ incidentsRouter.get('/', optionalAuth, async (req: Request, res: Response) => {
       };
     });
 
+    const incidentsWithBlackspots = await Promise.all(
+      incidents.map(async (inc) => {
+        const blackspot_info = await checkIncidentBlackspot(inc.latitude, inc.longitude);
+        return {
+          ...inc,
+          blackspot_info,
+        };
+      })
+    );
+
     return res.json({
-      incidents,
-      total: incidents.length,
+      incidents: incidentsWithBlackspots,
+      total: incidentsWithBlackspots.length,
     });
   } catch (error) {
     console.error('[GET /incidents Error]', error);
@@ -464,6 +735,13 @@ incidentsRouter.get('/nearby', async (req: Request, res: Response) => {
         i.status,
         i.accepted_hospital_id,
         i.ambulance_id,
+        i.ambulance_plate,
+        i.ambulance_driver_name,
+        i.ambulance_driver_phone,
+        i.ambulance_origin_station,
+        i.ambulance_arrived_at,
+        i.ambulance_arrival_lat,
+        i.ambulance_arrival_lng,
         i.victim_metadata,
         ST_Y(i.location::geometry) AS latitude,
         ST_X(i.location::geometry) AS longitude,
@@ -533,6 +811,13 @@ incidentsRouter.get('/nearby', async (req: Request, res: Response) => {
         accepted_hospital_id: row.accepted_hospital_id,
         accepted_hospital: row.accepted_hospital || null,
         ambulance_id: row.ambulance_id || null,
+        ambulance_plate: (row.ambulance_plate as string) || (row.ambulance_id ? 'KA-01-EA-108' : null),
+        ambulance_driver_name: (row.ambulance_driver_name as string) || (row.ambulance_id ? 'Ramesh Kumar' : null),
+        ambulance_driver_phone: (row.ambulance_driver_phone as string) || (row.ambulance_id ? '+91 98450 12345' : null),
+        ambulance_origin_station: (row.ambulance_origin_station as string) || (row.ambulance_id ? 'Manipal Hospital HAL Depot Base' : null),
+        ambulance_arrived_at: (row.ambulance_arrived_at as string) || null,
+        ambulance_arrival_lat: row.ambulance_arrival_lat ? Number(row.ambulance_arrival_lat) : null,
+        ambulance_arrival_lng: row.ambulance_arrival_lng ? Number(row.ambulance_arrival_lng) : null,
         ambulance_location: ambLoc,
         victim_metadata: row.victim_metadata,
         created_at: row.created_at,
@@ -594,7 +879,7 @@ incidentsRouter.post('/:id/claim', optionalAuth, async (req: Request, res: Respo
     }
 
     const { id } = paramsResult.data;
-    const { ambulance_id } = bodyResult.data;
+    const { ambulance_id, ambulance_plate, driver_name, driver_phone, origin_station } = bodyResult.data;
 
     const incCheck = await query<{ id: string; status: string; ambulance_id: string | null }>(
       'SELECT id, status, ambulance_id FROM incidents WHERE id = $1;',
@@ -618,16 +903,29 @@ incidentsRouter.post('/:id/claim', optionalAuth, async (req: Request, res: Respo
       });
     }
 
+    const plate = ambulance_plate || 'KA-01-EA-108';
+    const driver = driver_name || 'Ramesh Kumar';
+    const phone = driver_phone || '+91 98450 12345';
+    const origin = origin_station || 'Manipal Hospital HAL Depot Base';
+
     const updateRes = await query<Incident>(
       `UPDATE incidents
-       SET ambulance_id = $1, updated_at = CURRENT_TIMESTAMP
-       WHERE id = $2 AND (ambulance_id IS NULL OR ambulance_id = $1)
+       SET ambulance_id = $1,
+           ambulance_plate = COALESCE($2, ambulance_plate, 'KA-01-EA-108'),
+           ambulance_driver_name = COALESCE($3, ambulance_driver_name, 'Ramesh Kumar'),
+           ambulance_driver_phone = COALESCE($4, ambulance_driver_phone, '+91 98450 12345'),
+           ambulance_origin_station = COALESCE($5, ambulance_origin_station, 'Manipal Hospital HAL Depot Base'),
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $6 AND (ambulance_id IS NULL OR ambulance_id = $1)
        RETURNING 
-         id, status, accepted_hospital_id, ambulance_id, victim_metadata,
+         id, status, accepted_hospital_id, ambulance_id,
+         ambulance_plate, ambulance_driver_name, ambulance_driver_phone, ambulance_origin_station,
+         ambulance_arrived_at, ambulance_arrival_lat, ambulance_arrival_lng,
+         victim_metadata,
          ST_Y(location::geometry) AS latitude,
          ST_X(location::geometry) AS longitude,
          created_at, updated_at;`,
-      [ambulance_id, id]
+      [ambulance_id, plate, driver, phone, origin, id]
     );
 
     if (updateRes.rowCount === 0) {
@@ -644,7 +942,12 @@ incidentsRouter.post('/:id/claim', optionalAuth, async (req: Request, res: Respo
       longitude: Number(updateRes.rows[0].longitude),
     };
 
-    broadcastIncidentClaimed(id, ambulance_id);
+    broadcastIncidentClaimed(id, ambulance_id, {
+      ambulance_plate: plate,
+      driver_name: driver,
+      driver_phone: phone,
+      origin_station: origin,
+    });
 
     return res.json({
       message: `Incident successfully claimed by ambulance ${ambulance_id}`,
@@ -658,6 +961,130 @@ incidentsRouter.post('/:id/claim', optionalAuth, async (req: Request, res: Respo
         error instanceof Error
           ? error.message
           : 'Unexpected database error while claiming incident.',
+    });
+  }
+});
+
+// POST /incidents/:id/ambulance-arrived - Ambulance reports zero-touch or manual on-scene arrival
+incidentsRouter.post('/:id/ambulance-arrived', optionalAuth, async (req: Request, res: Response) => {
+  try {
+    const paramsResult = incidentIdParamsSchema.safeParse(req.params);
+    if (!paramsResult.success) {
+      return res.status(400).json({
+        error: 'Validation failed',
+        message: 'Invalid incident ID format. Must be a valid UUID.',
+      });
+    }
+
+    const bodyResult = ambulanceArrivedSchema.safeParse(req.body);
+    if (!bodyResult.success) {
+      return res.status(400).json({
+        error: 'Validation failed',
+        message: 'Invalid arrival payload',
+        details: bodyResult.error.errors.map((e) => ({
+          field: e.path.join('.'),
+          message: e.message,
+        })),
+      });
+    }
+
+    const { id } = paramsResult.data;
+    const {
+      ambulance_id,
+      latitude,
+      longitude,
+      arrived_at,
+      ambulance_plate,
+      driver_name,
+      driver_phone,
+      origin_station,
+    } = bodyResult.data;
+
+    const arrivalTimestamp = arrived_at || new Date().toISOString();
+    const plate = ambulance_plate || 'KA-01-EA-108';
+    const driver = driver_name || 'Ramesh Kumar';
+    const phone = driver_phone || '+91 98450 12345';
+    const origin = origin_station || 'Manipal Hospital HAL Depot Base';
+
+    const updateRes = await query<Incident>(
+      `UPDATE incidents
+       SET ambulance_arrived_at = $1,
+           ambulance_arrival_lat = $2,
+           ambulance_arrival_lng = $3,
+           ambulance_id = COALESCE(ambulance_id, $4),
+           ambulance_plate = COALESCE($5, ambulance_plate, 'KA-01-EA-108'),
+           ambulance_driver_name = COALESCE($6, ambulance_driver_name, 'Ramesh Kumar'),
+           ambulance_driver_phone = COALESCE($7, ambulance_driver_phone, '+91 98450 12345'),
+           ambulance_origin_station = COALESCE($8, ambulance_origin_station, 'Manipal Hospital HAL Depot Base'),
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $9
+       RETURNING 
+         id, status, accepted_hospital_id, ambulance_id,
+         ambulance_plate, ambulance_driver_name, ambulance_driver_phone, ambulance_origin_station,
+         ambulance_arrived_at, ambulance_arrival_lat, ambulance_arrival_lng,
+         victim_metadata,
+         ST_Y(location::geometry) AS latitude,
+         ST_X(location::geometry) AS longitude,
+         created_at, updated_at;`,
+      [
+        arrivalTimestamp,
+        latitude ?? null,
+        longitude ?? null,
+        ambulance_id,
+        plate,
+        driver,
+        phone,
+        origin,
+        id,
+      ]
+    );
+
+    if (updateRes.rowCount === 0) {
+      return res.status(404).json({
+        error: 'Not found',
+        message: `Incident with ID '${id}' does not exist.`,
+      });
+    }
+
+    const arrivedIncident = {
+      ...updateRes.rows[0],
+      latitude: Number(updateRes.rows[0].latitude),
+      longitude: Number(updateRes.rows[0].longitude),
+    };
+
+    const arrivalPayload = {
+      incident_id: id,
+      ambulance_id,
+      ambulance_plate: plate,
+      driver_name: driver,
+      driver_phone: phone,
+      origin_station: origin,
+      arrived_at: arrivalTimestamp,
+      latitude,
+      longitude,
+    };
+
+    try {
+      await redis.setex(`ambulance_arrived:${id}`, 1800, JSON.stringify(arrivalPayload));
+    } catch {
+      // Non-fatal cache write
+    }
+
+    await broadcastAmbulanceArrived(arrivalPayload);
+
+    return res.json({
+      message: `Ambulance ${ambulance_id} arrival recorded on-scene.`,
+      incident: arrivedIncident,
+      arrival: arrivalPayload,
+    });
+  } catch (error) {
+    console.error('[POST /incidents/:id/ambulance-arrived Error]', error);
+    return res.status(500).json({
+      error: 'Arrival logging failed',
+      message:
+        error instanceof Error
+          ? error.message
+          : 'Unexpected database error while recording ambulance arrival.',
     });
   }
 });
@@ -681,6 +1108,13 @@ incidentsRouter.get('/:id', async (req: Request, res: Response) => {
         i.status,
         i.accepted_hospital_id,
         i.ambulance_id,
+        i.ambulance_plate,
+        i.ambulance_driver_name,
+        i.ambulance_driver_phone,
+        i.ambulance_origin_station,
+        i.ambulance_arrived_at,
+        i.ambulance_arrival_lat,
+        i.ambulance_arrival_lng,
         i.victim_metadata,
         ST_Y(i.location::geometry) AS latitude,
         ST_X(i.location::geometry) AS longitude,

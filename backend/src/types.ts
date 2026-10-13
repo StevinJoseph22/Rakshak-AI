@@ -5,7 +5,9 @@ export type IncidentStatus =
   | 'en_route'
   | 'resolved'
   | 'escalated'
-  | 'unmatched';
+  | 'unmatched'
+  | 'suspected'
+  | 'cancelled';
 
 export interface Hospital {
   id: string;
@@ -31,6 +33,13 @@ export interface Incident {
   accepted_hospital_id: string | null;
   accepted_hospital?: Hospital | null;
   ambulance_id?: string | null;
+  ambulance_plate?: string | null;
+  ambulance_driver_name?: string | null;
+  ambulance_driver_phone?: string | null;
+  ambulance_origin_station?: string | null;
+  ambulance_arrived_at?: string | null;
+  ambulance_arrival_lat?: number | null;
+  ambulance_arrival_lng?: number | null;
   ambulance_location?: {
     latitude: number;
     longitude: number;
@@ -39,8 +48,26 @@ export interface Incident {
     updated_at?: string;
   } | null;
   victim_metadata: Record<string, unknown> | null;
+  blackspot_info?: BlackspotInfo | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface BlackspotInfo {
+  is_blackspot: boolean;
+  incident_count: number;
+  hazard_level: 'High' | 'Severe' | 'Critical';
+  zone_name: string;
+}
+
+export interface BlackspotZone {
+  id: string;
+  latitude: number;
+  longitude: number;
+  radius_meters: number;
+  incident_count: number;
+  hazard_level: 'High' | 'Severe' | 'Critical';
+  zone_name: string;
 }
 
 export interface PoliceUnit {

@@ -216,6 +216,35 @@ class IncidentTrackingService {
         }
       });
 
+      socket.on('ambulance_arrived', (data) {
+        debugPrint('[IncidentTrackingService] ambulance_arrived received: $data');
+        if (data is Map) {
+          final incId = data['incident_id']?.toString().toLowerCase().trim();
+          final trackedId = _trackedIncidentId?.toLowerCase().trim();
+          final ambId = data['ambulance_id']?.toString() ?? '108 Unit';
+          final plate = data['ambulance_plate']?.toString() ?? 'KA-01-EA-108';
+          final driver = data['driver_name']?.toString() ?? 'Ramesh Kumar';
+          final phone = data['driver_phone']?.toString() ?? '+91 98450 12345';
+          final origin = data['origin_station']?.toString() ?? 'Emergency Base';
+
+          if (incId == null || trackedId == null || incId == trackedId) {
+            statusNotifier.value = statusNotifier.value.copyWith(
+              message: 'Ambulance $ambId ($plate) has arrived on scene. Paramedics assessing.',
+            );
+
+            // Dispatch follow-up update SMS: "UPDATE: Ambulance [ambId] ([plate]) has ARRIVED..."
+            EmergencySmsService.instance.sendAmbulanceArrivedAlert(
+              incidentId: _trackedIncidentId ?? incId,
+              ambulanceId: ambId,
+              vehiclePlate: plate,
+              driverName: driver,
+              driverPhone: phone,
+              locationDescription: 'Accident Scene (Depot: $origin)',
+            );
+          }
+        }
+      });
+
       socket.on('incident_escalated', (data) {
         debugPrint('[IncidentTrackingService] incident_escalated received: $data');
         if (data is Map) {

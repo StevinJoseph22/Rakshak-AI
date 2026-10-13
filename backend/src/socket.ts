@@ -1,9 +1,15 @@
 import { Server as SocketIOServer, Socket } from 'socket.io';
 import { Server as HttpServer } from 'http';
-import { Hospital } from './types';
+import { Hospital, BlackspotInfo } from './types';
 import { redis, registerPurgeVerification } from './redis';
 import { query } from './db';
 import { verifyToken } from './utils/jwt';
+import { NtcipTrafficControllerService } from './services/ntcipService';
+import {
+  scheduleSilentPromotion,
+  cancelSilentPromotion,
+  promoteSuspectedIncident,
+} from './services/preAlertService';
 
 let io: SocketIOServer | null = null;
 
@@ -20,6 +26,7 @@ export interface IncidentBroadcastPayload {
   matched_hospitals_count?: number;
   matched_hospitals?: Hospital[];
   victim_metadata?: Record<string, unknown> | null;
+  blackspot_info?: BlackspotInfo | null;
   status?: string;
   escalated?: boolean;
   accepted_hospital_id?: string | null;
@@ -196,6 +203,205 @@ export function initSocketIO(httpServer: HttpServer): SocketIOServer {
         }
       }
     );
+
+    // Phase 14: Ambulance Zero-Touch On-Scene Arrival Detection
+    socket.on(
+      'ambulance_arrived',
+      async (data: {
+        incident_id: string;
+        ambulance_id: string;
+        ambulance_plate?: string;
+        driver_name?: string;
+        driver_phone?: string;
+        origin_station?: string;
+        arrived_at?: string;
+        latitude?: number;
+        longitude?: number;
+      }) => {
+        try {
+          if (!data?.incident_id || !data?.ambulance_id) {
+            return;
+          }
+
+          const arrivedAt = data.arrived_at || new Date().toISOString();
+          const fullPayload: AmbulanceArrivalPayload = {
+            incident_id: data.incident_id,
+            ambulance_id: data.ambulance_id,
+            ambulance_plate: data.ambulance_plate || 'KA-01-EA-108',
+            driver_name: data.driver_name || 'Ramesh Kumar',
+            driver_phone: data.driver_phone || '+91 98450 12345',
+            origin_station: data.origin_station || 'Manipal Hospital HAL Depot Base',
+            arrived_at: arrivedAt,
+            latitude: data.latitude,
+            longitude: data.longitude,
+          };
+
+          try {
+            await redis.setex(
+              `ambulance_arrived:${data.incident_id}`,
+              1800,
+              JSON.stringify(fullPayload)
+            );
+          } catch {
+            // Non-fatal cache failure
+          }
+
+          await query(
+            `UPDATE incidents
+             SET ambulance_arrived_at = $1,
+                 ambulance_arrival_lat = $2,
+                 ambulance_arrival_lng = $3,
+                 ambulance_plate = COALESCE($4, ambulance_plate),
+                 ambulance_driver_name = COALESCE($5, ambulance_driver_name),
+                 ambulance_driver_phone = COALESCE($6, ambulance_driver_phone),
+                 ambulance_origin_station = COALESCE($7, ambulance_origin_station),
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE id = $8;`,
+            [
+              arrivedAt,
+              data.latitude ?? null,
+              data.longitude ?? null,
+              fullPayload.ambulance_plate,
+              fullPayload.driver_name,
+              fullPayload.driver_phone,
+              fullPayload.origin_station,
+              data.incident_id,
+            ]
+          );
+
+          await broadcastAmbulanceArrived(fullPayload);
+        } catch (err) {
+          console.error('[Socket.io] Error handling ambulance_arrived:', err);
+        }
+      }
+    );
+
+    // C-V2X Automated Signal Preemption (EVP / Green Corridor) Handler
+    socket.on(
+      'signal_preempt_request',
+      async (data: {
+        incident_id: string;
+        ambulance_id: string;
+        ambulance_plate: string;
+        intersection_id: string;
+        junction_name: string;
+        eta_seconds: number;
+      }) => {
+        try {
+          const ntcipService = NtcipTrafficControllerService.getInstance();
+          const response = await ntcipService.requestPreemption({
+            incident_id: data.incident_id,
+            ambulance_id: data.ambulance_id,
+            ambulance_plate: data.ambulance_plate,
+            intersection_id: data.intersection_id,
+            junction_name: data.junction_name,
+            priority_level: 1,
+            eta_seconds: data.eta_seconds,
+            approach_direction: 'Primary Inbound Corridor',
+          });
+
+          // Broadcast preemption event to Police ITMS (all_incidents room)
+          io?.to('all_incidents').emit('traffic_signal_preempted', {
+            ...response,
+            incident_id: data.incident_id,
+            ambulance_id: data.ambulance_id,
+            ambulance_plate: data.ambulance_plate,
+          });
+        } catch (err) {
+          console.error('[Socket.io] Error handling signal_preempt_request:', err);
+        }
+      }
+    );
+
+    // Phase 17: Pre-Alert Soft Marker Socket Handlers
+    socket.on(
+      'impact_suspected',
+      async (
+        data: {
+          id?: string;
+          latitude: number;
+          longitude: number;
+          speed_before_impact?: number;
+          timestamp?: string;
+          victim_metadata?: Record<string, unknown>;
+        },
+        ack?: (res: { status: string; id?: string }) => void
+      ) => {
+        try {
+          if (!data || typeof data.latitude !== 'number' || typeof data.longitude !== 'number') {
+            ack?.({ status: 'error' });
+            return;
+          }
+
+          const id = data.id;
+          if (id) {
+            const existing = await query(`SELECT id, status FROM incidents WHERE id = $1`, [id]);
+            if (existing.rows.length > 0) {
+              ack?.({ status: 'ok', id });
+              return;
+            }
+          }
+
+          const insertSql = id
+            ? `
+              INSERT INTO incidents (id, location, status, victim_metadata)
+              VALUES ($1, ST_SetSRID(ST_MakePoint($2, $3), 4326)::geography, 'suspected', $4)
+              RETURNING id, status, ST_Y(location::geometry) AS latitude, ST_X(location::geometry) AS longitude, created_at;
+            `
+            : `
+              INSERT INTO incidents (location, status, victim_metadata)
+              VALUES (ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography, 'suspected', $3)
+              RETURNING id, status, ST_Y(location::geometry) AS latitude, ST_X(location::geometry) AS longitude, created_at;
+            `;
+
+          const params = id
+            ? [id, data.longitude, data.latitude, data.victim_metadata ? JSON.stringify(data.victim_metadata) : null]
+            : [data.longitude, data.latitude, data.victim_metadata ? JSON.stringify(data.victim_metadata) : null];
+
+          const result = await query(insertSql, params);
+          const inc = result.rows[0];
+
+          io?.to('all_incidents').emit('incident_suspected', {
+            id: inc.id,
+            latitude: Number(inc.latitude),
+            longitude: Number(inc.longitude),
+            speed_before_impact: data.speed_before_impact ?? null,
+            status: 'suspected',
+            is_suspected: true,
+            soft_marker: true,
+            created_at: inc.created_at,
+          });
+
+          scheduleSilentPromotion(inc.id, 30000);
+          ack?.({ status: 'ok', id: inc.id });
+        } catch (err) {
+          console.error('[Socket.io] Error in impact_suspected:', err);
+          ack?.({ status: 'error' });
+        }
+      }
+    );
+
+    socket.on('confirm_suspected_incident', async (data: { id: string }) => {
+      try {
+        if (data?.id) {
+          await promoteSuspectedIncident(data.id, 'USER_CONFIRMED');
+        }
+      } catch (err) {
+        console.error('[Socket.io] Error confirming suspected incident:', err);
+      }
+    });
+
+    socket.on('cancel_suspected_incident', async (data: { id: string }) => {
+      try {
+        if (data?.id) {
+          cancelSilentPromotion(data.id);
+          await query(`UPDATE incidents SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP WHERE id = $1`, [data.id]);
+          io?.to('all_incidents').emit('incident_cancelled', { id: data.id, timestamp: new Date().toISOString() });
+        }
+      } catch (err) {
+        console.error('[Socket.io] Error cancelling suspected incident:', err);
+      }
+    });
 
     // Phase 6: Zero-Storage Ephemeral Photo Stream Handler
     socket.on(
@@ -496,6 +702,7 @@ export async function broadcastNewIncident(
     longitude: number;
     created_at: string | Date;
     victim_metadata?: Record<string, unknown> | null;
+    blackspot_info?: BlackspotInfo | null;
     status?: string;
   },
   matchedHospitals: Hospital[],
@@ -531,6 +738,7 @@ export async function broadcastNewIncident(
       matched_hospitals_count: matchedHospitals.length,
       matched_hospitals: matchedHospitals,
       victim_metadata: incident.victim_metadata,
+      blackspot_info: incident.blackspot_info || null,
       status: incident.status || (isEscalated ? 'escalated' : 'broadcasting'),
       escalated: isEscalated,
     };
@@ -558,6 +766,7 @@ export async function broadcastNewIncident(
     matched_hospitals_count: matchedHospitals.length,
     matched_hospitals: matchedHospitals,
     victim_metadata: incident.victim_metadata,
+    blackspot_info: incident.blackspot_info || null,
     status: incident.status || (isEscalated ? 'escalated' : 'broadcasting'),
     escalated: isEscalated,
   };
@@ -720,17 +929,39 @@ export function broadcastIncidentUnmatched(incidentId: string): void {
   console.log(`[Socket.io] Emitted incident_unmatched for incident ${incidentId}`);
 }
 
+export interface AmbulanceArrivalPayload {
+  incident_id: string;
+  ambulance_id: string;
+  ambulance_plate: string;
+  driver_name: string;
+  driver_phone: string;
+  origin_station: string;
+  arrived_at: string;
+  latitude?: number;
+  longitude?: number;
+}
+
 /**
  * Phase 8: Broadcast incident claimed by ambulance unit.
  */
-/**
- * Phase 8: Broadcast incident claimed by ambulance unit.
- */
-export async function broadcastIncidentClaimed(incidentId: string, ambulanceId: string): Promise<void> {
+export async function broadcastIncidentClaimed(
+  incidentId: string,
+  ambulanceId: string,
+  extra?: {
+    ambulance_plate?: string;
+    driver_name?: string;
+    driver_phone?: string;
+    origin_station?: string;
+  }
+): Promise<void> {
   if (!io) return;
   const payload = {
     incident_id: incidentId,
     ambulance_id: ambulanceId,
+    ambulance_plate: extra?.ambulance_plate || 'KA-01-EA-108',
+    driver_name: extra?.driver_name || 'Ramesh Kumar',
+    driver_phone: extra?.driver_phone || '+91 98450 12345',
+    origin_station: extra?.origin_station || 'Manipal Hospital HAL Depot Base',
     claimed_at: new Date().toISOString(),
   };
   io.to(`incident:${incidentId}`).emit('incident_claimed', payload);
@@ -749,6 +980,31 @@ export async function broadcastIncidentClaimed(incidentId: string, ambulanceId: 
   }
 
   console.log(`[Socket.io] Broadcasted incident_claimed for ${incidentId} by ${ambulanceId}`);
+}
+
+/**
+ * Phase 14: Broadcast ambulance arrival at incident scene.
+ */
+export async function broadcastAmbulanceArrived(payload: AmbulanceArrivalPayload): Promise<void> {
+  if (!io) return;
+  io.to(`incident:${payload.incident_id}`).emit('ambulance_arrived', payload);
+  io.to('all_incidents').emit('ambulance_arrived', payload);
+
+  try {
+    const res = await query<{ accepted_hospital_id: string | null }>(
+      'SELECT accepted_hospital_id FROM incidents WHERE id = $1',
+      [payload.incident_id]
+    );
+    if (res.rows[0]?.accepted_hospital_id) {
+      io.to(res.rows[0].accepted_hospital_id).emit('ambulance_arrived', payload);
+    }
+  } catch (err) {
+    console.error('[Socket.io] Error routing ambulance_arrived to accepted hospital:', err);
+  }
+
+  console.log(
+    `[Socket.io] Broadcasted ambulance_arrived for ${payload.incident_id} (Unit: ${payload.ambulance_id}, Plate: ${payload.ambulance_plate}, Driver: ${payload.driver_name} ${payload.driver_phone})`
+  );
 }
 
 /**

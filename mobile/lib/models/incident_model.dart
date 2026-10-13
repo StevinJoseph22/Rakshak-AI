@@ -177,6 +177,13 @@ class NearbyIncident {
   final String? acceptedHospitalId;
   final MatchedHospital? acceptedHospital;
   final String? ambulanceId;
+  final String? ambulancePlate;
+  final String? driverName;
+  final String? driverPhone;
+  final String? originStation;
+  final DateTime? arrivedAt;
+  final double? arrivalLat;
+  final double? arrivalLng;
   final String? imageUrl;
   final Map<String, dynamic>? victimMetadata;
   final DateTime? createdAt;
@@ -191,6 +198,13 @@ class NearbyIncident {
     this.acceptedHospitalId,
     this.acceptedHospital,
     this.ambulanceId,
+    this.ambulancePlate,
+    this.driverName,
+    this.driverPhone,
+    this.originStation,
+    this.arrivedAt,
+    this.arrivalLat,
+    this.arrivalLng,
     this.imageUrl,
     this.victimMetadata,
     this.createdAt,
@@ -209,6 +223,19 @@ class NearbyIncident {
           ? MatchedHospital.fromJson(json['accepted_hospital'] as Map<String, dynamic>)
           : null,
       ambulanceId: json['ambulance_id'] as String?,
+      ambulancePlate: json['ambulance_plate'] as String?,
+      driverName: json['ambulance_driver_name'] as String?,
+      driverPhone: json['ambulance_driver_phone'] as String?,
+      originStation: json['ambulance_origin_station'] as String?,
+      arrivedAt: json['ambulance_arrived_at'] != null
+          ? DateTime.tryParse(json['ambulance_arrived_at'].toString())
+          : null,
+      arrivalLat: json['ambulance_arrival_lat'] != null
+          ? _parseDouble(json['ambulance_arrival_lat'])
+          : null,
+      arrivalLng: json['ambulance_arrival_lng'] != null
+          ? _parseDouble(json['ambulance_arrival_lng'])
+          : null,
       imageUrl: json['imageUrl'] as String?,
       victimMetadata: json['victim_metadata'] is Map<String, dynamic>
           ? json['victim_metadata'] as Map<String, dynamic>

@@ -156,6 +156,7 @@ export const HospitalView: React.FC = () => {
 
   // Socket.io room management
   useEffect(() => {
+    if (!currentUser || !currentUser.hospital_id) return;
     const socket = getSocket();
 
     const handleConnect = () => {
@@ -451,6 +452,10 @@ export const HospitalView: React.FC = () => {
     const handleIncidentClaimed = (payload: {
       incident_id: string;
       ambulance_id: string;
+      ambulance_plate?: string;
+      driver_name?: string;
+      driver_phone?: string;
+      origin_station?: string;
     }) => {
       setIncidentsByHospital((prev) => {
         let hasChanges = false;
@@ -464,6 +469,57 @@ export const HospitalView: React.FC = () => {
             updatedList[idx] = {
               ...updatedList[idx],
               ambulance_id: payload.ambulance_id,
+              ambulance_plate: payload.ambulance_plate || updatedList[idx].ambulance_plate,
+              ambulance_driver_name: payload.driver_name || updatedList[idx].ambulance_driver_name,
+              ambulance_driver_phone: payload.driver_phone || updatedList[idx].ambulance_driver_phone,
+              ambulance_origin_station: payload.origin_station || updatedList[idx].ambulance_origin_station,
+            };
+            updated[hId] = updatedList;
+          } else {
+            updated[hId] = list;
+          }
+        }
+
+        if (!hasChanges) return prev;
+        try {
+          localStorage.setItem('rakshak_hospital_feed', JSON.stringify(updated));
+        } catch {
+          // ignore
+        }
+        return updated;
+      });
+    };
+
+    const handleAmbulanceArrived = (payload: {
+      incident_id: string;
+      ambulance_id: string;
+      ambulance_plate?: string;
+      driver_name?: string;
+      driver_phone?: string;
+      origin_station?: string;
+      arrived_at: string;
+      latitude?: number;
+      longitude?: number;
+    }) => {
+      setIncidentsByHospital((prev) => {
+        let hasChanges = false;
+        const updated: Record<string, IncidentPayload[]> = {};
+
+        for (const [hId, list] of Object.entries(prev)) {
+          const idx = list.findIndex((item) => item.id === payload.incident_id);
+          if (idx !== -1) {
+            hasChanges = true;
+            const updatedList = [...list];
+            updatedList[idx] = {
+              ...updatedList[idx],
+              ambulance_id: payload.ambulance_id,
+              ambulance_plate: payload.ambulance_plate || updatedList[idx].ambulance_plate,
+              ambulance_driver_name: payload.driver_name || updatedList[idx].ambulance_driver_name,
+              ambulance_driver_phone: payload.driver_phone || updatedList[idx].ambulance_driver_phone,
+              ambulance_origin_station: payload.origin_station || updatedList[idx].ambulance_origin_station,
+              ambulance_arrived_at: payload.arrived_at,
+              ambulance_arrival_lat: payload.latitude,
+              ambulance_arrival_lng: payload.longitude,
             };
             updated[hId] = updatedList;
           } else {
@@ -520,11 +576,18 @@ export const HospitalView: React.FC = () => {
       });
     };
 
+    const handleDeadManCollapseDetected = () => {
+      setLastAlertFlash(true);
+      setTimeout(() => setLastAlertFlash(false), 2000);
+      playAlertChime();
+    };
+
     socket.on('connect', handleConnect);
     socket.on('disconnect', handleDisconnect);
     socket.on('connect_error', handleConnectError);
     socket.io.on('reconnect_attempt', handleReconnectAttempt);
     socket.on('new_incident', handleNewIncident);
+    socket.on('dead_man_collapse_detected', handleDeadManCollapseDetected);
     socket.on('feed_cleared', handleFeedCleared);
     socket.on('image_update', handleImageUpdate);
     socket.on('case_locked', handleCaseLocked);
@@ -533,6 +596,7 @@ export const HospitalView: React.FC = () => {
     socket.on('incident_unmatched', handleIncidentUnmatched);
     socket.on('hospital_rejected', handleHospitalRejected);
     socket.on('incident_claimed', handleIncidentClaimed);
+    socket.on('ambulance_arrived', handleAmbulanceArrived);
     socket.on('ambulance_location_update', handleAmbulanceLocationUpdate);
 
     return () => {
@@ -541,6 +605,7 @@ export const HospitalView: React.FC = () => {
       socket.off('connect_error', handleConnectError);
       socket.io.off('reconnect_attempt', handleReconnectAttempt);
       socket.off('new_incident', handleNewIncident);
+      socket.off('dead_man_collapse_detected', handleDeadManCollapseDetected);
       socket.off('feed_cleared', handleFeedCleared);
       socket.off('image_update', handleImageUpdate);
       socket.off('case_locked', handleCaseLocked);
@@ -549,9 +614,10 @@ export const HospitalView: React.FC = () => {
       socket.off('incident_unmatched', handleIncidentUnmatched);
       socket.off('hospital_rejected', handleHospitalRejected);
       socket.off('incident_claimed', handleIncidentClaimed);
+      socket.off('ambulance_arrived', handleAmbulanceArrived);
       socket.off('ambulance_location_update', handleAmbulanceLocationUpdate);
     };
-  }, [selectedHospitalId, playAlertChime]);
+  }, [selectedHospitalId, currentUser, playAlertChime]);
 
   const [acceptingIncidentId, setAcceptingIncidentId] = useState<string | null>(null);
 

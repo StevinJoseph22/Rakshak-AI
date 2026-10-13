@@ -6,6 +6,7 @@ import dotenv from 'dotenv';
 import { hospitalsRouter } from './routes/hospitals';
 import { incidentsRouter } from './routes/incidents';
 import { authRouter } from './routes/auth';
+import { sentinelRouter } from './routes/sentinel';
 import { initSocketIO } from './socket';
 
 dotenv.config();
@@ -62,6 +63,7 @@ app.get('/', (_req: Request, res: Response) => {
 app.use('/auth', authRouter);
 app.use('/hospitals', hospitalsRouter);
 app.use('/incidents', incidentsRouter);
+app.use('/sentinel', sentinelRouter);
 
 // 404 Handler for undefined routes
 app.use((req: Request, res: Response) => {
@@ -83,8 +85,12 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   });
 });
 
+import { ensureMigrations } from './migrate';
+
 if (process.env.NODE_ENV !== 'test') {
-  httpServer.listen(PORT, () => {
-    console.log(`[Rakshak Backend] Server & Socket.io listening on http://localhost:${PORT}`);
+  ensureMigrations().finally(() => {
+    httpServer.listen(PORT, () => {
+      console.log(`[Rakshak Backend] Server & Socket.io listening on http://localhost:${PORT}`);
+    });
   });
 }

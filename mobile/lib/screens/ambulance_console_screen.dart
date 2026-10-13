@@ -132,6 +132,37 @@ class _AmbulanceConsoleScreenState extends State<AmbulanceConsoleScreen> {
       ),
       body: Column(
         children: [
+          // Ambulance Unit & Driver Profile HUD
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FAFC),
+              border: Border(bottom: BorderSide(color: Colors.grey.shade300)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFDC2626),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: const Text(
+                    'KA-01-EA-108',
+                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text(
+                    'Driver: Ramesh Kumar (+91 98450 12345)\nBase: Manipal Hospital HAL Depot Base',
+                    style: TextStyle(fontSize: 11, color: Color(0xFF334155), fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ],
+            ),
+          ),
           if (_errorMessage != null && _incidents.isNotEmpty)
             Container(
               width: double.infinity,

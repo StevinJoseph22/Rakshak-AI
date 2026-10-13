@@ -48,16 +48,20 @@ class ApiClient {
 
   /// Reports a new crash incident with GPS coordinates and optional victim metadata.
   /// Matches Phase 1: POST /incidents
-  /// Body: { "latitude": double, "longitude": double, "victim_metadata": {...} }
+  /// Body: { "id"?: string, "latitude": double, "longitude": double, "status"?: string, "victim_metadata": {...} }
   Future<ApiResult<IncidentResponse>> reportIncident({
+    String? id,
     required double latitude,
     required double longitude,
+    String? status,
     Map<String, dynamic>? victimMetadata,
     Duration timeout = const Duration(seconds: 5),
   }) async {
     final payload = {
+      if (id != null) 'id': id,
       'latitude': latitude,
       'longitude': longitude,
+      if (status != null) 'status': status,
       if (victimMetadata != null) 'victim_metadata': victimMetadata,
     };
 
@@ -147,11 +151,49 @@ class ApiClient {
     return ApiResult.failure('Unable to reach backend: $lastError');
   }
 
+  /// Confirms a suspected incident, promoting it to full broadcasting status.
+  /// Phase 17: POST /incidents/:id/confirm
+  Future<ApiResult<bool>> confirmIncident(String incidentId, {Duration timeout = const Duration(seconds: 4)}) async {
+    final candidates = getBackendCandidates(baseUrl);
+    for (final candidateUrl in candidates) {
+      final uri = Uri.parse('$candidateUrl/incidents/$incidentId/confirm');
+      try {
+        final res = await _httpClient.post(uri, headers: {'Content-Type': 'application/json'}).timeout(timeout);
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          activeBackendUrl = candidateUrl;
+          return const ApiResult.success(true);
+        }
+      } catch (_) {}
+    }
+    return const ApiResult.failure('Unable to confirm incident');
+  }
+
+  /// Cancels a suspected incident when user taps "I'm OK".
+  /// Phase 17: POST /incidents/:id/cancel
+  Future<ApiResult<bool>> cancelIncident(String incidentId, {Duration timeout = const Duration(seconds: 4)}) async {
+    final candidates = getBackendCandidates(baseUrl);
+    for (final candidateUrl in candidates) {
+      final uri = Uri.parse('$candidateUrl/incidents/$incidentId/cancel');
+      try {
+        final res = await _httpClient.post(uri, headers: {'Content-Type': 'application/json'}).timeout(timeout);
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          activeBackendUrl = candidateUrl;
+          return const ApiResult.success(true);
+        }
+      } catch (_) {}
+    }
+    return const ApiResult.failure('Unable to cancel incident');
+  }
+
   /// Claims an incident for the ambulance unit.
   /// Matches Phase 8: POST /incidents/:id/claim
   Future<ApiResult<bool>> claimIncident({
     required String incidentId,
     required String ambulanceId,
+    String? ambulancePlate,
+    String? driverName,
+    String? driverPhone,
+    String? originStation,
     Duration timeout = const Duration(seconds: 4),
   }) async {
     final candidates = getBackendCandidates(baseUrl);
@@ -165,7 +207,13 @@ class ApiClient {
             'Content-Type': 'application/json',
             'Accept': 'application/json',
           },
-          body: jsonEncode({'ambulance_id': ambulanceId}),
+          body: jsonEncode({
+            'ambulance_id': ambulanceId,
+            if (ambulancePlate != null) 'ambulance_plate': ambulancePlate,
+            if (driverName != null) 'driver_name': driverName,
+            if (driverPhone != null) 'driver_phone': driverPhone,
+            if (originStation != null) 'origin_station': originStation,
+          }),
         ).timeout(timeout);
 
         if (response.statusCode >= 200 && response.statusCode < 300) {
@@ -179,6 +227,59 @@ class ApiClient {
           );
         } else {
           return ApiResult.failure('Claim failed with status ${response.statusCode}');
+        }
+      } catch (e) {
+        lastError = 'Error ($candidateUrl): $e';
+        continue;
+      }
+    }
+    return ApiResult.failure('Unable to reach backend: $lastError');
+  }
+
+  /// Records ambulance arrival on-scene (Phase 14 Zero-Touch or Manual arrival)
+  /// Calls POST /incidents/:id/ambulance-arrived
+  Future<ApiResult<bool>> markAmbulanceArrived({
+    required String incidentId,
+    required String ambulanceId,
+    String? ambulancePlate,
+    String? driverName,
+    String? driverPhone,
+    String? originStation,
+    double? latitude,
+    double? longitude,
+    DateTime? arrivedAt,
+    Duration timeout = const Duration(seconds: 5),
+  }) async {
+    final candidates = getBackendCandidates(baseUrl);
+    String? lastError;
+    final payload = {
+      'ambulance_id': ambulanceId,
+      'ambulance_plate': ambulancePlate ?? 'KA-01-EA-108',
+      'driver_name': driverName ?? 'Ramesh Kumar',
+      'driver_phone': driverPhone ?? '+91 98450 12345',
+      'origin_station': originStation ?? 'Manipal Hospital HAL Depot Base',
+      if (latitude != null) 'latitude': latitude,
+      if (longitude != null) 'longitude': longitude,
+      'arrived_at': (arrivedAt ?? DateTime.now()).toIso8601String(),
+    };
+
+    for (final candidateUrl in candidates) {
+      final uri = Uri.parse('$candidateUrl/incidents/$incidentId/ambulance-arrived');
+      try {
+        final response = await _httpClient.post(
+          uri,
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+          body: jsonEncode(payload),
+        ).timeout(timeout);
+
+        if (response.statusCode >= 200 && response.statusCode < 300) {
+          activeBackendUrl = candidateUrl;
+          return const ApiResult.success(true);
+        } else {
+          return ApiResult.failure('Arrival logging failed with status ${response.statusCode}');
         }
       } catch (e) {
         lastError = 'Error ($candidateUrl): $e';

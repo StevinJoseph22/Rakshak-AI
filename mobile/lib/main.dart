@@ -14,6 +14,10 @@ import 'services/crash_event_service.dart';
 import 'services/emergency_contact_service.dart';
 import 'services/emergency_sms_service.dart';
 import 'services/lock_screen_service.dart';
+import 'services/trip_sentinel_client_service.dart';
+import 'services/pre_crash_microburst_service.dart';
+import 'services/offline_dispatch_queue.dart';
+import 'screens/detection_lab_screen.dart';
 
 void main() {
   runApp(const RakshakApp());
@@ -71,6 +75,7 @@ class _CrashDetectionScreenState extends State<CrashDetectionScreen> {
   void initState() {
     super.initState();
     EmergencySmsService.navigatorKey = RakshakApp.navigatorKey;
+    OfflineDispatchQueue.instance.initialize().catchError((_) {});
     _loadEmergencyContacts();
     _initSensors();
     _initCrashListener();
@@ -167,6 +172,31 @@ class _CrashDetectionScreenState extends State<CrashDetectionScreen> {
       MaterialPageRoute(
         builder: (context) => const SimulatedLockScreen(),
       ),
+    );
+  }
+
+  Future<void> _simulateDeadManSwitch() async {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        backgroundColor: Colors.purple,
+        content: Text('💥 Phone Destruction Simulated! Heartbeat cut. Cloud Watchdog triggering emergency response in 12s...'),
+      ),
+    );
+    await TripSentinelClientService.instance.simulateCatastrophicPhoneBreakdown();
+  }
+
+  Future<void> _simulatePreCrashMicroBurst() async {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        backgroundColor: Colors.deepPurple,
+        content: Text('⚡ Pre-Alert Dispatched: Soft impact_suspected marker sent to police room pending rider confirmation.'),
+      ),
+    );
+    await PreCrashMicroBurstService.instance.fireMicroBurst(
+      latitude: _useLiveDeviceLocation ? CrashDetectorService.instance.lastKnownLatitude : 12.9716,
+      longitude: _useLiveDeviceLocation ? CrashDetectorService.instance.lastKnownLongitude : 77.5946,
+      speedKmh: 92.4,
+      netG: 8.5,
     );
   }
 
@@ -314,6 +344,17 @@ class _CrashDetectionScreenState extends State<CrashDetectionScreen> {
               _loadEmergencyContacts();
             },
           ),
+          IconButton(
+            icon: const Icon(Icons.science_rounded, color: Colors.purpleAccent),
+            tooltip: 'Detection Lab',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => const DetectionLabScreen(),
+                ),
+              );
+            },
+          ),
           Padding(
             padding: const EdgeInsets.only(right: 8.0),
             child: ActionChip(
@@ -424,6 +465,43 @@ class _CrashDetectionScreenState extends State<CrashDetectionScreen> {
               ),
             ),
             const SizedBox(height: 16),
+
+            // Explicit In-App Consent Toggle for Trip Sentinel Monitoring (Off by default for privacy)
+            Material(
+              color: TripSentinelClientService.instance.isConsentEnabled
+                  ? const Color(0xFFEFF6FF)
+                  : const Color(0xFFF8FAFC),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: BorderSide(
+                  color: TripSentinelClientService.instance.isConsentEnabled
+                      ? const Color(0xFF3B82F6)
+                      : const Color(0xFFCBD5E1),
+                ),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                child: SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  title: const Text(
+                    'Trip Sentinel (Contact Loss Safeguard)',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                  ),
+                  subtitle: const Text(
+                    'Privacy Protected: Off by default. Sends ephemeral heartbeat to detect contact loss at high speed. No trip track or breadcrumbs stored.',
+                    style: TextStyle(fontSize: 11, color: Colors.black54),
+                  ),
+                  value: TripSentinelClientService.instance.isConsentEnabled,
+                  onChanged: (val) {
+                    setState(() {
+                      TripSentinelClientService.instance.setMonitoringConsent(val);
+                    });
+                  },
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
 
             // Segmented Mode Selector
             _buildModeSelector(),
@@ -1307,6 +1385,87 @@ class _CrashDetectionScreenState extends State<CrashDetectionScreen> {
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10),
                   ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Divider(),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                const Icon(Icons.satellite_alt_rounded, size: 18, color: Colors.purple),
+                const SizedBox(width: 8),
+                Text(
+                  'Hardware Destruction & Zero-Network Defense',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                    color: Colors.purple.shade900,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Demonstrates survival if phone breaks down in <100ms or cellular IP is 100% dead.',
+              style: TextStyle(fontSize: 11, color: Colors.purple.shade800),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: _simulateDeadManSwitch,
+                icon: const Icon(Icons.flash_off, color: Colors.white),
+                label: const Text(
+                  'SIMULATE PHONE BREAKDOWN (CLOUD WATCHDOG)',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.white),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.purple.shade800,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: _simulatePreCrashMicroBurst,
+                icon: const Icon(Icons.bolt, color: Colors.deepPurple),
+                label: const Text(
+                  'FIRE PRE-ALERT (SUSPECTED IMPACT MARKER)',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                ),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.deepPurple,
+                  side: const BorderSide(color: Colors.deepPurple, width: 1.5),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => const DetectionLabScreen(),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.biotech_rounded, color: Colors.white),
+                label: const Text(
+                  'OPEN DETECTION LAB (7 SCENARIO VERIFICATION)',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.white),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF1E293B),
+                  side: const BorderSide(color: Color(0xFF3B82F6), width: 1.5),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                 ),
               ),
             ),

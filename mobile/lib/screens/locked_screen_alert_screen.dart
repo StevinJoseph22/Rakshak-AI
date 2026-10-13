@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../models/crash_biomechanics_model.dart';
+import '../models/crash_severity_model.dart';
 import '../models/abha_emergency_vault_model.dart';
 import '../services/api_client.dart';
 import '../services/crash_detector_service.dart';
@@ -7,6 +9,8 @@ import '../services/crash_event_service.dart';
 import '../services/emergency_contact_service.dart';
 import '../services/emergency_sms_service.dart';
 import '../services/incident_tracking_service.dart';
+import '../services/offline_dispatch_queue.dart';
+import '../services/pre_crash_microburst_service.dart';
 import 'intake_screen.dart';
 
 /// Full-screen high-urgency alert screen with 10s countdown ring.
@@ -29,17 +33,24 @@ class _LockedScreenAlertScreenState extends State<LockedScreenAlertScreen>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
   late final ApiClient _apiClient;
-  static const int _countdownDurationSeconds = 10;
+  late final int _countdownDurationSeconds;
   bool _hasDispatched = false;
+  bool _riderUnresponsive = true;
 
   @override
   void initState() {
     super.initState();
     _apiClient = widget.apiClient ?? ApiClient();
+    _countdownDurationSeconds = widget.crashEvent?.adaptiveCountdownSeconds ?? 10;
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: _countdownDurationSeconds),
+      duration: Duration(seconds: _countdownDurationSeconds),
     );
+
+    // Initial alert haptic vibration
+    try {
+      HapticFeedback.vibrate();
+    } catch (_) {}
 
     _controller.addListener(() {
       setState(() {});
@@ -65,6 +76,7 @@ class _LockedScreenAlertScreenState extends State<LockedScreenAlertScreen>
   void _onAutoDispatch() {
     if (!_hasDispatched && mounted) {
       _hasDispatched = true;
+      _riderUnresponsive = true; // Auto-dispatch implies rider did not tap prompt within countdown
       _broadcastIncident();
       _navigateToNext();
     }
@@ -73,6 +85,7 @@ class _LockedScreenAlertScreenState extends State<LockedScreenAlertScreen>
   void _onConfirm() {
     if (!_hasDispatched) {
       _hasDispatched = true;
+      _riderUnresponsive = false; // User actively interacted with prompt
       _controller.stop();
       _broadcastIncident();
       _navigateToNext();
@@ -87,28 +100,49 @@ class _LockedScreenAlertScreenState extends State<LockedScreenAlertScreen>
     final lat = widget.crashEvent?.latitude ?? CrashDetectorService.instance.lastKnownLatitude;
     final lng = widget.crashEvent?.longitude ?? CrashDetectorService.instance.lastKnownLongitude;
 
-    // Privacy note: Emergency contact data is the victim's own chosen contact,
-    // stored locally on-device and only sent alongside an actual confirmed incident dispatch
-    // via victim_metadata. It is never stored in a standalone contacts table or cached
-    // in Redis alongside temporary photos.
     final primaryContact = EmergencyContactService.instance.primaryContactSync;
     final victimName = EmergencyContactService.instance.victimNameSync;
 
+    final decelG = widget.crashEvent?.decelerationG ?? 6.5;
+    final isSaturated = widget.crashEvent?.isSaturated ?? (decelG >= 16.0);
+    final speedDrop = widget.crashEvent?.speedDropKmh ?? 60.0;
+    final rollover = widget.crashEvent?.rolloverSuspected ?? false;
+    final confidence = widget.crashEvent?.confidenceScore ?? 85;
+
+    final severityIndex = CrashSeverityIndex.compute(
+      peakG: decelG,
+      speedDropKmh: speedDrop,
+      isSaturated: isSaturated,
+      rolloverSuspected: rollover,
+      riderUnresponsive: _riderUnresponsive,
+      confidenceScore: confidence,
+    );
+
     final biomechanics = CrashBiomechanics.generateSimulated(
-      decelerationG: widget.crashEvent?.decelerationG ?? 6.5,
-      speedDropKmh: widget.crashEvent?.speedDropKmh ?? 60.0,
+      decelerationG: decelG,
+      speedDropKmh: speedDrop,
     );
     final abhaVault = AbhaEmergencyVault.defaultProfile();
 
     final metadata = {
       'vehicle_type': 'Two-Wheeler',
-      'rider_status': 'SOS Active (Unresponsive)',
-      'deceleration_g': widget.crashEvent?.decelerationG ?? 6.5,
-      'speed_drop_kmh': widget.crashEvent?.speedDropKmh ?? 60.0,
+      'rider_status': _riderUnresponsive
+          ? 'SOS Active (Unresponsive to prompt)'
+          : 'SOS Active (Rider responsive)',
+      'rider_unresponsive': _riderUnresponsive,
+      'deceleration_g': decelG,
+      'deceleration_saturated': isSaturated,
+      'speed_drop_kmh': speedDrop,
+      'confidence_score': confidence,
+      'severity_index': severityIndex.toJson(),
       'source': widget.crashEvent?.source ?? 'locked_screen_alert',
       'timestamp': (widget.crashEvent?.timestamp ?? DateTime.now()).toIso8601String(),
       'victim_name': victimName,
-      'biomechanics': biomechanics.toJson(),
+      'biomechanics': {
+        ...biomechanics.toJson(),
+        'is_simulated_illustrative': true,
+        'label': 'Illustrative / Simulated Model',
+      },
       'abha_vault': abhaVault.toJson(),
       if (primaryContact != null) ...{
         'emergency_contact_name': primaryContact.name,
@@ -117,8 +151,12 @@ class _LockedScreenAlertScreenState extends State<LockedScreenAlertScreen>
       },
     };
 
-    // Auto-broadcast alert to backend
+    final clientIncidentId = PreCrashMicroBurstService.instance.currentSuspectedIncidentId;
+
+    // Auto-broadcast alert to backend (idempotently promotes suspected incident to broadcasting)
     _apiClient.reportIncident(
+      id: clientIncidentId,
+      status: 'broadcasting',
       latitude: lat,
       longitude: lng,
       victimMetadata: metadata,
@@ -133,6 +171,14 @@ class _LockedScreenAlertScreenState extends State<LockedScreenAlertScreen>
       } else {
         CrashEventService.instance.lastDispatchedIncidentId = null;
         debugPrint('Incident broadcast queued / offline fallback: ${result.errorMessage}');
+        final fallbackId = clientIncidentId ?? PreCrashMicroBurstService.generateClientUuid();
+        OfflineDispatchQueue.instance.enqueue(
+          id: fallbackId,
+          latitude: lat,
+          longitude: lng,
+          victimMetadata: metadata,
+          originalTimestamp: (widget.crashEvent?.timestamp ?? DateTime.now()).toIso8601String(),
+        );
       }
     });
 
@@ -158,6 +204,7 @@ class _LockedScreenAlertScreenState extends State<LockedScreenAlertScreen>
     // Full abort: cancel animation, flag as dispatched to prevent late callbacks
     _hasDispatched = true;
     _controller.stop();
+    PreCrashMicroBurstService.instance.cancelSuspectedImpact();
     _apiClient.dispose();
     Navigator.of(context).pop();
   }

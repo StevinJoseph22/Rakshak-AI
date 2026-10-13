@@ -5,6 +5,9 @@ import 'package:geolocator/geolocator.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 import 'crash_event_service.dart';
 import 'tflite_classifier_stub.dart';
+import 'pre_crash_microburst_service.dart';
+import 'trip_sentinel_client_service.dart';
+import '../config/crash_confidence_config.dart';
 
 // ==============================================================================
 // CONFIGURABLE CRASH DETECTION CONSTANTS (TUNABLE FOR REAL-PHONE TESTING)
@@ -37,6 +40,7 @@ const int kPotholeWindowMs = 300;
 class _AccelSample {
   final DateTime timestamp;
   final double netG;
+  final double totalG;
   final double x;
   final double y;
   final double z;
@@ -44,6 +48,7 @@ class _AccelSample {
   const _AccelSample({
     required this.timestamp,
     required this.netG,
+    required this.totalG,
     required this.x,
     required this.y,
     required this.z,
@@ -206,6 +211,13 @@ class CrashDetectorService {
     _speedHistory.removeWhere(
       (s) => now.difference(s.timestamp).inMilliseconds > 2000,
     );
+
+    // Update active trip sentinel watchdog telemetry
+    TripSentinelClientService.instance.updateTelemetry(
+      latitude: _lastKnownLatitude,
+      longitude: _lastKnownLongitude,
+      speedKmh: speedKmh,
+    );
   }
 
   /// Processes live Accelerometer samples from main.dart stream subscription.
@@ -221,6 +233,7 @@ class CrashDetectorService {
     final sample = _AccelSample(
       timestamp: now,
       netG: netG,
+      totalG: totalG,
       x: event.x,
       y: event.y,
       z: event.z,
@@ -228,9 +241,9 @@ class CrashDetectorService {
 
     _accelHistory.add(sample);
 
-    // Maintain sliding window for pothole and impact detection
+    // Maintain sliding window for pothole, free-fall pre-check, and impact detection
     _accelHistory.removeWhere(
-      (s) => now.difference(s.timestamp).inMilliseconds > max(potholeWindowMs, speedDropWindowMs),
+      (s) => now.difference(s.timestamp).inMilliseconds > 1500,
     );
 
     _evaluateTelemetries(sample, now);
@@ -321,8 +334,77 @@ class CrashDetectorService {
       final accelWindow = _accelHistory.map((s) => s.netG).toList();
       final classification = _tfliteStub.classify(accelWindow, _gyroMagnitudes);
 
+      // Pre-impact free-fall check: near-0g for >100ms before impact indicates dropped phone
+      bool preImpactFreeFall = false;
+      DateTime? freeFallStart;
+      for (final s in _accelHistory) {
+        final msBefore = now.difference(s.timestamp).inMilliseconds;
+        if (msBefore >= 50 && msBefore <= 1000) {
+          if (s.totalG < CrashConfidenceConfig.kFreeFallGThreshold) {
+            freeFallStart ??= s.timestamp;
+            if (s.timestamp.difference(freeFallStart).inMilliseconds.abs() >= CrashConfidenceConfig.kFreeFallMinDurationMs) {
+              preImpactFreeFall = true;
+            }
+          } else {
+            freeFallStart = null;
+          }
+        }
+      }
+
+      // Rollover / rotational tumble check
+      bool rolloverSuspected = false;
+      for (final g in _gyroMagnitudes) {
+        if (g >= CrashConfidenceConfig.kRolloverGyroThresholdRad) {
+          rolloverSuspected = true;
+          break;
+        }
+      }
+
+      // Post-impact stillness (variance check)
+      bool postImpactStillness = true;
+      final recentAccel = _accelHistory.where((s) => now.difference(s.timestamp).inMilliseconds <= 300).toList();
+      if (recentAccel.length >= 3) {
+        double mean = 0.0;
+        for (final s in recentAccel) mean += s.netG;
+        mean /= recentAccel.length;
+        double variance = 0.0;
+        for (final s in recentAccel) variance += (s.netG - mean) * (s.netG - mean);
+        variance /= recentAccel.length;
+        postImpactStillness = variance <= CrashConfidenceConfig.kStillnessVarianceMaxG;
+      }
+
+      final confidenceResult = CrashConfidenceResult.compute(
+        measuredPeakG: currentSample.netG,
+        speedDropKmh: speedDelta > 0 ? speedDelta : preImpactSpeedKmh,
+        postImpactSpeedKmh: _currentSpeedKmh,
+        preImpactFreeFall: preImpactFreeFall,
+        postImpactStillness: postImpactStillness,
+        rolloverSuspected: rolloverSuspected,
+      );
+
+      debugPrint(
+        '[CrashConfidence] Score: ${confidenceResult.score}/100 (${confidenceResult.confidenceLevel}) | '
+        'Countdown: ${confidenceResult.adaptiveCountdownSeconds}s | Factors: ${confidenceResult.factorBreakdown}',
+      );
+
+      // Free-fall drop suppression: drop from hand/pocket has near-0g prior and severe penalty
+      if (preImpactFreeFall && confidenceResult.score < 40) {
+        debugPrint(
+          'Suppressed: Phone-drop signature (free-fall near-0g >100ms detected prior to impact). Score: ${confidenceResult.score}/100',
+        );
+        return;
+      }
+
       if (speedDroppedTowardZero) {
         _lastCrashTriggeredTime = now;
+
+        // Negative-latency pre-crash micro-burst (<40ms dispatch before secondary phone destruction)
+        PreCrashMicroBurstService.instance.fireMicroBurst(
+          latitude: _lastKnownLatitude,
+          longitude: _lastKnownLongitude,
+          speedKmh: preImpactSpeedKmh,
+          netG: currentSample.netG,
+        );
 
         final event = CrashEvent(
           timestamp: now,
@@ -331,6 +413,14 @@ class CrashDetectorService {
           source: 'sensor',
           latitude: _lastKnownLatitude,
           longitude: _lastKnownLongitude,
+          confidenceScore: confidenceResult.score,
+          confidenceLevel: confidenceResult.confidenceLevel,
+          adaptiveCountdownSeconds: confidenceResult.adaptiveCountdownSeconds,
+          isSaturated: confidenceResult.isSaturated,
+          preImpactFreeFall: confidenceResult.preImpactFreeFall,
+          rolloverSuspected: confidenceResult.rolloverSuspected,
+          postImpactStillness: confidenceResult.postImpactStillness,
+          factorBreakdown: confidenceResult.factorBreakdown,
         );
 
         debugPrint('CRASH DETECTED by Sensor Rule Engine: $event');

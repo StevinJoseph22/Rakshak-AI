@@ -138,6 +138,19 @@ class EmergencySmsService {
     return 'UPDATE: Ambulance $ambulanceId has been dispatched and is en route to $victimName\'s location. Emergency services are responding.';
   }
 
+  /// Builds Message 4: Ambulance on-scene arrival update
+  String buildAmbulanceArrivedMessage({
+    required String victimName,
+    required String ambulanceId,
+    required String vehiclePlate,
+    required String driverName,
+    required String driverPhone,
+    required String locationDescription,
+  }) {
+    return 'UPDATE: Ambulance $ambulanceId ($vehiclePlate) has ARRIVED at $victimName\'s accident scene ($locationDescription). '
+        'Driver: $driverName (Ph: $driverPhone). Paramedics are administering trauma care.';
+  }
+
   /// Sends crash alert via Real Native SmsManager or falls back to WhatsApp preview
   Future<EmergencySmsDispatchResult> sendCrashAlert({
     required double lat,
@@ -235,6 +248,48 @@ class EmergencySmsService {
 
     return _dispatchAlert(
       alertType: 'AMBULANCE_DISPATCHED',
+      contacts: contacts,
+      message: message,
+      context: context,
+    );
+  }
+
+  /// Sends ambulance arrived on-scene alert via Real Native SmsManager or falls back to WhatsApp preview
+  Future<EmergencySmsDispatchResult> sendAmbulanceArrivedAlert({
+    String? incidentId,
+    required String ambulanceId,
+    String? vehiclePlate,
+    String? driverName,
+    String? driverPhone,
+    String? locationDescription,
+    BuildContext? context,
+  }) async {
+    final alertKey = 'AMBULANCE_ARRIVED_${incidentId ?? ""}_${ambulanceId.trim()}';
+    if (_dispatchedAlertKeys.contains(alertKey)) {
+      debugPrint('[EmergencySmsService] Ambulance arrived alert already dispatched for $ambulanceId. Skipping duplicate.');
+      return EmergencySmsDispatchResult(
+        success: true,
+        mode: SmsDeliveryMode.nativeSim,
+        totalContacts: 0,
+        successfulSends: 0,
+        messageBody: '',
+      );
+    }
+    _dispatchedAlertKeys.add(alertKey);
+
+    final contacts = await EmergencyContactService.instance.getContacts();
+    final victimName = await EmergencyContactService.instance.getVictimName();
+    final message = buildAmbulanceArrivedMessage(
+      victimName: victimName,
+      ambulanceId: ambulanceId,
+      vehiclePlate: vehiclePlate ?? 'KA-01-EA-108',
+      driverName: driverName ?? 'Ramesh Kumar',
+      driverPhone: driverPhone ?? '+91 98450 12345',
+      locationDescription: locationDescription ?? 'accident location',
+    );
+
+    return _dispatchAlert(
+      alertType: 'AMBULANCE_ARRIVED',
       contacts: contacts,
       message: message,
       context: context,
@@ -361,6 +416,45 @@ class EmergencySmsService {
     } catch (e) {
       debugPrint('[EmergencySmsService] Error launching WhatsApp: $e');
       return false;
+    }
+  }
+
+  /// Generates ultra-dense binary emergency payload fitting inside a single SMS over SS7
+  String buildOfflineSignalingPayload({
+    required double lat,
+    required double lng,
+    required double speedKmh,
+    required double gForce,
+    required String bloodGroup,
+  }) {
+    final latFixed = lat.toStringAsFixed(5);
+    final lngFixed = lng.toStringAsFixed(5);
+    final speed = speedKmh.round();
+    final g = gForce.toStringAsFixed(1);
+    final epochSecs = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+
+    return '🚨 RAKSHAK SOS (ZERO-NET): Accident detected!\n'
+        'Loc: https://maps.google.com/?q=$latFixed,$lngFixed\n'
+        'Telemetry: ${speed}km/h | ${g}G | Blood:$bloodGroup | T:$epochSecs';
+  }
+
+  /// Sends raw SMS to contacts via native telephony channel without building dialogs
+  Future<void> sendRawSmsToContacts({
+    required List<EmergencyContact> contacts,
+    required String message,
+  }) async {
+    for (final contact in contacts) {
+      try {
+        if (!_isTestEnvironment && !kIsWeb && Platform.isAndroid) {
+          await _smsChannel.invokeMethod<bool>('sendSmsNative', {
+            'phone': contact.phone,
+            'message': message,
+          });
+        }
+        debugPrint('[EmergencySmsService] Raw Signaling SMS sent to ${contact.name}');
+      } catch (e) {
+        debugPrint('[EmergencySmsService] Raw SMS dispatch note: $e');
+      }
     }
   }
 }

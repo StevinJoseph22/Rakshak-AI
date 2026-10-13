@@ -10,6 +10,15 @@ class CrashEvent {
   final double latitude;
   final double longitude;
 
+  final int confidenceScore;
+  final String confidenceLevel;
+  final int adaptiveCountdownSeconds;
+  final bool isSaturated;
+  final bool preImpactFreeFall;
+  final bool rolloverSuspected;
+  final bool postImpactStillness;
+  final Map<String, dynamic>? factorBreakdown;
+
   const CrashEvent({
     required this.timestamp,
     required this.decelerationG,
@@ -19,6 +28,14 @@ class CrashEvent {
     double? longitude,
     double? simulatedLatitude,
     double? simulatedLongitude,
+    this.confidenceScore = 85,
+    this.confidenceLevel = 'High',
+    this.adaptiveCountdownSeconds = 10,
+    this.isSaturated = false,
+    this.preImpactFreeFall = false,
+    this.rolloverSuspected = false,
+    this.postImpactStillness = true,
+    this.factorBreakdown,
   })  : latitude = latitude ?? simulatedLatitude ?? 12.9716,
         longitude = longitude ?? simulatedLongitude ?? 77.5946;
 
@@ -28,7 +45,7 @@ class CrashEvent {
 
   @override
   String toString() {
-    return 'CrashEvent(timestamp: $timestamp, decelerationG: ${decelerationG.toStringAsFixed(1)}G, speedDropKmh: ${speedDropKmh.toStringAsFixed(1)}km/h, source: $source, loc: ($latitude, $longitude))';
+    return 'CrashEvent(timestamp: $timestamp, decelerationG: ${decelerationG.toStringAsFixed(1)}G (saturated: $isSaturated), speedDropKmh: ${speedDropKmh.toStringAsFixed(1)}km/h, confidence: $confidenceScore% ($confidenceLevel), source: $source, loc: ($latitude, $longitude))';
   }
 }
 

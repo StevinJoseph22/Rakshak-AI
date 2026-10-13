@@ -34,7 +34,7 @@ export interface IncidentPayload {
   matched_hospitals_count?: number;
   matched_hospitals?: Hospital[];
   victim_metadata?: Record<string, unknown> | null;
-  status?: 'detected' | 'broadcasting' | 'accepted' | 'en_route' | 'resolved' | 'escalated' | 'unmatched';
+  status?: 'detected' | 'broadcasting' | 'accepted' | 'en_route' | 'resolved' | 'escalated' | 'unmatched' | 'suspected' | 'cancelled';
   accepted_hospital_id?: string | null;
   accepted_hospital_name?: string;
   accepted_hospital?: Hospital | null;
@@ -49,5 +49,47 @@ export interface IncidentPayload {
   escalated?: boolean;
   case_locked?: boolean;
   rejections?: RejectionRecord[];
+  ambulance_plate?: string | null;
+  ambulance_driver_name?: string | null;
+  ambulance_driver_phone?: string | null;
+  ambulance_origin_station?: string | null;
+  ambulance_arrived_at?: string | null;
+  ambulance_arrival_lat?: number | null;
+  ambulance_arrival_lng?: number | null;
+  blackspot_info?: BlackspotInfo | null;
+}
+
+export interface BlackspotInfo {
+  is_blackspot: boolean;
+  incident_count: number;
+  hazard_level: 'High' | 'Severe' | 'Critical';
+  zone_name: string;
+}
+
+export interface BlackspotZone {
+  id: string;
+  latitude: number;
+  longitude: number;
+  radius_meters: number;
+  incident_count: number;
+  hazard_level: 'High' | 'Severe' | 'Critical';
+  zone_name: string;
+}
+
+export interface PreemptedSignalPayload {
+  request_id: string;
+  intersection_id: string;
+  junction_name?: string;
+  controller_oid: string;
+  status: 'GRANTED' | 'QUEUED' | 'ACTIVE';
+  granted_phase: number;
+  hold_seconds: number;
+  queue_clearance_seconds: number;
+  timestamp: string;
+  incident_id: string;
+  ambulance_id: string;
+  ambulance_plate?: string;
+  latitude?: number;
+  longitude?: number;
 }
 

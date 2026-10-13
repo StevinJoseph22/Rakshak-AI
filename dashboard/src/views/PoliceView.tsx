@@ -13,7 +13,7 @@ import {
   LogOut,
   CheckCircle2,
 } from 'lucide-react';
-import { IncidentPayload, ConnectionStatus } from '../types';
+import { IncidentPayload, ConnectionStatus, PreemptedSignalPayload } from '../types';
 import { getSocket, BACKEND_API_BASE, updateSocketAuth } from '../services/socket';
 import { getStoredUser, clearStoredSession, AuthUser, authFetch } from '../services/auth';
 import { LoginView } from '../components/LoginView';
@@ -41,6 +41,27 @@ export const PoliceView: React.FC = () => {
   const [viewMode, setViewMode] = useState<'map' | 'split' | 'cards'>('map');
   const [selectedIncidentId, setSelectedIncidentId] = useState<string | null>(null);
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
+  const [preemptedSignals, setPreemptedSignals] = useState<Record<string, PreemptedSignalPayload>>({});
+  const [isSimulatingCollapse, setIsSimulatingCollapse] = useState<boolean>(false);
+
+  // Countdown timer for C-V2X traffic signal preemption hold duration
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setPreemptedSignals((prev) => {
+        let changed = false;
+        const next: Record<string, PreemptedSignalPayload> = {};
+        for (const [id, sig] of Object.entries(prev)) {
+          if (sig.hold_seconds > 0) {
+            changed = true;
+            next[id] = { ...sig, hold_seconds: sig.hold_seconds - 1 };
+          }
+        }
+        return changed ? next : prev;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, []);
 
   const audioContextRef = useRef<AudioContext | null>(null);
 
@@ -80,6 +101,7 @@ export const PoliceView: React.FC = () => {
 
   // Fetch live incidents from backend API
   const fetchPoliceIncidents = useCallback(async () => {
+    if (!currentUser || currentUser.role !== 'police') return;
     try {
       localStorage.removeItem('rakshak_police_cleared');
       const res = await authFetch(`${BACKEND_API_BASE}/incidents?limit=20`);
@@ -116,7 +138,7 @@ export const PoliceView: React.FC = () => {
     } catch (err) {
       console.warn('[PoliceView] Failed to fetch incidents:', err);
     }
-  }, []);
+  }, [currentUser]);
 
   // Fetch on mount, window focus, and background sync every 4 seconds
   useEffect(() => {
@@ -134,6 +156,7 @@ export const PoliceView: React.FC = () => {
 
   // Connect and join police "all_incidents" broadcast room
   useEffect(() => {
+    if (!currentUser || currentUser.role !== 'police') return;
     const socket = getSocket();
 
     const handleConnect = () => {
@@ -371,6 +394,10 @@ export const PoliceView: React.FC = () => {
     const handleIncidentClaimed = (payload: {
       incident_id: string;
       ambulance_id: string;
+      ambulance_plate?: string;
+      driver_name?: string;
+      driver_phone?: string;
+      origin_station?: string;
     }) => {
       setIncidents((prev) => {
         const existingIndex = prev.findIndex((item) => item.id === payload.incident_id);
@@ -382,6 +409,48 @@ export const PoliceView: React.FC = () => {
         updatedList[existingIndex] = {
           ...updatedList[existingIndex],
           ambulance_id: payload.ambulance_id,
+          ambulance_plate: payload.ambulance_plate || updatedList[existingIndex].ambulance_plate,
+          ambulance_driver_name: payload.driver_name || updatedList[existingIndex].ambulance_driver_name,
+          ambulance_driver_phone: payload.driver_phone || updatedList[existingIndex].ambulance_driver_phone,
+          ambulance_origin_station: payload.origin_station || updatedList[existingIndex].ambulance_origin_station,
+        };
+        try {
+          localStorage.setItem('rakshak_police_feed', JSON.stringify(updatedList));
+        } catch {
+          // ignore
+        }
+        return updatedList;
+      });
+    };
+
+    const handleAmbulanceArrived = (payload: {
+      incident_id: string;
+      ambulance_id: string;
+      ambulance_plate?: string;
+      driver_name?: string;
+      driver_phone?: string;
+      origin_station?: string;
+      arrived_at: string;
+      latitude?: number;
+      longitude?: number;
+    }) => {
+      setIncidents((prev) => {
+        const existingIndex = prev.findIndex((item) => item.id === payload.incident_id);
+        if (existingIndex === -1) {
+          fetchPoliceIncidents();
+          return prev;
+        }
+        const updatedList = [...prev];
+        updatedList[existingIndex] = {
+          ...updatedList[existingIndex],
+          ambulance_id: payload.ambulance_id,
+          ambulance_plate: payload.ambulance_plate || updatedList[existingIndex].ambulance_plate,
+          ambulance_driver_name: payload.driver_name || updatedList[existingIndex].ambulance_driver_name,
+          ambulance_driver_phone: payload.driver_phone || updatedList[existingIndex].ambulance_driver_phone,
+          ambulance_origin_station: payload.origin_station || updatedList[existingIndex].ambulance_origin_station,
+          ambulance_arrived_at: payload.arrived_at,
+          ambulance_arrival_lat: payload.latitude,
+          ambulance_arrival_lng: payload.longitude,
         };
         try {
           localStorage.setItem('rakshak_police_feed', JSON.stringify(updatedList));
@@ -422,11 +491,81 @@ export const PoliceView: React.FC = () => {
       });
     };
 
+    const handleTrafficSignalPreempted = (payload: PreemptedSignalPayload) => {
+      setPreemptedSignals((prev) => ({
+        ...prev,
+        [payload.intersection_id]: payload,
+      }));
+    };
+
+    const handleDeadManCollapseDetected = () => {
+      setLastAlertFlash(true);
+      setTimeout(() => setLastAlertFlash(false), 2000);
+      playPoliceChime();
+    };
+
+    const handleIncidentSuspected = (payload: IncidentPayload) => {
+      setIncidents((prev) => {
+        const existingIndex = prev.findIndex((item) => item.id === payload.id);
+        let updatedList: IncidentPayload[];
+        if (existingIndex >= 0) {
+          updatedList = [...prev];
+          updatedList[existingIndex] = { ...updatedList[existingIndex], ...payload, status: 'suspected' };
+        } else {
+          updatedList = [{ ...payload, status: 'suspected' }, ...prev];
+        }
+        try {
+          localStorage.setItem('rakshak_police_feed', JSON.stringify(updatedList));
+        } catch {
+          // ignore
+        }
+        return updatedList;
+      });
+    };
+
+    const handleIncidentCancelled = (payload: { id: string; reason?: string }) => {
+      setIncidents((prev) => {
+        const updatedList = prev.filter((item) => item.id !== payload.id);
+        try {
+          localStorage.setItem('rakshak_police_feed', JSON.stringify(updatedList));
+        } catch {
+          // ignore
+        }
+        return updatedList;
+      });
+    };
+
+    const handleSuspectedIncidentPromoted = (payload: { id: string; incident: IncidentPayload }) => {
+      setIncidents((prev) => {
+        const existingIndex = prev.findIndex((item) => item.id === payload.id);
+        let updatedList: IncidentPayload[];
+        if (existingIndex >= 0) {
+          updatedList = [...prev];
+          updatedList[existingIndex] = { ...updatedList[existingIndex], ...payload.incident, status: 'broadcasting' };
+        } else {
+          updatedList = [{ ...payload.incident, status: 'broadcasting' }, ...prev];
+        }
+        try {
+          localStorage.setItem('rakshak_police_feed', JSON.stringify(updatedList));
+        } catch {
+          // ignore
+        }
+        return updatedList;
+      });
+      setLastAlertFlash(true);
+      setTimeout(() => setLastAlertFlash(false), 2000);
+      playPoliceChime();
+    };
+
     socket.on('connect', handleConnect);
     socket.on('disconnect', handleDisconnect);
     socket.on('connect_error', handleConnectError);
     socket.io.on('reconnect_attempt', handleReconnectAttempt);
     socket.on('new_incident', handleNewIncident);
+    socket.on('incident_suspected', handleIncidentSuspected);
+    socket.on('incident_cancelled', handleIncidentCancelled);
+    socket.on('suspected_incident_promoted', handleSuspectedIncidentPromoted);
+    socket.on('dead_man_collapse_detected', handleDeadManCollapseDetected);
     socket.on('feed_cleared', handleFeedCleared);
     socket.on('image_update', handleImageUpdate);
     socket.on('case_accepted', handleCaseAccepted);
@@ -435,7 +574,9 @@ export const PoliceView: React.FC = () => {
     socket.on('case_locked', handleCaseLocked);
     socket.on('hospital_rejected', handleHospitalRejected);
     socket.on('incident_claimed', handleIncidentClaimed);
+    socket.on('ambulance_arrived', handleAmbulanceArrived);
     socket.on('ambulance_location_update', handleAmbulanceLocationUpdate);
+    socket.on('traffic_signal_preempted', handleTrafficSignalPreempted);
 
     return () => {
       socket.off('connect', handleConnect);
@@ -443,6 +584,10 @@ export const PoliceView: React.FC = () => {
       socket.off('connect_error', handleConnectError);
       socket.io.off('reconnect_attempt', handleReconnectAttempt);
       socket.off('new_incident', handleNewIncident);
+      socket.off('incident_suspected', handleIncidentSuspected);
+      socket.off('incident_cancelled', handleIncidentCancelled);
+      socket.off('suspected_incident_promoted', handleSuspectedIncidentPromoted);
+      socket.off('dead_man_collapse_detected', handleDeadManCollapseDetected);
       socket.off('feed_cleared', handleFeedCleared);
       socket.off('image_update', handleImageUpdate);
       socket.off('case_accepted', handleCaseAccepted);
@@ -451,9 +596,11 @@ export const PoliceView: React.FC = () => {
       socket.off('case_locked', handleCaseLocked);
       socket.off('hospital_rejected', handleHospitalRejected);
       socket.off('incident_claimed', handleIncidentClaimed);
+      socket.off('ambulance_arrived', handleAmbulanceArrived);
       socket.off('ambulance_location_update', handleAmbulanceLocationUpdate);
+      socket.off('traffic_signal_preempted', handleTrafficSignalPreempted);
     };
-  }, [playPoliceChime, fetchPoliceIncidents]);
+  }, [currentUser, playPoliceChime, fetchPoliceIncidents]);
 
   const handleClearFeed = async () => {
     setIncidents([]);
@@ -463,6 +610,26 @@ export const PoliceView: React.FC = () => {
       await authFetch(`${BACKEND_API_BASE}/incidents`, { method: 'DELETE' });
     } catch {
       // ignore
+    }
+  };
+
+  const handleSimulateDeadManCollapse = async () => {
+    setIsSimulatingCollapse(true);
+    try {
+      await fetch(`${BACKEND_API_BASE}/sentinel/simulate-collapse`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          vehiclePlate: 'KA-01-EA-108',
+          speedKmh: 94.6,
+          latitude: 12.9716,
+          longitude: 77.5946,
+        }),
+      });
+    } catch (err) {
+      console.error('Failed to simulate dead-man collapse', err);
+    } finally {
+      setIsSimulatingCollapse(false);
     }
   };
 
@@ -583,6 +750,29 @@ export const PoliceView: React.FC = () => {
           >
             {soundEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
             <span>{soundEnabled ? 'Siren ON' : 'Muted'}</span>
+          </button>
+
+          <button
+            onClick={handleSimulateDeadManCollapse}
+            disabled={isSimulatingCollapse}
+            title="Simulate high-speed vehicle telemetry collapsing instantly with phone pulverized in impact"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.35rem',
+              padding: '0.5rem 0.75rem',
+              background: '#7f1d1d',
+              border: '1px solid #ef4444',
+              borderRadius: '0.375rem',
+              color: '#fee2e2',
+              cursor: isSimulatingCollapse ? 'not-allowed' : 'pointer',
+              fontSize: '0.8rem',
+              fontWeight: 700,
+              boxShadow: '0 2px 8px rgba(239, 68, 68, 0.25)',
+            }}
+          >
+            <Radio size={15} color="#fca5a5" />
+            <span>{isSimulatingCollapse ? 'Simulating...' : 'Simulate Phone Collapse'}</span>
           </button>
 
           {incidents.length > 0 && (
@@ -715,6 +905,43 @@ export const PoliceView: React.FC = () => {
             PostGIS 8km Triage Ring
           </div>
         </div>
+
+        <div
+          style={{
+            background: Object.values(preemptedSignals).some((s) => s.status === 'GRANTED' || s.status === 'ACTIVE')
+              ? '#ecfdf5'
+              : '#ffffff',
+            borderRadius: '0.5rem',
+            padding: '1rem',
+            border: Object.values(preemptedSignals).some((s) => s.status === 'GRANTED' || s.status === 'ACTIVE')
+              ? '1.5px solid #10b981'
+              : '1px solid #e2e8f0',
+            boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+          }}
+        >
+          <div style={{ color: '#64748b', fontSize: '0.75rem', fontWeight: 600 }}>
+            C-V2X GREEN CORRIDOR
+          </div>
+          <div
+            style={{
+              fontSize: '1.1rem',
+              fontWeight: 700,
+              color: Object.values(preemptedSignals).some((s) => s.status === 'GRANTED' || s.status === 'ACTIVE')
+                ? '#047857'
+                : '#475569',
+              marginTop: '0.35rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.35rem',
+            }}
+          >
+            <span>
+              {Object.values(preemptedSignals).some((s) => s.status === 'GRANTED' || s.status === 'ACTIVE')
+                ? '🟢 Preemption Active'
+                : '🚦 ITMS Standby'}
+            </span>
+          </div>
+        </div>
       </div>
 
       {/* Incidents Stream Header with View Mode Switcher */}
@@ -833,6 +1060,7 @@ export const PoliceView: React.FC = () => {
               selectedIncidentId={selectedIncidentId}
               onSelectIncident={(inc) => setSelectedIncidentId(inc.id)}
               onImageClick={(img) => setLightboxImage(img)}
+              preemptedSignals={preemptedSignals}
             />
 
             {/* Quick incident ticker below map when in Map mode */}

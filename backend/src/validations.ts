@@ -1,6 +1,9 @@
 import { z } from 'zod';
 
 export const createIncidentSchema = z.object({
+  id: z.string().uuid({ message: 'Incident ID must be a valid UUID' }).optional(),
+  idempotency_key: z.string().optional(),
+  status: z.enum(['detected', 'broadcasting', 'suspected', 'cancelled']).optional(),
   latitude: z
     .number({
       required_error: 'Latitude is required',
@@ -33,11 +36,13 @@ export const updateIncidentStatusSchema = z
         'resolved',
         'escalated',
         'unmatched',
+        'suspected',
+        'cancelled',
       ],
       {
         errorMap: () => ({
           message:
-            "Status must be one of: 'detected', 'broadcasting', 'accepted', 'en_route', 'resolved', 'escalated', 'unmatched'",
+            "Status must be one of: 'detected', 'broadcasting', 'accepted', 'en_route', 'resolved', 'escalated', 'unmatched', 'suspected', 'cancelled'",
         }),
       },
     ),
@@ -99,6 +104,21 @@ export const nearbyIncidentsQuerySchema = z.object({
 
 export const claimIncidentSchema = z.object({
   ambulance_id: z.string().min(1, { message: 'ambulance_id cannot be empty' }),
+  ambulance_plate: z.string().optional(),
+  driver_name: z.string().optional(),
+  driver_phone: z.string().optional(),
+  origin_station: z.string().optional(),
+});
+
+export const ambulanceArrivedSchema = z.object({
+  ambulance_id: z.string().min(1, { message: 'ambulance_id cannot be empty' }),
+  latitude: z.number().min(-90).max(90).optional(),
+  longitude: z.number().min(-180).max(180).optional(),
+  arrived_at: z.string().optional(),
+  ambulance_plate: z.string().optional(),
+  driver_name: z.string().optional(),
+  driver_phone: z.string().optional(),
+  origin_station: z.string().optional(),
 });
 
 export const ambulanceLocationSchema = z.object({

@@ -8,10 +8,15 @@ import 'package:socket_io_client/socket_io_client.dart' as io;
 import 'package:url_launcher/url_launcher.dart';
 import '../models/crash_biomechanics_model.dart';
 import '../models/abha_emergency_vault_model.dart';
+import '../models/cv2x_standards_model.dart';
 import '../models/incident_model.dart';
 import '../services/api_client.dart';
 import '../services/crash_detector_service.dart';
+import '../services/emergency_sms_service.dart';
 import '../services/incident_tracking_service.dart';
+import '../services/traffic_signal_service.dart';
+import '../services/vehicle_obu_service.dart';
+import '../widgets/cv2x_hardware_hub_dialog.dart';
 import 'intake_screen.dart';
 
 /// Traffic segment model representing a partitioned polyline with speed-based traffic color
@@ -37,6 +42,9 @@ class TrafficJunction {
   final bool isPreemptedGreen;
   final double distanceMeters;
   final int remainingClearanceSeconds;
+  final String controllerId;
+  final String source;
+  final SignalPreemptionState preemptionState;
 
   TrafficJunction({
     required this.id,
@@ -45,6 +53,9 @@ class TrafficJunction {
     required this.isPreemptedGreen,
     required this.distanceMeters,
     this.remainingClearanceSeconds = 0,
+    this.controllerId = 'BTP-ATC-101',
+    this.source = 'Municipal ITMS Registry',
+    this.preemptionState = SignalPreemptionState.normalCycle,
   });
 }
 
@@ -99,11 +110,30 @@ class _AmbulanceDispatchScreenState extends State<AmbulanceDispatchScreen> {
   final List<Map<String, String>> _rejections = [];
   bool _showTriageMatrix = false;
 
+  // Phase 14: Ambulance Profile, Driver Contact & On-Scene Arrival State
+  final String _ambulancePlate = 'KA-01-EA-108';
+  final String _driverName = 'Ramesh Kumar';
+  final String _driverPhone = '+91 98450 12345';
+  final String _originStation = 'Manipal Hospital HAL Depot Base';
+
+  bool _hasArrivedOnScene = false;
+  DateTime? _arrivedAt;
+  bool _isMarkingArrival = false;
+  bool _arrivalNotificationSent = false;
+  String _routeLeg = 'to_scene'; // 'to_scene' | 'to_hospital'
+
   @override
   void initState() {
     super.initState();
     _apiClient = widget.apiClient ?? ApiClient();
     _initAmbulanceLocation();
+
+    // Check if incident already recorded arrival
+    if (widget.incident.arrivedAt != null) {
+      _hasArrivedOnScene = true;
+      _arrivedAt = widget.incident.arrivedAt;
+      _routeLeg = 'to_hospital';
+    }
 
     // Join the incident socket room via IncidentTrackingService
     IncidentTrackingService.instance.trackIncident(widget.incident.id);
@@ -114,13 +144,17 @@ class _AmbulanceDispatchScreenState extends State<AmbulanceDispatchScreen> {
     // Start periodic ambulance GPS beacon (emits to incident socket room)
     _startTelemetryBeacon();
 
-    // If already accepted, fetch real roadway route immediately
-    if (widget.incident.acceptedHospital != null) {
+    // Fetch initial roadway route:
+    // If en route to scene, route from ambulance position to accident scene.
+    // If already arrived on scene and hospital accepted, route from scene to hospital.
+    final ambPos = LatLng(_ambulanceLat, _ambulanceLng);
+    final incPos = LatLng(widget.incident.latitude, widget.incident.longitude);
+
+    if (_routeLeg == 'to_scene') {
+      _fetchRoadRoute(ambPos, incPos);
+    } else if (widget.incident.acceptedHospital != null) {
       final hosp = widget.incident.acceptedHospital!;
-      _fetchRoadRoute(
-        LatLng(widget.incident.latitude, widget.incident.longitude),
-        LatLng(hosp.latitude, hosp.longitude),
-      );
+      _fetchRoadRoute(incPos, LatLng(hosp.latitude, hosp.longitude));
     }
   }
 
@@ -178,6 +212,10 @@ class _AmbulanceDispatchScreenState extends State<AmbulanceDispatchScreen> {
     final result = await _apiClient.claimIncident(
       incidentId: widget.incident.id,
       ambulanceId: widget.ambulanceId,
+      ambulancePlate: _ambulancePlate,
+      driverName: _driverName,
+      driverPhone: _driverPhone,
+      originStation: _originStation,
     );
 
     if (!mounted) return;
@@ -185,7 +223,7 @@ class _AmbulanceDispatchScreenState extends State<AmbulanceDispatchScreen> {
     if (result.isSuccess) {
       setState(() {
         _isClaimed = true;
-        _claimMessage = 'Assigned to Unit ${widget.ambulanceId}';
+        _claimMessage = 'Assigned to Unit ${widget.ambulanceId} ($_ambulancePlate)';
       });
     } else {
       setState(() {
@@ -227,6 +265,20 @@ class _AmbulanceDispatchScreenState extends State<AmbulanceDispatchScreen> {
         if (mounted) setState(() => _isSocketConnected = false);
       });
 
+      // Listen for real-time ambulance arrival confirmations
+      socket.on('ambulance_arrived', (data) {
+        if (data is Map && mounted) {
+          final incId = data['incident_id']?.toString();
+          if (incId == widget.incident.id && !_hasArrivedOnScene) {
+            setState(() {
+              _hasArrivedOnScene = true;
+              _arrivedAt = DateTime.tryParse(data['arrived_at']?.toString() ?? '') ?? DateTime.now();
+              _routeLeg = 'to_hospital';
+            });
+          }
+        }
+      });
+
       // Listen for real-time hospital rejections
       socket.on('hospital_rejected', (data) {
         if (data is Map && mounted) {
@@ -248,7 +300,7 @@ class _AmbulanceDispatchScreenState extends State<AmbulanceDispatchScreen> {
           if (hosp != null) {
             final hLat = (hosp['latitude'] as num?)?.toDouble();
             final hLng = (hosp['longitude'] as num?)?.toDouble();
-            if (hLat != null && hLng != null) {
+            if (hLat != null && hLng != null && _routeLeg == 'to_hospital') {
               _fetchRoadRoute(
                 LatLng(widget.incident.latitude, widget.incident.longitude),
                 LatLng(hLat, hLng),
@@ -271,11 +323,180 @@ class _AmbulanceDispatchScreenState extends State<AmbulanceDispatchScreen> {
       _beaconSocket!.emit('ambulance_location', {
         'incident_id': widget.incident.id,
         'ambulance_id': widget.ambulanceId,
+        'ambulance_plate': _ambulancePlate,
+        'driver_name': _driverName,
+        'driver_phone': _driverPhone,
+        'origin_station': _originStation,
         'latitude': _ambulanceLat,
         'longitude': _ambulanceLng,
         'speed_kmh': 48.5,
         'heading': 135.0,
       });
+    }
+
+    // Broadcast SAE J2735 Basic Safety Message (BSM) via in-vehicle OBU HAL
+    VehicleObuService.instance.generateBsm(
+      ambulanceId: widget.ambulanceId,
+      plateNumber: _ambulancePlate,
+      position: LatLng(_ambulanceLat, _ambulanceLng),
+      speedKmh: 48.5,
+      heading: 135.0,
+    );
+
+    // Update Real Traffic Signal Preemption States based on live vehicle location
+    TrafficSignalService.instance.updatePreemptionStates(
+      ambulancePosition: LatLng(_ambulanceLat, _ambulanceLng),
+      isGreenCorridorActive: _isGreenCorridorActive,
+      ambulanceSpeedKmh: 48.5,
+    );
+
+    final activeSignals = TrafficSignalService.instance.activeSignals;
+    if (activeSignals.isNotEmpty && mounted) {
+      const distanceCalc = Distance();
+      final ambLoc = LatLng(_ambulanceLat, _ambulanceLng);
+
+      // Check if any signal was just preempted (distance <= 450m)
+      for (final s in activeSignals) {
+        if (_isGreenCorridorActive && s.isPreempted && s.distanceMeters <= 450) {
+          VehicleObuService.instance.requestSignalPreemption(
+            ambulanceId: widget.ambulanceId,
+            targetSignal: s,
+            distanceMeters: s.distanceMeters,
+            speedKmh: 48.5,
+          );
+
+          // Forward to backend socket for Police ITMS synchronization
+          if (_beaconSocket != null && _beaconSocket!.connected) {
+            _beaconSocket!.emit('signal_preempt_request', {
+              'incident_id': widget.incident.id,
+              'ambulance_id': widget.ambulanceId,
+              'ambulance_plate': _ambulancePlate,
+              'intersection_id': s.id,
+              'junction_name': s.name,
+              'eta_seconds': s.preemptionTimerSeconds,
+            });
+          }
+        }
+      }
+
+      setState(() {
+        _trafficJunctions = activeSignals.map((s) {
+          final d = distanceCalc.as(LengthUnit.Meter, ambLoc, s.location);
+          return TrafficJunction(
+            id: s.id,
+            name: s.name,
+            location: s.location,
+            distanceMeters: d,
+            isPreemptedGreen: s.isPreempted,
+            remainingClearanceSeconds: s.preemptionTimerSeconds,
+            controllerId: s.controllerId,
+            source: s.source,
+            preemptionState: s.preemptionState,
+          );
+        }).toList();
+      });
+    }
+
+    // Zero-Touch Geofence Arrival Check (Auto-detect when ambulance is within 75m of incident location)
+    if (!_hasArrivedOnScene && !_isMarkingArrival) {
+      const distanceCalc = Distance();
+      final currentPos = LatLng(_ambulanceLat, _ambulanceLng);
+      final incidentPos = LatLng(widget.incident.latitude, widget.incident.longitude);
+      final distMeters = distanceCalc.as(LengthUnit.Meter, currentPos, incidentPos);
+
+      if (distMeters <= 75.0) {
+        _triggerOnSceneArrival(autoGeofence: true);
+      }
+    }
+  }
+
+  /// Triggers on-scene arrival automatically or manually
+  Future<void> _triggerOnSceneArrival({bool autoGeofence = false}) async {
+    if (_hasArrivedOnScene || _isMarkingArrival) return;
+    setState(() => _isMarkingArrival = true);
+
+    final arrivalTime = DateTime.now();
+
+    // 1. Post arrival to backend database
+    await _apiClient.markAmbulanceArrived(
+      incidentId: widget.incident.id,
+      ambulanceId: widget.ambulanceId,
+      ambulancePlate: _ambulancePlate,
+      driverName: _driverName,
+      driverPhone: _driverPhone,
+      originStation: _originStation,
+      latitude: _ambulanceLat,
+      longitude: _ambulanceLng,
+      arrivedAt: arrivalTime,
+    );
+
+    // 2. Emit socket event for instant real-time sync across dashboard
+    if (_beaconSocket != null && _beaconSocket!.connected) {
+      _beaconSocket!.emit('ambulance_arrived', {
+        'incident_id': widget.incident.id,
+        'ambulance_id': widget.ambulanceId,
+        'ambulance_plate': _ambulancePlate,
+        'driver_name': _driverName,
+        'driver_phone': _driverPhone,
+        'origin_station': _originStation,
+        'arrived_at': arrivalTime.toIso8601String(),
+        'latitude': _ambulanceLat,
+        'longitude': _ambulanceLng,
+      });
+    }
+
+    // 3. Dispatch automated SMS alert to Emergency Contacts
+    if (!_arrivalNotificationSent) {
+      _arrivalNotificationSent = true;
+      final landmark = 'Lat: ${widget.incident.latitude.toStringAsFixed(4)}, Lng: ${widget.incident.longitude.toStringAsFixed(4)} (Depot: $_originStation)';
+      EmergencySmsService.instance.sendAmbulanceArrivedAlert(
+        incidentId: widget.incident.id,
+        ambulanceId: widget.ambulanceId,
+        vehiclePlate: _ambulancePlate,
+        driverName: _driverName,
+        driverPhone: _driverPhone,
+        locationDescription: landmark,
+        context: mounted ? context : null,
+      );
+    }
+
+    if (mounted) {
+      setState(() {
+        _hasArrivedOnScene = true;
+        _arrivedAt = arrivalTime;
+        _isMarkingArrival = false;
+        _routeLeg = 'to_hospital';
+      });
+
+      // Refetch route to hospital if accepted
+      if (widget.incident.acceptedHospital != null) {
+        final hosp = widget.incident.acceptedHospital!;
+        _fetchRoadRoute(
+          LatLng(widget.incident.latitude, widget.incident.longitude),
+          LatLng(hosp.latitude, hosp.longitude),
+        );
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.check_circle, color: Colors.white),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  autoGeofence
+                      ? 'Geofence Triggered: Ambulance $_ambulancePlate ARRIVED ON SCENE! Emergency contacts & Police notified.'
+                      : 'Ambulance $_ambulancePlate ARRIVED ON SCENE! SMS sent to contacts with driver number ($_driverPhone).',
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: const Color(0xFF059669),
+          duration: const Duration(seconds: 4),
+        ),
+      );
     }
   }
 
@@ -310,45 +531,24 @@ class _AmbulanceDispatchScreenState extends State<AmbulanceDispatchScreen> {
           int heavyCount = 0;
           int moderateCount = 0;
 
-          // Compute C-V2X Junctions along route
-          final List<TrafficJunction> junctions = [];
-          if (pts.length >= 6) {
-            final distanceCalc = const Distance();
-            final ambLoc = LatLng(_ambulanceLat, _ambulanceLng);
-
-            final j1Pt = pts[(pts.length * 0.25).floor()];
-            final j2Pt = pts[(pts.length * 0.55).floor()];
-            final j3Pt = pts[(pts.length * 0.82).floor()];
-
-            final d1 = distanceCalc.as(LengthUnit.Meter, ambLoc, j1Pt);
-            final d2 = distanceCalc.as(LengthUnit.Meter, ambLoc, j2Pt);
-            final d3 = distanceCalc.as(LengthUnit.Meter, ambLoc, j3Pt);
-
-            junctions.add(TrafficJunction(
-              id: 'jcn-1',
-              name: 'Indiranagar 100ft Crossing',
-              location: j1Pt,
-              distanceMeters: d1,
-              isPreemptedGreen: _isGreenCorridorActive && d1 <= 950,
-              remainingClearanceSeconds: 0,
-            ));
-            junctions.add(TrafficJunction(
-              id: 'jcn-2',
-              name: 'Sony World Junction',
-              location: j2Pt,
-              distanceMeters: d2,
-              isPreemptedGreen: _isGreenCorridorActive && d2 <= 950,
-              remainingClearanceSeconds: 0,
-            ));
-            junctions.add(TrafficJunction(
-              id: 'jcn-3',
-              name: 'Command Hospital North Gate',
-              location: j3Pt,
-              distanceMeters: d3,
-              isPreemptedGreen: _isGreenCorridorActive && d3 <= 950,
-              remainingClearanceSeconds: 0,
-            ));
-          }
+          // Ingest Real-World Traffic Signals via TrafficSignalService (OSM Overpass + Municipal ITMS)
+          final realSignals = await TrafficSignalService.instance.loadSignalsForRoute(pts);
+          const distanceCalc = Distance();
+          final ambLoc = LatLng(_ambulanceLat, _ambulanceLng);
+          final List<TrafficJunction> junctions = realSignals.map((s) {
+            final d = distanceCalc.as(LengthUnit.Meter, ambLoc, s.location);
+            return TrafficJunction(
+              id: s.id,
+              name: s.name,
+              location: s.location,
+              distanceMeters: d,
+              isPreemptedGreen: _isGreenCorridorActive && d <= 500,
+              remainingClearanceSeconds: s.preemptionTimerSeconds,
+              controllerId: s.controllerId,
+              source: s.source,
+              preemptionState: s.preemptionState,
+            );
+          }).toList();
 
           Color getColorForSpeed(double speedMps, int index, int total) {
             // If Green Corridor is active, the primary approach is cleared as Neon Emerald Green Wave
@@ -530,7 +730,7 @@ class _AmbulanceDispatchScreenState extends State<AmbulanceDispatchScreen> {
 
           return Column(
             children: [
-              // Top Status Card
+              // Top Status & Driver Profile Card
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(12),
@@ -538,6 +738,203 @@ class _AmbulanceDispatchScreenState extends State<AmbulanceDispatchScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // Ambulance Profile & Driver Phone HUD
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.red.shade200),
+                        boxShadow: const [
+                          BoxShadow(color: Colors.black12, blurRadius: 2, offset: Offset(0, 1)),
+                        ],
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.red.shade700,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              _ambulancePlate,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 11,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Driver: $_driverName (Ph: $_driverPhone)',
+                                  style: const TextStyle(
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF1E293B),
+                                  ),
+                                ),
+                                Text(
+                                  'Origin: $_originStation',
+                                  style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            constraints: const BoxConstraints(),
+                            padding: EdgeInsets.zero,
+                            icon: const Icon(Icons.phone, size: 18, color: Color(0xFF047857)),
+                            onPressed: () {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Calling Driver $_driverName: $_driverPhone'),
+                                  backgroundColor: const Color(0xFF047857),
+                                ),
+                              );
+                            },
+                            tooltip: 'Call Driver',
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // Accident Scene Location Card
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFEF2F2),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: const Color(0xFFFECACA)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.location_on, color: Color(0xFFDC2626), size: 20),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    const Text(
+                                      'INCIDENT SCENE: ',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w900,
+                                        color: Color(0xFF991B1B),
+                                      ),
+                                    ),
+                                    Text(
+                                      '${widget.incident.latitude.toStringAsFixed(4)}, ${widget.incident.longitude.toStringAsFixed(4)}',
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                        color: Color(0xFF7F1D1D),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                Text(
+                                  'Distance from Ambulance: ${(const Distance().as(LengthUnit.Meter, LatLng(_ambulanceLat, _ambulanceLng), incidentLocation) / 1000).toStringAsFixed(2)} km',
+                                  style: const TextStyle(fontSize: 10.5, color: Color(0xFFB91C1C)),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // On-Scene Arrival Banner & Confirmation
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: _hasArrivedOnScene ? const Color(0xFFECFDF5) : const Color(0xFFFFFBEB),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: _hasArrivedOnScene ? const Color(0xFFA7F3D0) : const Color(0xFFFDE68A),
+                          width: 1.5,
+                        ),
+                      ),
+                      child: _hasArrivedOnScene
+                          ? Row(
+                              children: [
+                                const Icon(Icons.check_circle, color: Color(0xFF059669), size: 22),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'ARRIVED ON SCENE (${_arrivedAt != null ? "${_arrivedAt!.hour}:${_arrivedAt!.minute.toString().padLeft(2, '0')}" : "15:35"} IST)',
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w900,
+                                          fontSize: 11.5,
+                                          color: Color(0xFF065F46),
+                                        ),
+                                      ),
+                                      const Text(
+                                        'Emergency contacts notified via SMS with driver direct line • Police informed',
+                                        style: TextStyle(fontSize: 10, color: Color(0xFF047857)),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            )
+                          : Row(
+                              children: [
+                                const Icon(Icons.radar, color: Color(0xFFD97706), size: 20),
+                                const SizedBox(width: 8),
+                                const Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'ZERO-TOUCH GEOFENCE ACTIVE (<= 75m)',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w800,
+                                          fontSize: 11,
+                                          color: Color(0xFF92400E),
+                                        ),
+                                      ),
+                                      Text(
+                                        'Auto-notifies contacts with driver phone upon arrival',
+                                        style: TextStyle(fontSize: 10, color: Color(0xFFB45309)),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                ElevatedButton(
+                                  onPressed: _isMarkingArrival ? null : () => _triggerOnSceneArrival(autoGeofence: false),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF059669),
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                                    elevation: 2,
+                                  ),
+                                  child: _isMarkingArrival
+                                      ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                                      : const Text('Mark Arrived', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                                ),
+                              ],
+                            ),
+                    ),
+
+                    // Destination Hospital Status
                     Row(
                       children: [
                         Icon(
@@ -582,6 +979,50 @@ class _AmbulanceDispatchScreenState extends State<AmbulanceDispatchScreen> {
                         ),
                       ],
                     ),
+
+                    // Route Leg Switcher (En Route to Scene vs En Route to Hospital)
+                    if (isAccepted) ...[
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: () {
+                                setState(() => _routeLeg = 'to_scene');
+                                _fetchRoadRoute(LatLng(_ambulanceLat, _ambulanceLng), incidentLocation);
+                              },
+                              icon: const Icon(Icons.crisis_alert, size: 14),
+                              label: const Text('Leg 1: Scene', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                              style: OutlinedButton.styleFrom(
+                                backgroundColor: _routeLeg == 'to_scene' ? const Color(0xFFDC2626) : Colors.white,
+                                foregroundColor: _routeLeg == 'to_scene' ? Colors.white : const Color(0xFFDC2626),
+                                side: const BorderSide(color: Color(0xFFDC2626)),
+                                padding: const EdgeInsets.symmetric(vertical: 4),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: hospitalLocation == null
+                                  ? null
+                                  : () {
+                                      setState(() => _routeLeg = 'to_hospital');
+                                      _fetchRoadRoute(incidentLocation, hospitalLocation!);
+                                    },
+                              icon: const Icon(Icons.local_hospital, size: 14),
+                              label: const Text('Leg 2: Hospital', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                              style: OutlinedButton.styleFrom(
+                                backgroundColor: _routeLeg == 'to_hospital' ? const Color(0xFF047857) : Colors.white,
+                                foregroundColor: _routeLeg == 'to_hospital' ? Colors.white : const Color(0xFF047857),
+                                side: const BorderSide(color: Color(0xFF047857)),
+                                padding: const EdgeInsets.symmetric(vertical: 4),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
 
                     // Roadway Routing & Live Traffic Banner
                     if (_roadDistanceKm != null) ...[
@@ -732,7 +1173,7 @@ class _AmbulanceDispatchScreenState extends State<AmbulanceDispatchScreen> {
                       ],
                     ],
 
-                    // Advanced Trauma Diagnostics: AI Biomechanics & ABHA Vault
+                    // Advanced Trauma Diagnostics: AI Biomechanics & ABHA Vault & C-V2X Hub
                     const SizedBox(height: 6),
                     Row(
                       children: [
@@ -741,7 +1182,7 @@ class _AmbulanceDispatchScreenState extends State<AmbulanceDispatchScreen> {
                             onTap: () => _showBiomechanicsSheet(context),
                             borderRadius: BorderRadius.circular(8),
                             child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
                               decoration: BoxDecoration(
                                 color: const Color(0xFFFEF2F2),
                                 borderRadius: BorderRadius.circular(8),
@@ -750,24 +1191,24 @@ class _AmbulanceDispatchScreenState extends State<AmbulanceDispatchScreen> {
                               child: const Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  Icon(Icons.psychology, size: 14, color: Color(0xFFDC2626)),
-                                  SizedBox(width: 4),
+                                  Icon(Icons.psychology, size: 13, color: Color(0xFFDC2626)),
+                                  SizedBox(width: 3),
                                   Text(
-                                    'AI Trauma Blackbox',
-                                    style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Color(0xFF991B1B)),
+                                    'AI Blackbox',
+                                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF991B1B)),
                                   ),
                                 ],
                               ),
                             ),
                           ),
                         ),
-                        const SizedBox(width: 8),
+                        const SizedBox(width: 6),
                         Expanded(
                           child: InkWell(
                             onTap: () => _showAbhaVaultSheet(context),
                             borderRadius: BorderRadius.circular(8),
                             child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
                               decoration: BoxDecoration(
                                 color: const Color(0xFFF0FDF4),
                                 borderRadius: BorderRadius.circular(8),
@@ -776,11 +1217,40 @@ class _AmbulanceDispatchScreenState extends State<AmbulanceDispatchScreen> {
                               child: const Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  Icon(Icons.verified_user, size: 14, color: Color(0xFF16A34A)),
-                                  SizedBox(width: 4),
+                                  Icon(Icons.verified_user, size: 13, color: Color(0xFF16A34A)),
+                                  SizedBox(width: 3),
                                   Text(
-                                    'ABHA Health Vault',
-                                    style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Color(0xFF166534)),
+                                    'ABHA Vault',
+                                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF166534)),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: InkWell(
+                            onTap: () => showDialog(
+                              context: context,
+                              builder: (_) => const Cv2xHardwareHubDialog(),
+                            ),
+                            borderRadius: BorderRadius.circular(8),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF0F172A),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: const Color(0xFF38BDF8)),
+                              ),
+                              child: const Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.settings_input_antenna, size: 13, color: Color(0xFF38BDF8)),
+                                  SizedBox(width: 3),
+                                  Text(
+                                    'C-V2X OBU Hub',
+                                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF38BDF8)),
                                   ),
                                 ],
                               ),
@@ -974,48 +1444,72 @@ class _AmbulanceDispatchScreenState extends State<AmbulanceDispatchScreen> {
                                 ),
                               ),
 
-                            // Traffic Signal Preemption Markers along the Route
+                            // Real Traffic Signal Preemption Markers along the Route
                             ..._trafficJunctions.map((jcn) {
+                              final isGreen = jcn.isPreemptedGreen;
+                              final isYellow = jcn.preemptionState == SignalPreemptionState.yellowClearance;
+                              final badgeBg = isGreen
+                                  ? const Color(0xFF065F46)
+                                  : (isYellow ? const Color(0xFF78350F) : const Color(0xFF7F1D1D));
+                              final borderCol = isGreen
+                                  ? const Color(0xFF34D399)
+                                  : (isYellow ? const Color(0xFFFBBF24) : const Color(0xFFFCA5A5));
+                              final statusText = isGreen
+                                  ? 'GREEN (${jcn.remainingClearanceSeconds}s)'
+                                  : (isYellow ? 'CLEAR (4s)' : 'RED');
+
                               return Marker(
                                 point: jcn.location,
-                                width: 78,
-                                height: 48,
+                                width: 112,
+                                height: 50,
                                 child: Column(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2.5),
+                                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
                                       decoration: BoxDecoration(
-                                        color: jcn.isPreemptedGreen ? const Color(0xFF065F46) : const Color(0xFF7F1D1D),
-                                        borderRadius: BorderRadius.circular(10),
-                                        border: Border.all(
-                                          color: jcn.isPreemptedGreen ? const Color(0xFF34D399) : const Color(0xFFFCA5A5),
-                                          width: 1.5,
-                                        ),
+                                        color: badgeBg,
+                                        borderRadius: BorderRadius.circular(8),
+                                        border: Border.all(color: borderCol, width: 1.2),
                                         boxShadow: [
                                           BoxShadow(
-                                            color: (jcn.isPreemptedGreen ? const Color(0xFF10B981) : Colors.red).withOpacity(0.4),
-                                            blurRadius: 6,
+                                            color: (isGreen ? const Color(0xFF10B981) : Colors.red).withOpacity(0.35),
+                                            blurRadius: 5,
                                             offset: const Offset(0, 2),
                                           ),
                                         ],
                                       ),
-                                      child: Row(
+                                      child: Column(
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
-                                          Icon(
-                                            Icons.traffic,
-                                            size: 11,
-                                            color: jcn.isPreemptedGreen ? const Color(0xFF34D399) : Colors.white,
-                                          ),
-                                          const SizedBox(width: 3),
                                           Text(
-                                            jcn.isPreemptedGreen ? 'GREEN' : 'RED',
+                                            jcn.name,
                                             style: const TextStyle(
-                                              fontSize: 9.5,
-                                              fontWeight: FontWeight.w900,
+                                              fontSize: 7.5,
+                                              fontWeight: FontWeight.bold,
                                               color: Colors.white,
                                             ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                          Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                Icons.traffic,
+                                                size: 9.5,
+                                                color: isGreen ? const Color(0xFF34D399) : (isYellow ? Colors.amber : Colors.white),
+                                              ),
+                                              const SizedBox(width: 2.5),
+                                              Text(
+                                                statusText,
+                                                style: const TextStyle(
+                                                  fontSize: 8.5,
+                                                  fontWeight: FontWeight.w900,
+                                                  color: Colors.white,
+                                                ),
+                                              ),
+                                            ],
                                           ),
                                         ],
                                       ),
@@ -1025,7 +1519,7 @@ class _AmbulanceDispatchScreenState extends State<AmbulanceDispatchScreen> {
                                       width: 6,
                                       height: 6,
                                       decoration: BoxDecoration(
-                                        color: jcn.isPreemptedGreen ? const Color(0xFF10B981) : Colors.red,
+                                        color: isGreen ? const Color(0xFF10B981) : (isYellow ? Colors.amber : Colors.red),
                                         shape: BoxShape.circle,
                                         border: Border.all(color: Colors.white, width: 1),
                                       ),
@@ -1049,7 +1543,14 @@ class _AmbulanceDispatchScreenState extends State<AmbulanceDispatchScreen> {
                           decoration: BoxDecoration(
                             color: Colors.black.withOpacity(0.85),
                             borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: const Color(0xFF10B981), width: 1.5),
+                            border: Border.all(
+                              color: _trafficJunctions.first.isPreemptedGreen
+                                  ? const Color(0xFF10B981)
+                                  : (_trafficJunctions.first.preemptionState == SignalPreemptionState.yellowClearance
+                                      ? Colors.amber
+                                      : const Color(0xFFEF4444)),
+                              width: 1.5,
+                            ),
                             boxShadow: const [
                               BoxShadow(color: Colors.black38, blurRadius: 6, offset: Offset(0, 2)),
                             ],
@@ -1060,18 +1561,22 @@ class _AmbulanceDispatchScreenState extends State<AmbulanceDispatchScreen> {
                               Container(
                                 width: 8,
                                 height: 8,
-                                decoration: const BoxDecoration(
-                                  color: Color(0xFF10B981),
+                                decoration: BoxDecoration(
+                                  color: _trafficJunctions.first.isPreemptedGreen
+                                      ? const Color(0xFF10B981)
+                                      : (_trafficJunctions.first.preemptionState == SignalPreemptionState.yellowClearance
+                                          ? Colors.amber
+                                          : const Color(0xFFEF4444)),
                                   shape: BoxShape.circle,
                                 ),
                               ),
                               const SizedBox(width: 6),
                               Text(
-                                'Next Signal: ${_trafficJunctions.first.name} (${_trafficJunctions.first.distanceMeters.toStringAsFixed(0)}m) • PREEMPTED 🟢',
+                                'Signal Ahead: ${_trafficJunctions.first.name} (${_trafficJunctions.first.distanceMeters.toStringAsFixed(0)}m) • ${_trafficJunctions.first.isPreemptedGreen ? "PREEMPTED 🟢 (${_trafficJunctions.first.remainingClearanceSeconds}s)" : (_trafficJunctions.first.preemptionState == SignalPreemptionState.yellowClearance ? "CLEARANCE 🟡" : "NORMAL RED 🔴")}',
                                 style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 10.5,
+                                  fontSize: 10,
                                   fontWeight: FontWeight.bold,
+                                  color: Colors.white,
                                 ),
                               ),
                             ],
@@ -1118,15 +1623,23 @@ class _AmbulanceDispatchScreenState extends State<AmbulanceDispatchScreen> {
                       top: 12,
                       right: 12,
                       child: ElevatedButton.icon(
-                        onPressed: () => _openGoogleMapsNavigation(
-                          destLat: hospitalLocation?.latitude ?? widget.incident.latitude,
-                          destLng: hospitalLocation?.longitude ?? widget.incident.longitude,
-                          originLat: _ambulanceLat,
-                          originLng: _ambulanceLng,
-                        ),
+                        onPressed: () {
+                          final targetLat = (_routeLeg == 'to_hospital' && hospitalLocation != null)
+                              ? hospitalLocation.latitude
+                              : widget.incident.latitude;
+                          final targetLng = (_routeLeg == 'to_hospital' && hospitalLocation != null)
+                              ? hospitalLocation.longitude
+                              : widget.incident.longitude;
+                          _openGoogleMapsNavigation(
+                            destLat: targetLat,
+                            destLng: targetLng,
+                            originLat: _ambulanceLat,
+                            originLng: _ambulanceLng,
+                          );
+                        },
                         icon: const Icon(Icons.directions, size: 18),
                         label: Text(
-                          isAccepted ? 'Directions to Hospital' : 'Directions to Scene',
+                          _routeLeg == 'to_hospital' ? 'Directions to Hospital' : 'Directions to Scene',
                           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11.5),
                         ),
                         style: ElevatedButton.styleFrom(
@@ -1163,24 +1676,51 @@ class _AmbulanceDispatchScreenState extends State<AmbulanceDispatchScreen> {
                     children: [
                       // Direct Google Maps Turn-by-Turn Button
                       ElevatedButton.icon(
-                        onPressed: () => _openGoogleMapsNavigation(
-                          destLat: hospitalLocation?.latitude ?? widget.incident.latitude,
-                          destLng: hospitalLocation?.longitude ?? widget.incident.longitude,
-                          originLat: _ambulanceLat,
-                          originLng: _ambulanceLng,
-                        ),
+                        onPressed: () {
+                          final targetLat = (_routeLeg == 'to_hospital' && hospitalLocation != null)
+                              ? hospitalLocation.latitude
+                              : widget.incident.latitude;
+                          final targetLng = (_routeLeg == 'to_hospital' && hospitalLocation != null)
+                              ? hospitalLocation.longitude
+                              : widget.incident.longitude;
+                          _openGoogleMapsNavigation(
+                            destLat: targetLat,
+                            destLng: targetLng,
+                            originLat: _ambulanceLat,
+                            originLng: _ambulanceLng,
+                          );
+                        },
                         icon: const Icon(Icons.navigation, size: 17),
-                        label: const Text('Directions', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5)),
+                        label: Text(
+                          _routeLeg == 'to_hospital' ? 'Hospital Nav' : 'Scene Nav',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                        ),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF2563EB),
                           foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 14),
+                          padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 12),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(10),
                           ),
                         ),
                       ),
                       const SizedBox(width: 8),
+
+                      // Manual On-Scene Arrival Confirmation Button
+                      if (!_hasArrivedOnScene) ...[
+                        ElevatedButton.icon(
+                          onPressed: _isMarkingArrival ? null : () => _triggerOnSceneArrival(autoGeofence: false),
+                          icon: const Icon(Icons.check_circle_outline, size: 16),
+                          label: const Text('Arrived', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF059669),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 10),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                      ],
 
                       // Capture On-Scene Photo (Phase 6 Zero-Gallery Camera Flow)
                       Expanded(

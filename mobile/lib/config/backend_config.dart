@@ -27,8 +27,8 @@ const String kDefaultBackendUrl = String.fromEnvironment(
 
 /// Workstation Wi-Fi / Hotspot LAN IP for physical device testing without ADB reverse.
 /// Current active Wi-Fi IP on workstation:
-const String kDemoWorkstationIp = 'http://10.215.58.149:5000';
-const String kDemoWorkstationAltIp = 'http://192.168.1.21:5000';
+const String kDemoWorkstationIp = 'http://10.167.12.149:5000';
+const String kDemoWorkstationAltIp = 'http://10.215.58.149:5000';
 
 /// Ordered list of candidate backend URLs attempted during network failover:
 List<String> getBackendCandidates([String? overrideBaseUrl]) {
@@ -69,4 +69,15 @@ Future<String> resolveReachableBackendUrl({
     client.close();
   }
   return candidates.isNotEmpty ? candidates.first : kDemoWorkstationIp;
+}
+
+/// Helper class providing clean access to active base HTTP URL
+class BackendConfig {
+  static String get baseHttpUrl =>
+      gActiveBackendUrl ??
+      (kDefaultBackendUrl != 'http://10.0.2.2:5000'
+          ? kDefaultBackendUrl
+          : kDemoWorkstationIp);
+
+  static Future<String> getResolvedUrl() => resolveReachableBackendUrl();
 }
