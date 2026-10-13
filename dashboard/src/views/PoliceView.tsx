@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   ShieldAlert,
-  Activity,
   Radio,
   Trash2,
   Volume2,
@@ -11,7 +10,6 @@ import {
   LayoutGrid,
   X,
   LogOut,
-  CheckCircle2,
 } from 'lucide-react';
 import { IncidentPayload, ConnectionStatus, PreemptedSignalPayload } from '../types';
 import { getSocket, BACKEND_API_BASE, updateSocketAuth } from '../services/socket';
@@ -663,104 +661,100 @@ export const PoliceView: React.FC = () => {
         onRetry={handleManualReconnect}
       />
 
-      {/* Control Room Header */}
+      {/* Unified Executive Tactical Operations Header */}
       <div
         style={{
-          background: '#ffffff',
-          borderRadius: '0.75rem',
+          background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
+          borderRadius: '0.875rem',
           padding: '1.25rem 1.5rem',
-          border: '1px solid #e2e8f0',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-          marginBottom: '1.5rem',
+          border: '1px solid #334155',
+          boxShadow: '0 8px 24px rgba(0, 0, 0, 0.25)',
+          marginBottom: '1.25rem',
           display: 'flex',
           flexWrap: 'wrap',
           alignItems: 'center',
           justifyContent: 'space-between',
           gap: '1rem',
-          borderColor: lastAlertFlash ? '#ef4444' : '#e2e8f0',
+          borderColor: lastAlertFlash ? '#ef4444' : '#334155',
           transition: 'border-color 0.3s ease',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
           <div
             style={{
-              background: '#eff6ff',
-              color: '#1d4ed8',
-              padding: '0.65rem',
-              borderRadius: '0.5rem',
+              background: '#1e3a8a',
+              color: '#60a5fa',
+              padding: '0.75rem',
+              borderRadius: '0.625rem',
+              border: '1.5px solid #3b82f6',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
             }}
           >
-            <Activity size={26} />
+            <ShieldAlert size={26} color="#60a5fa" />
           </div>
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', marginBottom: '0.2rem' }}>
-              <h2
-                style={{
-                  margin: 0,
-                  fontSize: '1.25rem',
-                  fontWeight: 800,
-                  color: '#0f172a',
-                }}
-              >
-                City-Wide Police Control Room
-              </h2>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+              <h1 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: '#f8fafc' }}>
+                BTP & ERSS Police Tactical Command Center
+              </h1>
               <span
                 style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '0.25rem',
-                  fontSize: '0.725rem',
-                  fontWeight: 700,
-                  color: '#1d4ed8',
-                  background: '#dbeafe',
+                  background: '#1e3a8a',
+                  color: '#93c5fd',
                   padding: '0.15rem 0.5rem',
-                  borderRadius: '0.25rem',
-                  border: '1px solid #bfdbfe',
+                  borderRadius: '9999px',
+                  fontSize: '0.7rem',
+                  fontWeight: 800,
+                  border: '1px solid #3b82f6',
                 }}
               >
-                <CheckCircle2 size={12} />
-                <span>Verified Dispatcher: @{currentUser.username}</span>
+                TACTICAL BROADCAST ACTIVE
               </span>
             </div>
-            <p style={{ margin: 0, color: '#64748b', fontSize: '0.825rem' }}>
-              Monitoring all collisions across Bengaluru jurisdiction in real
-              time via <code>all_incidents</code> WebSocket broadcast.
-            </p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginTop: '0.25rem', color: '#94a3b8', fontSize: '0.8rem', flexWrap: 'wrap' }}>
+              <span>Jurisdiction: Bengaluru Urban & Rural Police Control</span>
+              <span>•</span>
+              <span style={{ color: '#60a5fa', fontWeight: 600 }}>
+                Verified Dispatcher: @{currentUser.username}
+              </span>
+            </div>
           </div>
         </div>
 
         {/* Action Controls */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
           <button
+            type="button"
             onClick={() => setSoundEnabled(!soundEnabled)}
-            title={soundEnabled ? 'Mute alert siren' : 'Enable alert siren'}
             style={{
               display: 'flex',
               alignItems: 'center',
               gap: '0.35rem',
-              padding: '0.5rem 0.75rem',
-              background: '#f1f5f9',
-              border: '1px solid #e2e8f0',
+              padding: '0.45rem 0.8rem',
+              background: soundEnabled ? '#1e293b' : '#0f172a',
+              border: `1px solid ${soundEnabled ? '#3b82f6' : '#475569'}`,
               borderRadius: '0.375rem',
-              color: soundEnabled ? '#0f172a' : '#94a3b8',
+              color: soundEnabled ? '#60a5fa' : '#94a3b8',
               cursor: 'pointer',
               fontSize: '0.8rem',
-              fontWeight: 500,
+              fontWeight: 600,
             }}
           >
-            {soundEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
-            <span>{soundEnabled ? 'Siren ON' : 'Muted'}</span>
+            {soundEnabled ? <Volume2 size={15} /> : <VolumeX size={15} />}
+            <span>{soundEnabled ? 'Siren Armed' : 'Muted'}</span>
           </button>
 
           <button
+            type="button"
             onClick={handleSimulateDeadManCollapse}
             disabled={isSimulatingCollapse}
-            title="Simulate high-speed vehicle telemetry collapsing instantly with phone pulverized in impact"
             style={{
               display: 'flex',
               alignItems: 'center',
               gap: '0.35rem',
-              padding: '0.5rem 0.75rem',
+              padding: '0.45rem 0.8rem',
               background: '#7f1d1d',
               border: '1px solid #ef4444',
               borderRadius: '0.375rem',
@@ -768,178 +762,123 @@ export const PoliceView: React.FC = () => {
               cursor: isSimulatingCollapse ? 'not-allowed' : 'pointer',
               fontSize: '0.8rem',
               fontWeight: 700,
-              boxShadow: '0 2px 8px rgba(239, 68, 68, 0.25)',
             }}
           >
-            <Radio size={15} color="#fca5a5" />
+            <Radio size={14} color="#fca5a5" />
             <span>{isSimulatingCollapse ? 'Simulating...' : 'Simulate Phone Collapse'}</span>
           </button>
 
           {incidents.length > 0 && (
             <button
+              type="button"
               onClick={handleClearFeed}
-              title="Clear current view alerts"
               style={{
                 display: 'flex',
                 alignItems: 'center',
                 gap: '0.35rem',
-                padding: '0.5rem 0.75rem',
-                background: '#fef2f2',
-                border: '1px solid #fecaca',
+                padding: '0.45rem 0.8rem',
+                background: 'rgba(239, 68, 68, 0.2)',
+                border: '1px solid #ef4444',
                 borderRadius: '0.375rem',
-                color: '#dc2626',
+                color: '#fca5a5',
                 cursor: 'pointer',
                 fontSize: '0.8rem',
-                fontWeight: 500,
+                fontWeight: 600,
               }}
             >
-              <Trash2 size={16} />
+              <Trash2 size={14} />
               <span>Clear Feed</span>
             </button>
           )}
 
           <button
+            type="button"
             onClick={handleLogout}
-            title="Sign out of police control terminal"
             style={{
               display: 'flex',
               alignItems: 'center',
               gap: '0.35rem',
-              padding: '0.5rem 0.75rem',
-              background: '#f8fafc',
-              border: '1px solid #cbd5e1',
+              padding: '0.45rem 0.8rem',
+              background: '#1e293b',
+              border: '1px solid #475569',
               borderRadius: '0.375rem',
-              color: '#475569',
+              color: '#cbd5e1',
               cursor: 'pointer',
               fontSize: '0.8rem',
               fontWeight: 600,
             }}
           >
-            <LogOut size={16} />
+            <LogOut size={14} />
             <span>Sign Out</span>
           </button>
         </div>
       </div>
 
-      {/* Police Stats Overview */}
+      {/* Police Tactical KPI Deck */}
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-          gap: '1rem',
-          marginBottom: '1.5rem',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+          gap: '0.85rem',
+          marginBottom: '1.25rem',
         }}
       >
-        <div
-          style={{
-            background: '#ffffff',
-            borderRadius: '0.5rem',
-            padding: '1rem',
-            border: '1px solid #e2e8f0',
-            boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
-          }}
-        >
-          <div style={{ color: '#64748b', fontSize: '0.75rem', fontWeight: 600 }}>
-            CITY-WIDE ACTIVE ALERTS
+        <div style={{ background: '#ffffff', borderRadius: '0.5rem', padding: '0.85rem 1rem', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' }}>
+          <div style={{ color: '#64748b', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase' }}>
+            City-Wide Active Collisions
           </div>
-          <div
-            style={{
-              fontSize: '1.75rem',
-              fontWeight: 800,
-              color: incidents.length > 0 ? '#dc2626' : '#059669',
-              marginTop: '0.25rem',
-            }}
-          >
+          <div style={{ fontSize: '1.65rem', fontWeight: 900, color: incidents.length > 0 ? '#dc2626' : '#059669', marginTop: '0.2rem' }}>
             {incidents.length}
           </div>
         </div>
 
-        <div
-          style={{
-            background: '#ffffff',
-            borderRadius: '0.5rem',
-            padding: '1rem',
-            border: '1px solid #e2e8f0',
-            boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
-          }}
-        >
-          <div style={{ color: '#64748b', fontSize: '0.75rem', fontWeight: 600 }}>
-            BROADCAST CHANNEL
+        <div style={{ background: '#ffffff', borderRadius: '0.5rem', padding: '0.85rem 1rem', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' }}>
+          <div style={{ color: '#64748b', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase' }}>
+            Pre-Alert Soft Markers
           </div>
-          <div
-            style={{
-              fontSize: '1.1rem',
-              fontWeight: 700,
-              color: '#2563eb',
-              marginTop: '0.35rem',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.35rem',
-            }}
-          >
-            <Radio size={18} />
-            <span>all_incidents</span>
+          <div style={{ fontSize: '1.65rem', fontWeight: 900, color: incidents.filter((i) => i.status === 'suspected').length > 0 ? '#7c3aed' : '#64748b', marginTop: '0.2rem' }}>
+            {incidents.filter((i) => i.status === 'suspected').length}
+          </div>
+        </div>
+
+        <div style={{ background: '#ffffff', borderRadius: '0.5rem', padding: '0.85rem 1rem', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' }}>
+          <div style={{ color: '#64748b', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase' }}>
+            Accident Blackspots Flagged
+          </div>
+          <div style={{ fontSize: '1.65rem', fontWeight: 900, color: incidents.filter((i) => i.blackspot_info?.is_blackspot).length > 0 ? '#dc2626' : '#64748b', marginTop: '0.2rem' }}>
+            {incidents.filter((i) => i.blackspot_info?.is_blackspot).length}
           </div>
         </div>
 
         <div
           style={{
-            background: '#ffffff',
-            borderRadius: '0.5rem',
-            padding: '1rem',
-            border: '1px solid #e2e8f0',
-            boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
-          }}
-        >
-          <div style={{ color: '#64748b', fontSize: '0.75rem', fontWeight: 600 }}>
-            DISPATCH PROTOCOL
-          </div>
-          <div
-            style={{
-              fontSize: '1.1rem',
-              fontWeight: 700,
-              color: '#15803d',
-              marginTop: '0.35rem',
-            }}
-          >
-            PostGIS 8km Triage Ring
-          </div>
-        </div>
-
-        <div
-          style={{
-            background: Object.values(preemptedSignals).some((s) => s.status === 'GRANTED' || s.status === 'ACTIVE')
+            background: Object.values(preemptedSignals).some((s) => s.status === 'GRANTED' || s.status === 'ACTIVE' || s.hold_seconds > 0)
               ? '#ecfdf5'
               : '#ffffff',
             borderRadius: '0.5rem',
-            padding: '1rem',
-            border: Object.values(preemptedSignals).some((s) => s.status === 'GRANTED' || s.status === 'ACTIVE')
+            padding: '0.85rem 1rem',
+            border: Object.values(preemptedSignals).some((s) => s.status === 'GRANTED' || s.status === 'ACTIVE' || s.hold_seconds > 0)
               ? '1.5px solid #10b981'
               : '1px solid #e2e8f0',
-            boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
           }}
         >
-          <div style={{ color: '#64748b', fontSize: '0.75rem', fontWeight: 600 }}>
-            C-V2X GREEN CORRIDOR
+          <div style={{ color: '#64748b', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase' }}>
+            C-V2X Green Corridor
           </div>
           <div
             style={{
-              fontSize: '1.1rem',
-              fontWeight: 700,
-              color: Object.values(preemptedSignals).some((s) => s.status === 'GRANTED' || s.status === 'ACTIVE')
+              fontSize: '1.15rem',
+              fontWeight: 800,
+              color: Object.values(preemptedSignals).some((s) => s.status === 'GRANTED' || s.status === 'ACTIVE' || s.hold_seconds > 0)
                 ? '#047857'
                 : '#475569',
               marginTop: '0.35rem',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.35rem',
             }}
           >
-            <span>
-              {Object.values(preemptedSignals).some((s) => s.status === 'GRANTED' || s.status === 'ACTIVE')
-                ? '🟢 Preemption Active'
-                : '🚦 ITMS Standby'}
-            </span>
+            {Object.values(preemptedSignals).some((s) => s.status === 'GRANTED' || s.status === 'ACTIVE' || s.hold_seconds > 0)
+              ? '🟢 Preemption Active'
+              : '🚦 ITMS Standby'}
           </div>
         </div>
       </div>

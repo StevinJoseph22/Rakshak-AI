@@ -43,6 +43,7 @@ export const HospitalView: React.FC = () => {
     useState<ConnectionStatus>('connected');
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
   const [lastAlertFlash, setLastAlertFlash] = useState<boolean>(false);
+  const [filterMode, setFilterMode] = useState<'all' | 'action_required' | 'accepted'>('all');
 
   // Audio Context Ref for instant emergency buzzer/chime without external files
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -770,6 +771,23 @@ export const HospitalView: React.FC = () => {
     socket.emit('join_hospital', selectedHospitalId);
   };
 
+  const broadcastingCount = activeIncidents.filter(
+    (inc) => inc.status === 'broadcasting' || inc.status === 'escalated'
+  ).length;
+  const acceptedCount = activeIncidents.filter(
+    (inc) => inc.status === 'accepted' && inc.accepted_hospital_id === selectedHospitalId
+  ).length;
+
+  const displayedIncidents = activeIncidents.filter((inc) => {
+    if (filterMode === 'action_required') {
+      return inc.status === 'broadcasting' || inc.status === 'escalated';
+    }
+    if (filterMode === 'accepted') {
+      return inc.status === 'accepted' && inc.accepted_hospital_id === selectedHospitalId;
+    }
+    return true;
+  });
+
   return (
     <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '1.5rem 1rem' }}>
       {/* Reconnecting banner if socket disconnects */}
@@ -778,111 +796,127 @@ export const HospitalView: React.FC = () => {
         onRetry={handleManualReconnect}
       />
 
-      {/* Hospital Switcher & Status Bar */}
+      {/* Unified Executive Clinical Command Header */}
       <div
         style={{
-          background: '#ffffff',
-          borderRadius: '0.75rem',
+          background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
+          borderRadius: '0.875rem',
           padding: '1.25rem 1.5rem',
           border: '1px solid #e2e8f0',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-          marginBottom: '1.5rem',
+          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.04)',
+          marginBottom: '1.25rem',
           display: 'flex',
           flexWrap: 'wrap',
           alignItems: 'center',
           justifyContent: 'space-between',
           gap: '1rem',
-          transition: 'border-color 0.3s ease',
           borderColor: lastAlertFlash ? '#ef4444' : '#e2e8f0',
+          transition: 'border-color 0.3s ease',
         }}
       >
-        <div style={{ flex: '1 1 350px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', flexWrap: 'wrap' }}>
           <div
             style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '0.35rem',
-              fontSize: '0.75rem',
-              fontWeight: 700,
-              textTransform: 'uppercase',
-              color: '#059669',
+              padding: '0.75rem',
               background: '#ecfdf5',
-              padding: '0.2rem 0.5rem',
-              borderRadius: '0.25rem',
-              marginBottom: '0.35rem',
-              border: '1px solid #a7f3d0',
+              borderRadius: '0.625rem',
+              border: '1.5px solid #a7f3d0',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
             }}
           >
-            <CheckCircle2 size={12} />
-            <span>Verified Facility Staff</span>
+            <HospitalIcon size={26} color="#059669" />
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
-            <HospitalIcon size={24} color="#059669" />
-            <div>
-              <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#0f172a' }}>
+
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+              <h1 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: '#0f172a' }}>
                 {currentUser.hospital_name || selectedHospital?.name || 'Assigned Trauma Facility'}
-              </div>
-              <div style={{ fontSize: '0.8rem', color: '#64748b' }}>
-                Logged in as <strong style={{ color: '#0f172a' }}>@{currentUser.username}</strong>
-              </div>
+              </h1>
+              <span
+                style={{
+                  background: '#dcfce7',
+                  color: '#15803d',
+                  padding: '0.2rem 0.55rem',
+                  borderRadius: '9999px',
+                  fontSize: '0.7rem',
+                  fontWeight: 800,
+                  letterSpacing: '0.04em',
+                }}
+              >
+                LEVEL-1 TRAUMA BAY READY
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', marginTop: '0.25rem', color: '#64748b', fontSize: '0.8rem', flexWrap: 'wrap' }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                <MapPin size={12} /> {selectedHospital?.address}
+              </span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                <Phone size={12} /> {selectedHospital?.phone}
+              </span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', color: '#059669', fontWeight: 600 }}>
+                <CheckCircle2 size={12} /> ER Staff: @{currentUser.username}
+              </span>
             </div>
           </div>
         </div>
 
-        {/* Controls & Sound Toggle */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+        {/* Top Controls: Sound, Purge, Sign out */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
           <button
+            type="button"
             onClick={() => setSoundEnabled(!soundEnabled)}
-            title={soundEnabled ? 'Mute alert chime' : 'Enable alert chime'}
             style={{
               display: 'flex',
               alignItems: 'center',
               gap: '0.35rem',
-              padding: '0.5rem 0.75rem',
-              background: '#f1f5f9',
-              border: '1px solid #e2e8f0',
+              padding: '0.45rem 0.8rem',
+              background: soundEnabled ? '#ecfdf5' : '#f1f5f9',
+              border: `1px solid ${soundEnabled ? '#a7f3d0' : '#cbd5e1'}`,
               borderRadius: '0.375rem',
-              color: soundEnabled ? '#0f172a' : '#94a3b8',
+              color: soundEnabled ? '#047857' : '#64748b',
               cursor: 'pointer',
               fontSize: '0.8rem',
-              fontWeight: 500,
+              fontWeight: 600,
             }}
           >
-            {soundEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
-            <span>{soundEnabled ? 'Chime ON' : 'Muted'}</span>
+            {soundEnabled ? <Volume2 size={15} /> : <VolumeX size={15} />}
+            <span>{soundEnabled ? 'Chime Armed' : 'Muted'}</span>
           </button>
 
           {activeIncidents.length > 0 && (
             <button
+              type="button"
               onClick={handleClearAlerts}
-              title="Clear current view alerts"
               style={{
                 display: 'flex',
                 alignItems: 'center',
                 gap: '0.35rem',
-                padding: '0.5rem 0.75rem',
+                padding: '0.45rem 0.8rem',
                 background: '#fef2f2',
                 border: '1px solid #fecaca',
                 borderRadius: '0.375rem',
                 color: '#dc2626',
                 cursor: 'pointer',
                 fontSize: '0.8rem',
-                fontWeight: 500,
+                fontWeight: 600,
               }}
             >
-              <Trash2 size={16} />
+              <Trash2 size={14} />
               <span>Clear Feed</span>
             </button>
           )}
 
           <button
+            type="button"
             onClick={handleLogout}
-            title="Sign out of hospital terminal"
             style={{
               display: 'flex',
               alignItems: 'center',
               gap: '0.35rem',
-              padding: '0.5rem 0.75rem',
+              padding: '0.45rem 0.8rem',
               background: '#f8fafc',
               border: '1px solid #cbd5e1',
               borderRadius: '0.375rem',
@@ -892,221 +926,170 @@ export const HospitalView: React.FC = () => {
               fontWeight: 600,
             }}
           >
-            <LogOut size={16} />
+            <LogOut size={14} />
             <span>Sign Out</span>
           </button>
         </div>
       </div>
 
-      {/* Selected Hospital Spec Card */}
-      {selectedHospital && (
-        <div
-          style={{
-            background: '#f8fafc',
-            borderRadius: '0.5rem',
-            padding: '1rem 1.25rem',
-            border: '1px solid #e2e8f0',
-            marginBottom: '1.5rem',
-            display: 'flex',
-            flexWrap: 'wrap',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: '1rem',
-          }}
-        >
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <h2
-                style={{
-                  margin: 0,
-                  fontSize: '1.1rem',
-                  fontWeight: 700,
-                  color: '#0f172a',
-                }}
-              >
-                {selectedHospital.name}
-              </h2>
-              {selectedHospital.has_trauma_center ? (
-                <span
-                  style={{
-                    background: '#dcfce7',
-                    color: '#15803d',
-                    padding: '0.2rem 0.5rem',
-                    borderRadius: '9999px',
-                    fontSize: '0.7rem',
-                    fontWeight: 700,
-                  }}
-                >
-                  TRAUMA READY
-                </span>
-              ) : (
-                <span
-                  style={{
-                    background: '#fef3c7',
-                    color: '#b45309',
-                    padding: '0.2rem 0.5rem',
-                    borderRadius: '9999px',
-                    fontSize: '0.7rem',
-                    fontWeight: 600,
-                  }}
-                >
-                  NO TRAUMA CENTER
-                </span>
-              )}
-            </div>
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '1rem',
-                marginTop: '0.35rem',
-                color: '#64748b',
-                fontSize: '0.8rem',
-                flexWrap: 'wrap',
-              }}
-            >
-              <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                <MapPin size={13} /> {selectedHospital.address}
-              </span>
-              <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                <Phone size={13} /> {selectedHospital.phone}
-              </span>
-            </div>
+      {/* Clinical KPI Status Deck */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+          gap: '0.85rem',
+          marginBottom: '1.25rem',
+        }}
+      >
+        <div style={{ background: '#ffffff', borderRadius: '0.5rem', padding: '0.85rem 1rem', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' }}>
+          <div style={{ color: '#64748b', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase' }}>
+            Active Trauma Alerts
           </div>
-
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '1rem',
-              fontSize: '0.8rem',
-            }}
-          >
-            <div style={{ textAlign: 'right' }}>
-              <div style={{ color: '#64748b', fontSize: '0.725rem' }}>
-                SOCKET ROOM ID
-              </div>
-              <div
-                style={{
-                  fontFamily: 'monospace',
-                  color: '#0f172a',
-                  fontWeight: 600,
-                }}
-              >
-                {selectedHospital.id.slice(0, 13)}...
-              </div>
-            </div>
-            <div
-              style={{
-                background: '#ffffff',
-                padding: '0.5rem 0.85rem',
-                borderRadius: '0.375rem',
-                border: '1px solid #cbd5e1',
-                textAlign: 'center',
-              }}
-            >
-              <div style={{ fontSize: '0.725rem', color: '#64748b' }}>
-                ACTIVE ALERTS
-              </div>
-              <div
-                style={{
-                  fontSize: '1.25rem',
-                  fontWeight: 800,
-                  color: activeIncidents.length > 0 ? '#dc2626' : '#059669',
-                }}
-              >
-                {activeIncidents.length}
-              </div>
-            </div>
+          <div style={{ fontSize: '1.65rem', fontWeight: 900, color: activeIncidents.length > 0 ? '#dc2626' : '#059669', marginTop: '0.2rem' }}>
+            {activeIncidents.length}
           </div>
         </div>
-      )}
 
-      {/* Main Incident Feed */}
+        <div style={{ background: '#ffffff', borderRadius: '0.5rem', padding: '0.85rem 1rem', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' }}>
+          <div style={{ color: '#64748b', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase' }}>
+            Action Required
+          </div>
+          <div style={{ fontSize: '1.65rem', fontWeight: 900, color: broadcastingCount > 0 ? '#ea580c' : '#64748b', marginTop: '0.2rem' }}>
+            {broadcastingCount}
+          </div>
+        </div>
+
+        <div style={{ background: '#ffffff', borderRadius: '0.5rem', padding: '0.85rem 1rem', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' }}>
+          <div style={{ color: '#64748b', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase' }}>
+            Cases Accepted by Us
+          </div>
+          <div style={{ fontSize: '1.65rem', fontWeight: 900, color: '#16a34a', marginTop: '0.2rem' }}>
+            {acceptedCount}
+          </div>
+        </div>
+
+        <div style={{ background: '#ffffff', borderRadius: '0.5rem', padding: '0.85rem 1rem', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' }}>
+          <div style={{ color: '#64748b', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase' }}>
+            Triage Golden Sector
+          </div>
+          <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#0f172a', marginTop: '0.35rem' }}>
+            8.0 km Radius
+          </div>
+        </div>
+      </div>
+
+      {/* Incident Stream & Clean Filter Tabs */}
       <div>
         <div
           style={{
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            marginBottom: '0.75rem',
+            marginBottom: '0.85rem',
+            flexWrap: 'wrap',
+            gap: '0.5rem',
           }}
         >
-          <h3
-            style={{
-              margin: 0,
-              fontSize: '1rem',
-              fontWeight: 700,
-              color: '#334155',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem',
-            }}
-          >
-            <span>Incoming Trauma Dispatches</span>
-            {activeIncidents.length > 0 && (
-              <span
-                style={{
-                  background: '#ef4444',
-                  color: '#ffffff',
-                  fontSize: '0.75rem',
-                  padding: '0.1rem 0.5rem',
-                  borderRadius: '9999px',
-                  fontWeight: 700,
-                }}
-              >
-                {activeIncidents.length} NEW
-              </span>
-            )}
-          </h3>
-          <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
-            Listening to room:{' '}
-            <code style={{ color: '#0f172a', fontWeight: 600 }}>
-              {selectedHospitalId}
-            </code>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            <button
+              type="button"
+              onClick={() => setFilterMode('all')}
+              style={{
+                padding: '0.35rem 0.75rem',
+                borderRadius: '9999px',
+                border: '1px solid',
+                borderColor: filterMode === 'all' ? '#0f172a' : '#cbd5e1',
+                background: filterMode === 'all' ? '#0f172a' : '#ffffff',
+                color: filterMode === 'all' ? '#ffffff' : '#475569',
+                fontSize: '0.75rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+              }}
+            >
+              All Alerts ({activeIncidents.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setFilterMode('action_required')}
+              style={{
+                padding: '0.35rem 0.75rem',
+                borderRadius: '9999px',
+                border: '1px solid',
+                borderColor: filterMode === 'action_required' ? '#dc2626' : '#cbd5e1',
+                background: filterMode === 'action_required' ? '#fef2f2' : '#ffffff',
+                color: filterMode === 'action_required' ? '#dc2626' : '#475569',
+                fontSize: '0.75rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+              }}
+            >
+              Action Required ({broadcastingCount})
+            </button>
+            <button
+              type="button"
+              onClick={() => setFilterMode('accepted')}
+              style={{
+                padding: '0.35rem 0.75rem',
+                borderRadius: '9999px',
+                border: '1px solid',
+                borderColor: filterMode === 'accepted' ? '#16a34a' : '#cbd5e1',
+                background: filterMode === 'accepted' ? '#f0fdf4' : '#ffffff',
+                color: filterMode === 'accepted' ? '#16a34a' : '#475569',
+                fontSize: '0.75rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+              }}
+            >
+              Accepted by Us ({acceptedCount})
+            </button>
+          </div>
+
+          <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
+            Live Socket Channel: <code style={{ color: '#0f172a', fontWeight: 600 }}>hospital_{selectedHospitalId.slice(0, 8)}</code>
           </span>
         </div>
 
-        {activeIncidents.length === 0 ? (
+        {displayedIncidents.length === 0 ? (
           <div
             style={{
               background: '#ffffff',
               borderRadius: '0.75rem',
-              padding: '3rem 1.5rem',
+              padding: '3.5rem 1.5rem',
               textAlign: 'center',
               border: '2px dashed #cbd5e1',
               color: '#64748b',
             }}
           >
             <CheckCircle2
-              size={44}
+              size={48}
               color="#10b981"
               style={{ margin: '0 auto 0.75rem' }}
             />
-            <h4
+            <h3
               style={{
                 margin: '0 0 0.35rem 0',
-                fontSize: '1.1rem',
+                fontSize: '1.15rem',
                 color: '#0f172a',
+                fontWeight: 800,
               }}
             >
-              Emergency Channel Clear
-            </h4>
+              Trauma Intake Clear
+            </h3>
             <p
               style={{
                 margin: '0 auto',
                 maxWidth: '480px',
-                fontSize: '0.875rem',
+                fontSize: '0.85rem',
+                color: '#64748b',
+                lineHeight: 1.5,
               }}
             >
-              Awaiting real-time collision packets. When a high-G impact is
-              detected within this hospital&apos;s 8km triage radius, incident
-              telemetry will broadcast here instantly.
+              No active collisions pending admission in this filter sector. When a vehicular collision occurs within the 8km golden radius, immediate clinical trauma telemetry will stream here in sub-second real time.
             </p>
           </div>
         ) : (
           <div>
-            {activeIncidents.map((incident) => (
+            {displayedIncidents.map((incident) => (
               <IncidentCard
                 key={incident.id}
                 incident={incident}
