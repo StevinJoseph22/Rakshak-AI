@@ -358,4 +358,9 @@ export class TripSentinelService {
       status: s.status,
     }));
   }
+
+  public clearAllSessions(): void {
+    this.sessions.clear();
+    console.log('[TripSentinel] All in-memory trip sentinel sessions cleared');
+  }
 }

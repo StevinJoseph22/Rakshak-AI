@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { ShieldAlert, Hospital, Activity, Radio, Wifi, WifiOff } from 'lucide-react';
+import { ShieldAlert, Hospital, Activity, Radio, Wifi, WifiOff, Settings } from 'lucide-react';
 import { ConnectionStatus } from '../types';
 
 interface NavbarProps {
@@ -125,6 +125,27 @@ export const Navbar: React.FC<NavbarProps> = ({ status, demoMode = false, onTogg
           >
             <Activity size={18} />
             <span>Police Control Room</span>
+          </NavLink>
+
+          <NavLink
+            to="/admin"
+            style={({ isActive }) => ({
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.45rem',
+              padding: '0.5rem 1rem',
+              borderRadius: '0.375rem',
+              textDecoration: 'none',
+              fontSize: '0.875rem',
+              fontWeight: 600,
+              background: isActive ? '#fef2f2' : 'transparent',
+              color: isActive ? '#dc2626' : '#64748b',
+              border: isActive ? '1px solid #fecaca' : '1px solid transparent',
+              transition: 'all 0.15s ease',
+            })}
+          >
+            <Settings size={18} />
+            <span>Admin Reset Lab</span>
           </NavLink>
         </nav>
 

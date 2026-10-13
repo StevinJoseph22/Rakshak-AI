@@ -62,6 +62,17 @@ export function cancelSilentPromotion(incidentId: string): void {
 }
 
 /**
+ * Cancels all pending silent promotion watchdogs across all incidents.
+ */
+export function clearAllSilentPromotions(): void {
+  for (const [, timer] of activeSilentPromotions.entries()) {
+    clearTimeout(timer.timeout);
+  }
+  activeSilentPromotions.clear();
+  console.log('[Pre-Alert Service] Disarmed all pending silent promotion watchdogs');
+}
+
+/**
  * Promotes a suspected incident to normal broadcasting flow:
  * 1. Updates DB status from 'suspected' -> 'broadcasting'
  * 2. Runs PostGIS 8km trauma center matching

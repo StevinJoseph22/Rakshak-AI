@@ -30,7 +30,9 @@ import {
   scheduleSilentPromotion,
   cancelSilentPromotion,
   promoteSuspectedIncident,
+  clearAllSilentPromotions,
 } from '../services/preAlertService';
+import { TripSentinelService } from '../services/tripSentinelService';
 import { checkIncidentBlackspot, getAllBlackspotZones } from '../services/blackspotService';
 import { authenticateJWT, optionalAuth } from '../middleware/auth';
 
@@ -674,30 +676,44 @@ incidentsRouter.get('/', optionalAuth, async (req: Request, res: Response) => {
   }
 });
 
-// DELETE /incidents - Purge test incidents from database and broadcast feed_cleared to dashboard
+// DELETE /incidents - Purge test incidents from database, Redis RAM, watchdog timers, and broadcast feed_cleared
 incidentsRouter.delete('/', async (req: Request, res: Response) => {
   try {
     await query('DELETE FROM incident_rejections;');
     await query('DELETE FROM incidents;');
     clearAllEscalations();
+    clearAllSilentPromotions();
+    TripSentinelService.getInstance().clearAllSessions();
+
     try {
       const io = getIO();
-      io.emit('feed_cleared');
+      if (io) {
+        io.emit('feed_cleared');
+        io.to('all_incidents').emit('feed_cleared');
+      }
     } catch {
       // Socket.io might not be initialized
     }
+
     // Clean up volatile Redis RAM keys so future feeds start 100% clean
     try {
-      const keys = await redis.keys('incident_*');
-      if (keys.length > 0) {
-        await redis.del(...keys);
+      const [incidentKeys, ambKeys, sentinelKeys] = await Promise.all([
+        redis.keys('incident_*'),
+        redis.keys('ambulance_*'),
+        redis.keys('sentinel_*'),
+      ]);
+      const allKeys = [...incidentKeys, ...ambKeys, ...sentinelKeys];
+      if (allKeys.length > 0) {
+        await redis.del(...allKeys);
       }
     } catch (redisErr) {
       console.warn('[Redis] Failed to clear keys on DELETE /incidents:', redisErr);
     }
+
     return res.json({
-      message: 'All test incidents purged successfully from database.',
+      message: 'All active alerts and test incidents purged successfully from database, Redis RAM, and memory timers.',
       cleared: true,
+      timestamp: new Date().toISOString(),
     });
   } catch (error) {
     console.error('[DELETE /incidents Error]', error);
@@ -708,6 +724,59 @@ incidentsRouter.delete('/', async (req: Request, res: Response) => {
           ? error.message
           : 'Unexpected database error while purging incidents.',
     });
+  }
+});
+
+// GET /incidents/stats - System health and incident counts for Admin Console
+incidentsRouter.get('/stats', async (_req: Request, res: Response) => {
+  try {
+    const countsRes = await query<{ status: string; count: string }>(
+      `SELECT status, COUNT(*)::text AS count FROM incidents GROUP BY status`
+    );
+
+    const statusCounts: Record<string, number> = {
+      detected: 0,
+      broadcasting: 0,
+      accepted: 0,
+      en_route: 0,
+      resolved: 0,
+      escalated: 0,
+      unmatched: 0,
+      suspected: 0,
+      cancelled: 0,
+    };
+
+    let total = 0;
+    countsRes.rows.forEach((r) => {
+      const c = parseInt(r.count, 10) || 0;
+      statusCounts[r.status] = c;
+      total += c;
+    });
+
+    const activeHospitalsRes = await query<{ count: string }>(
+      `SELECT COUNT(*)::text AS count FROM hospitals WHERE is_verified = true`
+    );
+    const totalHospitals = parseInt(activeHospitalsRes.rows[0]?.count || '0', 10);
+
+    const [incidentKeys, ambKeys, sentinelKeys] = await Promise.all([
+      redis.keys('incident_*'),
+      redis.keys('ambulance_*'),
+      redis.keys('sentinel_*'),
+    ]);
+
+    const sentinelSessions = TripSentinelService.getInstance().getActiveSessionsSummary();
+
+    return res.json({
+      total_incidents: total,
+      status_counts: statusCounts,
+      total_hospitals: totalHospitals,
+      redis_cached_keys: incidentKeys.length + ambKeys.length + sentinelKeys.length,
+      active_sentinel_sessions: sentinelSessions.length,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.error('[GET /incidents/stats Error]', err);
+    return res.status(500).json({ error: 'Failed to retrieve incident stats' });
   }
 });
 
