@@ -153,6 +153,98 @@ In vehicular trauma accidents, **50% of fatalities occur within the first 60 min
 
 ---
 
+## 🛰️ Hardware Devices Structure & IoT Architecture
+
+> For complete wiring schematics, pinout diagrams, and SNMP OID specifications, see **[HARDWARE_ARCHITECTURE.md](docs/HARDWARE_ARCHITECTURE.md)** and **[architecture.md](docs/architecture.md)**.
+
+Rakshak-AI is engineered with a pluggable **Hardware Abstraction Layer (HAL)** that interfaces directly with real-world in-vehicle telematics, C-V2X transceivers, municipal roadside units, and traffic controller cabinets.
+
+```text
+ ┌─────────────────────────────────────────────────────────────────────────────┐
+ │                       1. IN-VEHICLE / VICTIM EDGE LAYER                     │
+ ├────────────────────────────────────────┬────────────────────────────────────┤
+ │  A. Smartphone Telematics & Sensors    │  B. In-Vehicle Telematics (OBU)    │
+ │  • Tri-axial MEMS Accelerometer (50Hz) │  • OBD-II / CAN-Bus (ISO 15765-4)  │
+ │  • Tri-axial MEMS Gyroscope (rad/s)    │  • Airbag ECU Deployment Trigger   │
+ │  • MEMS Barometer (Airbag ΔP pulse)    │  • Vehicle Speed Sensor (VSS)      │
+ │  • Multi-GNSS (GPS / NavIC / Galileo)  │  • Siren & Strobe Arming Sense     │
+ │  • Baseband SIM Modem (Native SMS)     │  • 12V/24V Automotive Power Supply │
+ └───────────────────┬────────────────────┴──────────────────┬─────────────────┘
+                     │                                       │
+     Sub-Second      │ C-V2X PC5 Sidelink (5.9 GHz)          │ BLE Beacon (UUID: 0xFD6F)
+     TLS 1.3 / 4G-5G │ Direct V2V & V2I Distress             │ or USB-OTG Serial
+                     ▼                                       ▼
+ ┌─────────────────────────────────────────────────────────────────────────────┐
+ │                   2. AMBULANCE EMERGENCY VEHICLE UNIT (OBU)                 │
+ ├─────────────────────────────────────────────────────────────────────────────┤
+ │  • Hardware Transceiver: Qualcomm 9150 / Quectel AG15 C-V2X Module         │
+ │  • Frequency Band: 5.855 GHz – 5.925 GHz (5.9 GHz Dedicated ITS Band)       │
+ │  • Standardized Messaging: SAE J2735 (BSM 0x01, SRM 0x0E, SSM 0x0F)         │
+ │  • Paramedic Navigation HUD: High-Brightness Rugged In-Vehicle Tablet       │
+ └───────────────────┬───────────────────────────────────────┬─────────────────┘
+                     │                                       │
+     SAE J2735 SRM   │ (Signal Request Message)              │ Cellular Backhaul
+     Range: 300m-500m│ Latency: < 20ms                       │ 4G LTE / 5G SA
+                     ▼                                       ▼
+ ┌────────────────────────────────────────┐ ┌──────────────────────────────────┐
+ │    3. MUNICIPAL ROADSIDE UNIT (RSU)    │ │   4. CENTRAL CLOUD & DISPATCH    │
+ ├────────────────────────────────────────┤ ├──────────────────────────────────┤
+ │  • Pole-Mounted C-V2X Transceiver RSU  │ │  • PostGIS Spatial Engine        │
+ │  • Dual Antennas (5.9 GHz Omni/Sector) │ │  • Volatile Redis 7 RAM Broker   │
+ │  • Hardware Crypto Acceleration (HSM)  │ │  • NTCIP-1202 SNMP Preemption Hub│
+ │  • Physical Interface: Rugged Ethernet │ │  • Hospital Trauma Web Console   │
+ └───────────────────┬────────────────────┘ │  • Police Tactical Command Map  │
+                     │                      └──────────────────────────────────┘
+     NTCIP 1202 v03  │ Industrial Ethernet / RS-485
+     SNMP v2c/v3     │ Port 161 (ascPreemptControl)
+                     ▼
+ ┌─────────────────────────────────────────────────────────────────────────────┐
+ │                 5. ADVANCED TRAFFIC CONTROLLER (ATC CABINET)                │
+ ├─────────────────────────────────────────────────────────────────────────────┤
+ │  • Controller Types: NEMA TS2 Type 1 / 2, Model 2070, ATC v6.25            │
+ │  • Signal Preemption Card: Solid-State Optical / NTCIP Preempt Discriminator│
+ │  • Signal Phasing: Force Green Wave (Phase 2/6), Yellow Clear, All-Red Hold │
+ │  • Intersection Heads: 3-Aspect High-Flux LED Traffic Signal Heads          │
+ └─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 1. In-Vehicle On-Board Unit (OBU) Hardware Modes
+Integrated via `VehicleObuService` (`mobile/lib/services/vehicle_obu_service.dart`) and switchable live inside the **C-V2X Hardware Hub**:
+* **`simulatedSoftware`**: Virtual GPS and software EVP engine for simulation and demo runtimes.
+* **`serialUsbOtG`**: Pluggable USB-OTG / RS-232 serial connection to commercial automotive C-V2X modems (Commsignia / Quectel AG15 at `/dev/ttyUSB0` at 115200 baud).
+* **`bluetoothBle`**: Wireless BLE 5.2 dashboard beacon (Rakshak BLE Emergency Dash Beacon, UUID: `0xFD6F`).
+* **`directCv2xPc5`**: Qualcomm 9150 C-V2X Direct PC5 transceiver operating over the 5.9 GHz ITS band (3GPP Rel-14/15/16 Mode 4 direct sidelink) for infrastructure-less communication.
+* **Siren & Beacon Hardware Sensor**: Senses 12V trigger lines from emergency siren/strobe bars; automatically arms C-V2X signal preemption during active runs and disarms during routine transfer.
+
+### 2. Roadside Units (RSU) & NTCIP-1202 Traffic Signal Controller
+* **SAE J2735 Standardized Messaging**:
+  * **BSM (`0x01`)**: 10Hz Basic Safety Message broadcasting vehicle position, speed, heading, and siren status.
+  * **SRM (`0x0E`)**: Signal Request Message demanding priority preemption 300m–500m ahead of an approaching intersection.
+  * **SSM (`0x0F`)**: Signal Status Message acknowledging preemption granted and reporting active green-hold duration.
+* **NTCIP 1202 v03 Traffic Controller Integration (`ntcipService.ts`)**:
+  * Directly communicates with municipal Advanced Traffic Controller (ATC) cabinets using SNMP v2c/v3 OID commands:
+    * `1.3.6.1.4.1.1206.4.2.1.1.1` (`ascPreemptControl`): Forces emergency green phase.
+    * `1.3.6.1.4.1.1206.4.2.1.1.2` (`ascPreemptState`): Reads active preemption state.
+    * `1.3.6.1.4.1.1206.4.2.1.1.3` (`ascPreemptRemainingTime`): Reads remaining green-hold seconds.
+  * **Preemption State Machine**: `normalCycle` $\rightarrow$ `yellowClearance` (3–4s) $\rightarrow$ `allRedSafetyBuffer` (1–2s) $\rightarrow$ `preemptedGreen` $\rightarrow$ `departedHandback`.
+
+### 3. Edge Smartphone Telematics & Hardware Safeguards
+* **Linear MEMS Accelerometer ($50\text{ Hz}$)**: High-G impact signature detection with saturation protection (readings hitting the physical $8\text{g}\text{--}16\text{g}$ sensor limit are marked `"saturated"`).
+* **MEMS Gyroscope ($50\text{ Hz}$)**: Rotational rate integration detecting vehicle rollovers ($>120^\circ$ gravity vector inversion).
+* **Free-Fall Invalidation ($50\text{ Hz}$)**: Suppresses false alarms if $|g| < 0.2\text{g}$ for $>100\text{ms}$ (indicates a dropped phone).
+* **MEMS Barometer ($10\text{ Hz}$)**: Captures cabin pressure spikes ($\Delta P \ge 12\text{ hPa}$) caused by vehicle airbag deployments.
+* **Multi-GNSS Receiver**: Dual-band GPS/GLONASS/NavIC measuring deceleration down to $0\text{ km/h}$.
+* **Cellular Baseband Radio**: Direct native P2P SMS using Android `SmsManager` over the physical SIM, bypassing cloud gateway vulnerabilities.
+
+### 4. Zero-Network & Broken-Device Resilience Matrix
+* **Zero Cellular Data (No 4G/5G)**: Native SIM P2P SMS transmits Google Maps coordinates and ABHA medical ID directly to family. Local SQLite queue synchronizes via exponential backoff upon network restoration.
+* **Total Cellular Tower Outage**: Direct C-V2X PC5 Sidelink (5.9 GHz) and BLE 5.2 Emergency Distress Beacons transmit to nearby vehicles and roadside units via delay-tolerant mesh.
+* **Device Destroyed on Impact**: Sub-second pre-alert microburst has already reached police; Trip Sentinel 30s watchdog detects silence without cancel and auto-escalates to an active emergency.
+* **Locked-Screen Override**: Android `USE_FULL_SCREEN_INTENT` + `showWhenLocked` wakes the display over keyguard so bystanders can assist without passwords.
+* **Zero-Gallery Privacy**: Camera frames stream directly from CMOS sensor into volatile RAM buffer, transmitted to Redis with 10-minute TTL and wiped upon case resolution.
+
+---
+
 ## 🏛 System Architecture & Network Ports
 
 | Service | Directory | Tech Stack | Port | Purpose |
