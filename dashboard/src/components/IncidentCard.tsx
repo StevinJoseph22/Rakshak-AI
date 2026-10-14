@@ -300,8 +300,8 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
 
   const abhaVault: AbhaVaultData = rawAbhaVault || {
     abha_id: '91-8842-9912-3401',
-    abha_address: 'stevin.joseph@abdm',
-    patient_name: (typeof metadata.victim_name === 'string' && metadata.victim_name) ? metadata.victim_name : 'Stevin Joseph (Verified)',
+    abha_address: 'aarav.sharma@abdm',
+    patient_name: (typeof metadata.victim_name === 'string' && metadata.victim_name) ? metadata.victim_name : 'Aarav Sharma (Verified)',
     blood_group: (typeof metadata.blood_group === 'string' && metadata.blood_group) ? metadata.blood_group : 'B+ Positive',
     critical_allergies: ['Penicillin Anaphylaxis', 'Sulfa Drugs'],
     chronic_conditions: ['Type-1 Diabetes'],
@@ -865,7 +865,7 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
                     letterSpacing: '0.04em',
                   }}
                 >
-                  🚨 HIGH-RISK BLACKSPOT: {incident.blackspot_info.zone_name} ({incident.blackspot_info.incident_count} Collisions)
+                  🚨 HIGH-RISK BLACKSPOT: {incident.blackspot_info.zone_name} ({incident.blackspot_info.incident_count} Collisions • Learned from Rakshak demo data)
                 </span>
               )}
             </div>

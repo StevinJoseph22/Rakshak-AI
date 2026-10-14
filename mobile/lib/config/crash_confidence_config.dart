@@ -80,6 +80,7 @@ class CrashConfidenceResult {
     required bool preImpactFreeFall,
     required bool postImpactStillness,
     required bool rolloverSuspected,
+    String vehicleType = 'Two-Wheeler',
     double? barometerDeltaHpa,
   }) {
     final bool isSaturated = measuredPeakG >= CrashConfidenceConfig.kAccelerometerSaturationLimitG;
@@ -141,9 +142,32 @@ class CrashConfidenceResult {
       'max_points': CrashConfidenceConfig.weightRollover,
     };
 
-    // 6. Barometer change (if available)
-    if (barometerDeltaHpa != null) {
-      breakdown['barometer_delta_hpa'] = barometerDeltaHpa;
+    // 6. Barometer change (airbag cabin pressure pulse)
+    final bool isEnclosedCabin = !vehicleType.toLowerCase().contains('two-wheeler') &&
+        !vehicleType.toLowerCase().contains('bike') &&
+        !vehicleType.toLowerCase().contains('motorcycle') &&
+        !vehicleType.toLowerCase().contains('scooter');
+
+    if (isEnclosedCabin && barometerDeltaHpa != null && barometerDeltaHpa.abs() >= 1.5) {
+      // In an enclosed vehicle cabin (car/truck), rapid airbag deployment causes a measurable 2-5 hPa pulse
+      final int baroPts = min((barometerDeltaHpa.abs() / 3.0 * 5).round(), 5);
+      points += baroPts;
+      breakdown['barometer_airbag_pulse'] = {
+        'measured_delta_hpa': barometerDeltaHpa,
+        'points_awarded': baroPts,
+        'max_points': 5,
+        'status': 'Airbag cabin pressure pulse detected (enclosed cabin vehicle)',
+      };
+    } else {
+      // For open-air Two-Wheelers, airbag cabin overpressure does not occur physically. Weight is strictly ZERO.
+      breakdown['barometer_airbag_pulse'] = {
+        'measured_delta_hpa': barometerDeltaHpa ?? 0.0,
+        'points_awarded': 0,
+        'max_points': 0,
+        'status': isEnclosedCabin
+            ? 'No significant cabin pressure pulse detected'
+            : 'Disregarded (weight 0): Airbag pressure pulse is physically limited to enclosed vehicle cabins, inapplicable to open-air Two-Wheelers.',
+      };
     }
 
     // 7. Free-fall penalty: phone drop deduction

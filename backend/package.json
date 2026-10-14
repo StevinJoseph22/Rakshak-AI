@@ -12,7 +12,7 @@
     "demo:reset": "tsx src/scripts/reset_demo.ts",
     "lint": "eslint src/**/*.ts",
     "lint:fix": "eslint src/**/*.ts --fix",
-    "test": "tsx src/tests/rbac.test.ts",
+    "test": "tsx src/tests/rbac.test.ts && tsx src/tests/phase17_intelligence.test.ts",
     "format": "prettier --write \"src/**/*.{ts,js,json}\""
   },
   "keywords": [

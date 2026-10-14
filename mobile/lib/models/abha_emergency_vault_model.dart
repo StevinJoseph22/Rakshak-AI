@@ -36,8 +36,8 @@ class AbhaEmergencyVault {
   factory AbhaEmergencyVault.fromJson(Map<String, dynamic> json) {
     return AbhaEmergencyVault(
       abhaId: json['abha_id'] as String? ?? '91-8842-9912-3401',
-      abhaAddress: json['abha_address'] as String? ?? 'stevin.joseph@abdm',
-      patientName: json['patient_name'] as String? ?? 'Stevin Joseph (Verified)',
+      abhaAddress: json['abha_address'] as String? ?? 'aarav.sharma@abdm',
+      patientName: json['patient_name'] as String? ?? 'Aarav Sharma (Verified)',
       gender: json['gender'] as String? ?? 'Male',
       dob: json['dob'] as String? ?? '1998-05-14',
       bloodGroup: json['blood_group'] as String? ?? 'B+ Positive',
@@ -88,8 +88,8 @@ class AbhaEmergencyVault {
   factory AbhaEmergencyVault.defaultProfile() {
     return const AbhaEmergencyVault(
       abhaId: '91-8842-9912-3401',
-      abhaAddress: 'stevin.joseph@abdm',
-      patientName: 'Stevin Joseph (Verified)',
+      abhaAddress: 'aarav.sharma@abdm',
+      patientName: 'Aarav Sharma (Verified)',
       gender: 'Male',
       dob: '1998-05-14',
       bloodGroup: 'B+ Positive',

@@ -693,7 +693,10 @@ export const PoliceTacticalMap: React.FC<PoliceTacticalMapProps> = ({
                   RECURRING ACCIDENT BLACKSPOT ZONE
                 </div>
                 <div style={{ fontSize: '10px', color: '#b91c1c', marginTop: '1px' }}>
-                  <b>{activeIncident.blackspot_info.incident_count} collisions</b> historically recorded in this 500m area.
+                  <b>{activeIncident.blackspot_info.incident_count} collisions</b> historically recorded in this 500m area (Learned from Rakshak demo data).
+                </div>
+                <div style={{ fontSize: '9px', color: '#7f1d1d', marginTop: '2px', fontStyle: 'italic' }}>
+                  * Production roadmap: Seeding from MoRTH iRAD / eDAR open accident database.
                 </div>
               </div>
             </div>

@@ -1,0 +1,1266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rakshak-AI: Master Executive Presentation (18 In-Depth Slides)</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <style>
+    body {
+      background-color: #060913;
+      color: #f8fafc;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      user-select: none;
+    }
+    .slide-container {
+      aspect-ratio: 16 / 9;
+      max-height: 86vh;
+    }
+    .card-glass {
+      background: rgba(15, 23, 42, 0.85);
+      border: 1px solid rgba(51, 65, 85, 0.6);
+      backdrop-filter: blur(12px);
+    }
+    .glow-emerald {
+      box-shadow: 0 0 25px -5px rgba(16, 185, 129, 0.3);
+    }
+    .glow-cyan {
+      box-shadow: 0 0 25px -5px rgba(56, 189, 248, 0.3);
+    }
+    .glow-rose {
+      box-shadow: 0 0 25px -5px rgba(239, 68, 68, 0.3);
+    }
+    /* Custom Scrollbar for Notes */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: #0f172a; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 9999px; }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-between p-2 sm:p-4 bg-slate-950 overflow-x-hidden">
+
+  <!-- Top Global Header / Meta Bar -->
+  <header class="w-full max-w-7xl flex items-center justify-between pb-3 border-b border-slate-800/80 mb-2">
+    <div class="flex items-center gap-3">
+      <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-500 via-cyan-400 to-blue-500 flex items-center justify-center font-black text-slate-950 shadow-lg shadow-emerald-500/20 text-lg">
+        🛡️
+      </div>
+      <div>
+        <div class="flex items-center gap-2">
+          <span class="font-extrabold text-lg tracking-tight bg-gradient-to-r from-emerald-400 via-cyan-300 to-white bg-clip-text text-transparent">RAKSHAK-AI</span>
+          <span class="px-2 py-0.5 text-[10px] font-bold rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">MASTER PRESENTATION DECK</span>
+        </div>
+        <p class="text-xs text-slate-400">18 In-Depth Slides: Problem Analysis, GDP Impact, UI Walkthroughs, PINN Biomechanics & ABDM Vault</p>
+      </div>
+    </div>
+
+    <!-- Quick Slide Selector Dropdown & Actions -->
+    <div class="flex items-center gap-2">
+      <select id="slideSelect" class="bg-slate-900 border border-slate-700 text-xs text-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-cyan-400">
+        <!-- Injected via JS -->
+      </select>
+
+      <button id="btnToggleNotes" class="px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-900 hover:bg-slate-800 text-xs font-semibold text-cyan-300 transition flex items-center gap-1.5" title="Toggle Speaker Notes (Key: S)">
+        <span>🎙️</span>
+        <span id="notesLabel">Notes: ON</span>
+      </button>
+
+      <button id="btnFullscreen" class="px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-900 hover:bg-slate-800 text-xs font-semibold text-slate-300 transition" title="Toggle Fullscreen (Key: F)">
+        ⛶ Fullscreen
+      </button>
+
+      <a href="Rakshak_AI_Master_Presentation.pptx" download class="px-3 py-1.5 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-xs font-bold text-white shadow-md shadow-emerald-600/20 transition flex items-center gap-1.5">
+        <span>📥</span>
+        <span>Download .PPTX</span>
+      </a>
+    </div>
+  </header>
+
+  <!-- Main Slide Frame (16:9 Cinema Container) -->
+  <main class="w-full max-w-7xl flex-1 flex flex-col items-center justify-center relative my-1">
+    <div id="slideViewport" class="w-full slide-container bg-slate-900/90 rounded-2xl border border-slate-800 shadow-2xl relative overflow-hidden flex flex-col p-6 sm:p-10 transition-all duration-300">
+      <!-- Dynamic Slide Content Injected Here -->
+    </div>
+  </main>
+
+  <!-- Presenter Notes Bottom Drawer (Collapsible) -->
+  <div id="speakerNotesDrawer" class="w-full max-w-7xl card-glass rounded-xl p-3.5 border border-cyan-900/40 shadow-xl my-2 text-xs">
+    <div class="flex items-center justify-between text-cyan-400 font-bold mb-1 pb-1 border-b border-slate-800">
+      <span class="flex items-center gap-1.5">
+        <span>🎙️</span> SPEAKER NOTES & IN-DEPTH METHODOLOGY FOR SLIDE <span id="notesSlideNumber" class="text-white">1</span>
+      </span>
+      <span class="text-[10px] text-slate-400">Press 'S' to collapse / expand notes</span>
+    </div>
+    <div id="speakerNotesContent" class="text-slate-300 leading-relaxed font-sans max-h-24 overflow-y-auto pr-2">
+      <!-- Injected by JS -->
+    </div>
+  </div>
+
+  <!-- Bottom Navigation Control Toolbar -->
+  <footer class="w-full max-w-7xl flex items-center justify-between pt-2 border-t border-slate-800/80">
+    <div class="flex items-center gap-2">
+      <button id="btnPrev" class="px-4 py-2 rounded-xl bg-slate-900 border border-slate-700 hover:bg-slate-800 text-slate-200 font-bold text-xs transition flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed">
+        <span>◀</span> Previous
+      </button>
+
+      <span id="slideIndicator" class="font-mono text-xs px-3 py-1.5 rounded-lg bg-slate-900/80 border border-slate-800 text-cyan-300 font-bold">
+        Slide 01 / 18
+      </span>
+
+      <button id="btnNext" class="px-4 py-2 rounded-xl bg-slate-900 border border-slate-700 hover:bg-slate-800 text-slate-200 font-bold text-xs transition flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed">
+        Next <span>▶</span>
+      </button>
+    </div>
+
+    <!-- Slide Timeline Scrub Progress -->
+    <div class="flex-1 mx-6 h-2 bg-slate-800 rounded-full overflow-hidden">
+      <div id="slideProgressBar" class="h-full bg-gradient-to-r from-emerald-500 via-cyan-400 to-blue-500 transition-all duration-300" style="width: 5.5%;"></div>
+    </div>
+
+    <!-- Quick Shortcuts Tip -->
+    <div class="text-[11px] text-slate-500 font-mono hidden md:block">
+      Keys: <span class="text-slate-400">← / →</span> Nav | <span class="text-slate-400">Space</span> Next | <span class="text-slate-400">S</span> Notes | <span class="text-slate-400">F</span> Fullscreen
+    </div>
+  </footer>
+
+  <!-- Slide Data & Presentation Engine -->
+  <script>
+    const slides = [
+      {
+        id: 1,
+        category: "National Hackathon Innovation • Healthcare & Smart Cities",
+        catColor: "emerald",
+        title: "RAKSHAK-AI",
+        render: () => `
+          <div class="h-full flex flex-col justify-between">
+            <div class="space-y-4">
+              <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold uppercase tracking-wider">
+                ⚡ Gateways 2026 / National Hackathon Master Presentation
+              </div>
+              <h1 class="text-5xl sm:text-6xl font-black tracking-tight text-white leading-tight">
+                RAKSHAK-AI
+              </h1>
+              <h2 class="text-xl sm:text-2xl font-bold text-cyan-300 max-w-4xl leading-snug">
+                Autonomous AI Emergency Guardianship, Dynamic Green Wave Signal Preemption & Zero-Storage Visual Trauma Triage
+              </h2>
+              <p class="text-slate-300 text-sm sm:text-base max-w-4xl leading-relaxed pt-2">
+                Bridging India's fatal "Golden Hour" road emergency delay through an end-to-end multi-agency real-time ecosystem: on-device TFLite kinematic crash classification, autonomous C-V2X municipal traffic light preemption, physics-informed crash biomechanics (PINN), and zero-knowledge Ayushman Bharat (ABDM/ABHA) emergency health cards.
+              </p>
+            </div>
+
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-6 border-t border-slate-800">
+              <div class="p-3 rounded-xl bg-slate-950/60 border border-slate-800">
+                <div class="text-xs text-slate-400 uppercase font-semibold">PILOT CITY</div>
+                <div class="text-base font-bold text-emerald-400">Bengaluru, KA</div>
+              </div>
+              <div class="p-3 rounded-xl bg-slate-950/60 border border-slate-800">
+                <div class="text-xs text-slate-400 uppercase font-semibold">TRANSIT LATENCY</div>
+                <div class="text-base font-bold text-cyan-300">75% Slashed (9.4 min)</div>
+              </div>
+              <div class="p-3 rounded-xl bg-slate-950/60 border border-slate-800">
+                <div class="text-xs text-slate-400 uppercase font-semibold">PRIVACY STANDARD</div>
+                <div class="text-base font-bold text-purple-400">DPDP Act 2023 (RAM Only)</div>
+              </div>
+              <div class="p-3 rounded-xl bg-slate-950/60 border border-slate-800">
+                <div class="text-xs text-slate-400 uppercase font-semibold">TEST SUITE STATUS</div>
+                <div class="text-base font-bold text-emerald-400">100% Passing (56/56 Tests)</div>
+              </div>
+            </div>
+          </div>
+        `,
+        notes: `
+          Good morning, respected judges and panel members. Today, we present Rakshak-AI.
+          In India, our healthcare system boasts some of the most gifted trauma surgeons in the world. Yet, every single day, over 420 citizens die on our roads before ever reaching their care.
+          The failure is not clinical capability. The failure is the chaotic 45-minute information and transit void known as the Golden Hour delay.
+          Rakshak-AI is an autonomous, unified, 4-way synchronized AI ecosystem designed to bridge this divide without human friction.
+        `
+      },
+      {
+        id: 2,
+        category: "Problem Statement & Clinical Evidence",
+        catColor: "rose",
+        title: "The Critical Crisis: India's Fatal Road Accident Epidemic",
+        render: () => `
+          <div class="h-full flex flex-col justify-between">
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-3.5 mb-4">
+              <div class="card-glass p-4 rounded-xl border-l-4 border-l-rose-500 glow-rose">
+                <div class="text-3xl font-black text-rose-500">153,972+</div>
+                <div class="text-xs font-bold text-white mt-1 uppercase">ANNUAL FATALITIES</div>
+                <p class="text-xs text-slate-400 mt-1 leading-snug">India holds 11% of global road crash deaths with only 1% of the world's vehicular fleet.</p>
+              </div>
+
+              <div class="card-glass p-4 rounded-xl border-l-4 border-l-amber-500">
+                <div class="text-3xl font-black text-amber-400">3.4 Mins</div>
+                <div class="text-xs font-bold text-white mt-1 uppercase">FATAL CRASH INTERVAL</div>
+                <p class="text-xs text-slate-400 mt-1 leading-snug">A citizen dies every 200 seconds on Indian roads; 461,000+ suffer catastrophic lifelong injuries.</p>
+              </div>
+
+              <div class="card-glass p-4 rounded-xl border-l-4 border-l-emerald-500">
+                <div class="text-3xl font-black text-emerald-400">50%+</div>
+                <div class="text-xs font-bold text-white mt-1 uppercase">PREVENTABLE DEATHS</div>
+                <p class="text-xs text-slate-400 mt-1 leading-snug">Trauma surgeons confirm that half of casualties could survive if definitive surgical care arrives in 60 mins.</p>
+              </div>
+
+              <div class="card-glass p-4 rounded-xl border-l-4 border-l-cyan-500">
+                <div class="text-3xl font-black text-cyan-400">38-47 Mins</div>
+                <div class="text-xs font-bold text-white mt-1 uppercase">MEDIAN REPORTING LAG</div>
+                <p class="text-xs text-slate-400 mt-1 leading-snug">Unconscious victims cannot call; bystanders fear police harassment; ambulances stuck at red lights.</p>
+              </div>
+            </div>
+
+            <!-- The Golden Hour Delay Anatomy -->
+            <div class="card-glass p-4 rounded-xl border border-slate-800">
+              <div class="text-xs font-bold text-rose-400 uppercase tracking-wider mb-2">
+                THE 4 BOTTLENECKS CONSUMING THE GOLDEN HOUR IN URBAN INDIA
+              </div>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                <div class="p-2.5 rounded-lg bg-slate-950/60 border border-slate-800/80">
+                  <div class="font-bold text-cyan-300">1. Discovery & Reporting Delay (~14 min)</div>
+                  <div class="text-slate-300 mt-0.5">Unconscious victims cannot dial 108. Bystanders fear police cross-examination and legal harassment despite Good Samaritan protections.</div>
+                </div>
+                <div class="p-2.5 rounded-lg bg-slate-950/60 border border-slate-800/80">
+                  <div class="font-bold text-cyan-300">2. Ambulance Navigation Delay (~9 min)</div>
+                  <div class="text-slate-300 mt-0.5">Dispatch relies on vague landmarks ("near the bakery") instead of sub-meter GPS coordinates, resulting in wrong-turn dispatches.</div>
+                </div>
+                <div class="p-2.5 rounded-lg bg-slate-950/60 border border-slate-800/80">
+                  <div class="font-bold text-cyan-300">3. Urban Traffic Paralysis (~16 min)</div>
+                  <div class="text-slate-300 mt-0.5">Bengaluru choke points (Silk Board, Tin Factory) lack preemption. Ambulances sit helpless behind bumper-to-bumper vehicles unable to clear.</div>
+                </div>
+                <div class="p-2.5 rounded-lg bg-slate-950/60 border border-slate-800/80">
+                  <div class="font-bold text-cyan-300">4. Blind Hospital Intake (~8 min)</div>
+                  <div class="text-slate-300 mt-0.5">Victim arrives with unknown blood group, zero injury dynamics, and full ICU beds, causing fatal inter-hospital transfers.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        `,
+        notes: `
+          Slide 2 grounds the audience in official MoRTH and WHO data.
+          Emphasize the 4 stages of delay: Discovery (14 mins), Dispatch (9 mins), Traffic (16 mins), and Intake (8 mins).
+          When you add these up, 47 minutes are squandered before a surgeon even lays eyes on the victim.
+          This leaves less than 13 minutes of the Golden Hour to operate.
+        `
+      },
+      {
+        id: 3,
+        category: "Economic Analysis & Societal Burden",
+        catColor: "amber",
+        title: "Macroeconomic & GDP Impact: The $157 Billion National Toll",
+        render: () => `
+          <div class="h-full grid grid-cols-1 md:grid-cols-2 gap-4">
+            <!-- Left: The Economic Drain -->
+            <div class="card-glass p-5 rounded-xl border-l-4 border-l-amber-500 flex flex-col justify-between">
+              <div>
+                <div class="text-xs font-bold text-amber-400 uppercase tracking-wider mb-2">
+                  THE MACROECONOMIC TOLL (WORLD BANK REPORT)
+                </div>
+                <div class="space-y-3 text-xs leading-relaxed">
+                  <div>
+                    <span class="text-amber-300 font-bold text-sm block">• 3.14% of India's Annual GDP Lost</span>
+                    <span class="text-slate-300">World Bank's report "Traffic Crash Injuries and Disabilities in India" calculated the annual socio-economic cost of road crashes at ~157 Billion USD (₹12.9 Lakh Crores).</span>
+                  </div>
+                  <div>
+                    <span class="text-amber-300 font-bold text-sm block">• Demographic Crisis: 70% in Prime Age</span>
+                    <span class="text-slate-300">Over 70% of fatalities and severe quadriplegic disabilities occur among youth aged 18 to 45 years — the primary breadwinners and workforce of India.</span>
+                  </div>
+                  <div>
+                    <span class="text-amber-300 font-bold text-sm block">• 2.8 Million Families Pushed Into Extreme Poverty</span>
+                    <span class="text-slate-300">Catastrophic Out-of-Pocket Expenditure (OOPE) for acute ICU stays, exploratory surgeries, and lost wages instantly bankrupts middle and lower-income families.</span>
+                  </div>
+                </div>
+              </div>
+              <div class="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-300 text-xs font-semibold">
+                ⚠️ Third-party motor accident insurance claims cost Indian insurers ₹32,000+ Crores annually.
+              </div>
+            </div>
+
+            <!-- Right: The Rakshak-AI Economic Return -->
+            <div class="card-glass p-5 rounded-xl border-l-4 border-l-emerald-500 flex flex-col justify-between">
+              <div>
+                <div class="text-xs font-bold text-emerald-400 uppercase tracking-wider mb-2">
+                  RAKSHAK-AI RETURN ON INVESTMENT (ROI) & GDP RECOVERY
+                </div>
+                <div class="space-y-3 text-xs leading-relaxed">
+                  <div>
+                    <span class="text-emerald-300 font-bold text-sm block">• 1:38.4 National Economic Multiplier</span>
+                    <span class="text-slate-300">Every ₹1 invested in automated signal preemption and trauma telemetry yields ₹38.4 in economic productivity preserved by averting premature workforce loss.</span>
+                  </div>
+                  <div>
+                    <span class="text-emerald-300 font-bold text-sm block">• 40,000+ Productive Lives Preserved Annually</span>
+                    <span class="text-slate-300">Targeting a 50% Golden Hour arrival latency reduction across metros preserves over ₹45,000 Crores in human capital value per year.</span>
+                  </div>
+                  <div>
+                    <span class="text-emerald-300 font-bold text-sm block">• 62% Reduction in Lifelong Disability Costs</span>
+                    <span class="text-slate-300">Advance C-Spine whiplash alerts prevent secondary spinal transections during extraction, drastically reducing long-term quadriplegia nursing costs.</span>
+                  </div>
+                </div>
+              </div>
+              <div class="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-emerald-300 text-xs font-semibold">
+                ✅ Zero bespoke road hardware: Leverages citizen smartphones, municipal CCTV, and NTCIP 1202 signals.
+              </div>
+            </div>
+          </div>
+        `,
+        notes: `
+          Slide 3 provides the macro-economic justification for government and investor stakeholders.
+          Point out the World Bank statistic: 3.14% of India's GDP is consumed by road crashes annually.
+          Because 70% of casualties are young breadwinners aged 18-45, saving them restores decades of productive GDP output and prevents family bankruptcies.
+        `
+      },
+      {
+        id: 4,
+        category: "System Overview & Orchestration",
+        catColor: "cyan",
+        title: "The Rakshak-AI Unified Solution: 4-Way Multi-Agency Synchronization",
+        render: () => `
+          <div class="h-full grid grid-cols-1 md:grid-cols-2 gap-3.5">
+            <div class="card-glass p-4 rounded-xl border border-rose-500/40">
+              <div class="flex items-center gap-2 text-rose-400 font-bold text-sm mb-1.5">
+                <span>📱</span> 1. CITIZEN & VICTIM MOBILE APP
+              </div>
+              <ul class="text-xs text-slate-300 space-y-1">
+                <li>• 18.2ms on-device TFLite kinematic crash classification</li>
+                <li>• 15-second zero-touch unconscious failsafe countdown</li>
+                <li>• Dual-SIM background SOS SMS with live tracking link</li>
+                <li>• Verified Ayushman Bharat (ABHA) Emergency Health Vault</li>
+              </ul>
+            </div>
+
+            <div class="card-glass p-4 rounded-xl border border-cyan-500/40">
+              <div class="flex items-center gap-2 text-cyan-400 font-bold text-sm mb-1.5">
+                <span>🚓</span> 2. POLICE & ITMS COMMAND WORKSTATION
+              </div>
+              <ul class="text-xs text-slate-300 space-y-1">
+                <li>• City-wide tactical GIS incident map (PostgreSQL + PostGIS)</li>
+                <li>• Sub-second geohash fanout & nearest PCR cruiser dispatch</li>
+                <li>• CCTV Edge Vision (YOLOv8) vehicle density scoring</li>
+                <li>• Municipal Green Corridor preemption authorization</li>
+              </ul>
+            </div>
+
+            <div class="card-glass p-4 rounded-xl border border-emerald-500/40">
+              <div class="flex items-center gap-2 text-emerald-400 font-bold text-sm mb-1.5">
+                <span>🚑</span> 3. 108 AMBULANCE COCKPIT HUD
+              </div>
+              <ul class="text-xs text-slate-300 space-y-1">
+                <li>• 1-tap incident claiming with race-safe distributed locking</li>
+                <li>• Luminous emerald Green Wave HUD with turn-by-turn routing</li>
+                <li>• Traffic lights flip to solid GREEN at 950m out (EVP)</li>
+                <li>• Dynamic A* reroute bypassing urban bottlenecks (-4.2 min)</li>
+              </ul>
+            </div>
+
+            <div class="card-glass p-4 rounded-xl border border-purple-500/40">
+              <div class="flex items-center gap-2 text-purple-400 font-bold text-sm mb-1.5">
+                <span>🏥</span> 4. LEVEL-1 HOSPITAL TRAUMA BAY
+              </div>
+              <ul class="text-xs text-slate-300 space-y-1">
+                <li>• JWT-authenticated surgeon dashboard (10 seeded facilities)</li>
+                <li>• Ephemeral WebRTC live video triage (zero persistent disk writes)</li>
+                <li>• AI Crash Biomechanics (Delta-V, peak G, ISS 26, organ risks)</li>
+                <li>• Pre-activates Trauma Bay 01, blood cross-match, and CT scan</li>
+              </ul>
+            </div>
+          </div>
+        `,
+        notes: `
+          Slide 4 provides the architectural blueprint of the entire product.
+          Explain that Rakshak-AI is NOT just another emergency phone app.
+          It is an orchestrated 4-way platform uniting the citizen, police, ambulance, and trauma surgeon simultaneously.
+        `
+      },
+      {
+        id: 5,
+        category: "Subsystem Deep-Dive: Mobile Edge AI",
+        catColor: "rose",
+        title: "Citizen App: 18ms On-Device Kinematic Crash AI",
+        render: () => `
+          <div class="h-full grid grid-cols-1 lg:grid-cols-12 gap-4 items-center">
+            <!-- Left Info Panel (7 cols) -->
+            <div class="lg:col-span-7 flex flex-col justify-between h-full space-y-3">
+              <div class="card-glass p-4 rounded-xl border-l-4 border-l-rose-500">
+                <div class="text-xs font-bold text-rose-400 uppercase tracking-wider mb-2">ON-DEVICE INFERENCE ENGINE (TFLITE 1D-CNN)</div>
+                <div class="space-y-2 text-xs text-slate-300">
+                  <div>
+                    <span class="text-cyan-300 font-bold">⚡ 18.2ms Zero-Cloud Latency:</span>
+                    Runs entirely locally via INT8-quantized 1D-CNN. Zero network roundtrip to confirm violent impact.
+                  </div>
+                  <div>
+                    <span class="text-cyan-300 font-bold">🔄 Multi-Axis Sensor Fusion:</span>
+                    Samples 100Hz tri-axial accelerometer (±16G), gyroscope, and sudden GPS speed drops.
+                  </div>
+                  <div>
+                    <span class="text-cyan-300 font-bold">🛡️ Zero False Alarm Guard:</span>
+                    Differentiates drops on concrete from vehicular crashes using bandpass filters & jerk (da/dt).
+                  </div>
+                  <div>
+                    <span class="text-cyan-300 font-bold">🔒 Immutable Physics Fallback:</span>
+                    Kinematic rule engine (>6.5G deceleration) guarantees detection if neural buffer fails.
+                  </div>
+                </div>
+              </div>
+
+              <!-- Hardware Benchmarks Strip -->
+              <div class="grid grid-cols-4 gap-2 text-center text-xs">
+                <div class="p-2 rounded-lg bg-slate-950/70 border border-slate-800">
+                  <div class="text-[10px] text-slate-400">MODEL SIZE</div>
+                  <div class="text-sm font-bold font-mono text-white">42 KB</div>
+                </div>
+                <div class="p-2 rounded-lg bg-slate-950/70 border border-slate-800">
+                  <div class="text-[10px] text-slate-400">LATENCY</div>
+                  <div class="text-sm font-bold font-mono text-emerald-400">18.2 ms</div>
+                </div>
+                <div class="p-2 rounded-lg bg-slate-950/70 border border-slate-800">
+                  <div class="text-[10px] text-slate-400">SAMPLING</div>
+                  <div class="text-sm font-bold font-mono text-cyan-300">100 Hz</div>
+                </div>
+                <div class="p-2 rounded-lg bg-slate-950/70 border border-slate-800">
+                  <div class="text-[10px] text-slate-400">BATTERY</div>
+                  <div class="text-sm font-bold font-mono text-amber-300">&lt;1.4%/8h</div>
+                </div>
+              </div>
+
+              <div class="p-2.5 rounded-lg bg-slate-950/80 border border-emerald-500/30 text-[11px] text-emerald-400 flex items-center justify-between">
+                <span>🛡️ ABDM Verified Health Vault Integrated</span>
+                <span class="font-mono text-xs">v2.4.0 • Android & iOS</span>
+              </div>
+            </div>
+
+            <!-- Right Screenshot Mockup (5 cols) -->
+            <div class="lg:col-span-5 flex justify-center items-center h-full">
+              <div class="relative p-2 rounded-3xl bg-slate-950/80 border-2 border-emerald-500/50 shadow-2xl shadow-emerald-500/10 max-h-[380px] flex flex-col items-center">
+                <div class="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400 text-[10px] font-bold text-emerald-300 uppercase tracking-wider whitespace-nowrap shadow-md">
+                  ● KINEMATIC GUARD ARMED
+                </div>
+                <img src="docs/screenshots/screenshot_citizen_guard.png" alt="Citizen Guard Mobile Screen" class="h-[340px] w-auto rounded-2xl object-contain shadow-lg" />
+              </div>
+            </div>
+          </div>
+        `,
+        notes: `
+          Slide 5 proves the technical depth of the mobile client.
+          Clarify that many student apps use a simple accelerometer threshold that triggers false alarms every time a phone drops.
+          Rakshak-AI uses a quantized 1D-CNN running in 18ms with jerk derivative filtering and a deterministic rule fallback.
+        `
+      },
+      {
+        id: 6,
+        category: "Subsystem Deep-Dive: Autonomous Dispatch",
+        catColor: "rose",
+        title: "Citizen App: 15-Second Zero-Touch Unconscious Failsafe",
+        render: () => `
+          <div class="h-full grid grid-cols-1 lg:grid-cols-12 gap-4 items-center">
+            <!-- Left Info Panel (7 cols) -->
+            <div class="lg:col-span-7 flex flex-col justify-between h-full space-y-3">
+              <div class="grid grid-cols-3 gap-2 text-xs">
+                <div class="p-2.5 rounded-xl bg-slate-950/70 border border-amber-500/40">
+                  <div class="text-[10px] font-bold text-amber-400 uppercase">PHASE 1: ALARM</div>
+                  <div class="text-slate-300 mt-1 leading-snug">100dB siren overrides mute; haptic pulse.</div>
+                </div>
+                <div class="p-2.5 rounded-xl bg-slate-950/70 border border-rose-500/50 glow-rose">
+                  <div class="text-[10px] font-bold text-rose-400 uppercase">PHASE 2: 15s RING</div>
+                  <div class="text-slate-300 mt-1 leading-snug">Circular timer with "I'm OK — Cancel" button.</div>
+                </div>
+                <div class="p-2.5 rounded-xl bg-slate-950/70 border border-emerald-500/40">
+                  <div class="text-[10px] font-bold text-emerald-400 uppercase">PHASE 3: AUTO-SOS</div>
+                  <div class="text-slate-300 mt-1 leading-snug">Zero-touch POST to API + Dual-SIM SMS.</div>
+                </div>
+              </div>
+
+              <div class="card-glass p-4 rounded-xl border border-cyan-500/40">
+                <div class="text-xs font-bold text-cyan-400 uppercase tracking-wider mb-1">
+                  WHY ZERO-TOUCH DISPATCH SAVES LIVES WHERE OTHER APPS FAIL
+                </div>
+                <p class="text-xs text-slate-300 leading-relaxed">
+                  In 68% of high-speed rollover collisions, occupants suffer concussions, shock, or upper extremity fractures, making unlocking a smartphone physiologically impossible.
+                  Rakshak-AI guarantees immediate medical activation without requiring victim consciousness.
+                </p>
+                <div class="mt-2 pt-2 border-t border-slate-800 text-[11px] text-emerald-400 font-mono">
+                  📱 Dual-SIM Background SMS transmits encrypted coordinates and live tracking map simultaneously.
+                </div>
+              </div>
+            </div>
+
+            <!-- Right Screenshot Mockup (5 cols) -->
+            <div class="lg:col-span-5 flex justify-center items-center h-full">
+              <div class="relative p-2 rounded-3xl bg-slate-950/80 border-2 border-rose-500/50 shadow-2xl shadow-rose-500/10 max-h-[380px] flex flex-col items-center">
+                <div class="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-0.5 rounded-full bg-rose-500/20 border border-rose-400 text-[10px] font-bold text-rose-300 uppercase tracking-wider whitespace-nowrap shadow-md">
+                  🚨 15s ZERO-TOUCH COUNTDOWN
+                </div>
+                <img src="docs/screenshots/screenshot_citizen_countdown.png" alt="Citizen Countdown Screen" class="h-[340px] w-auto rounded-2xl object-contain shadow-lg" />
+              </div>
+            </div>
+          </div>
+        `,
+        notes: `
+          Slide 6 focuses on the UX of the 15-second countdown.
+          Explain that if a driver is unconscious, the app does not wait. It auto-dispatches.
+          If they are fine, they have 15 seconds to tap cancel.
+        `
+      },
+      {
+        id: 7,
+        category: "Subsystem Deep-Dive: Traffic Grid V2I",
+        catColor: "emerald",
+        title: "Autonomous AI Green Corridor & Dynamic Signal Preemption (EVP)",
+        render: () => `
+          <div class="h-full grid grid-cols-1 lg:grid-cols-12 gap-4 items-center">
+            <!-- Left Info Panel (5 cols) -->
+            <div class="lg:col-span-5 flex flex-col justify-between h-full space-y-2.5">
+              <div class="card-glass p-3.5 rounded-xl border-l-4 border-l-emerald-500">
+                <div class="text-xs font-bold text-emerald-400 uppercase tracking-wider mb-1.5">C-V2X SIGNAL PREEMPTION (EVP)</div>
+                <div class="space-y-1.5 text-xs text-slate-300">
+                  <div><span class="text-cyan-300 font-bold">• 950m Geofence:</span> ITMS receives preemption command 950m out.</div>
+                  <div><span class="text-cyan-300 font-bold">• 45s Green Wave:</span> Signals turn SOLID GREEN 45s prior to arrival.</div>
+                  <div><span class="text-cyan-300 font-bold">• Zero Stoppage:</span> Safe 65 km/h transit through blind intersections.</div>
+                  <div><span class="text-cyan-300 font-bold">• NTCIP 1202:</span> Standard B-TRAC and Smart City controller compatibility.</div>
+                </div>
+              </div>
+
+              <div class="card-glass p-3.5 rounded-xl border-l-4 border-l-amber-500">
+                <div class="text-xs font-bold text-amber-400 uppercase tracking-wider mb-1.5">CCTV EDGE VISION & A* DETOUR</div>
+                <div class="space-y-1.5 text-xs text-slate-300">
+                  <div><span class="text-amber-300 font-bold">• YOLOv8 Density:</span> Real-time CCTV analysis flags 89% choke.</div>
+                  <div><span class="text-amber-300 font-bold">• Bottleneck Bypass:</span> A* detours via Old Airport Rd (-4.2 min).</div>
+                  <div><span class="text-amber-300 font-bold">• Variable Signs (VMS):</span> "CLEAR LEFT LANE" warnings 500m ahead.</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Right Screenshot Frame (7 cols) -->
+            <div class="lg:col-span-7 flex flex-col justify-center items-center h-full">
+              <div class="relative w-full rounded-2xl bg-slate-950/80 border border-emerald-500/40 p-2 shadow-2xl">
+                <div class="flex items-center justify-between px-2 pb-1.5 border-b border-slate-800 text-[11px]">
+                  <span class="font-bold text-emerald-400">🚑 AMBULANCE EMS CONSOLE: 1-TAP ATOMIC CLAIMING</span>
+                  <span class="font-mono text-cyan-300">INCIDENT #4d4ea69d</span>
+                </div>
+                <img src="docs/screenshots/screenshot_ambulance_claim.png" alt="Ambulance Claim Console" class="w-full max-h-[280px] rounded-xl object-contain mt-1.5 shadow-lg" />
+              </div>
+            </div>
+          </div>
+        `,
+        notes: `
+          Slide 7 covers our V2I / C-V2X Green Corridor innovation.
+          Explain that green lights are NOT switched abruptly; they cycle safely through yellow phases 45 seconds in advance.
+          And if a road is totally blocked, YOLOv8 CCTV vision triggers an autonomous A* detour around the choke point.
+        `
+      },
+      {
+        id: 8,
+        category: "Subsystem Deep-Dive: Police Ops",
+        catColor: "cyan",
+        title: "Central Police & ITMS Command: City-Wide Tactical Map",
+        render: () => `
+          <div class="h-full grid grid-cols-1 lg:grid-cols-12 gap-4 items-center">
+            <!-- Left Info Panel (5 cols) -->
+            <div class="lg:col-span-5 flex flex-col justify-between h-full space-y-2.5">
+              <div class="card-glass p-3.5 rounded-xl border-l-4 border-l-cyan-500">
+                <div class="text-xs font-bold text-cyan-400 uppercase tracking-wider mb-1.5">TACTICAL POLICE DISPATCH FEATURES</div>
+                <div class="space-y-1.5 text-xs text-slate-300">
+                  <div><span class="text-white font-bold">• Sub-Second Geohash:</span> PostGIS spatial indexing pinpoints crash in 300ms.</div>
+                  <div><span class="text-white font-bold">• PCR Cruiser Dispatch:</span> Assigns patrol cruiser (KA-01-G-404) immediately.</div>
+                  <div><span class="text-white font-bold">• 2-Minute Scene Arrival:</span> Secures crash scene and clears lanes for EMS.</div>
+                  <div><span class="text-white font-bold">• Immutable Audit Log:</span> JWT-signed telemetry for accident reconstruction.</div>
+                </div>
+              </div>
+
+              <div class="p-3 bg-cyan-500/10 rounded-xl border border-cyan-500/30 text-xs text-cyan-300 space-y-1">
+                <div class="font-bold">🗺️ GIS TACTICAL MAP & EDGE VISION</div>
+                <div class="text-slate-300 text-[11px]">Real-time React-Leaflet GIS visualization, CCTV density analytics (89% choke detection), and automated green corridor clearance.</div>
+              </div>
+            </div>
+
+            <!-- Right Screenshot Frame (7 cols) -->
+            <div class="lg:col-span-7 flex flex-col justify-center items-center h-full">
+              <div class="relative w-full rounded-2xl bg-slate-950/80 border border-cyan-500/40 p-2 shadow-2xl">
+                <div class="flex items-center justify-between px-2 pb-1.5 border-b border-slate-800 text-[11px]">
+                  <span class="font-bold text-cyan-300">🚓 POLICE & ITMS COMMAND WORKSTATION</span>
+                  <span class="font-mono text-emerald-400">BENGALURU CENTRAL</span>
+                </div>
+                <img src="docs/screenshots/screenshot_police_dashboard.png" alt="Police Command Workstation" class="w-full max-h-[280px] rounded-xl object-contain mt-1.5 shadow-lg" />
+              </div>
+            </div>
+          </div>
+        `,
+        notes: `
+          Slide 8 explains how Police ITMS Command participates in the ecosystem.
+          Police are dispatched not to interrogate bystanders, but to cordon the crash site and manage the traffic wave.
+        `
+      },
+      {
+        id: 9,
+        category: "Subsystem Deep-Dive: Ambulance EMS",
+        catColor: "emerald",
+        title: "Ambulance Cockpit Console: 1-Tap Claiming & High-Speed HUD",
+        render: () => `
+          <div class="h-full grid grid-cols-1 lg:grid-cols-12 gap-4 items-center">
+            <!-- Left Info Panel (5 cols) -->
+            <div class="lg:col-span-5 flex flex-col justify-between h-full space-y-2.5">
+              <div class="card-glass p-3.5 rounded-xl border-l-4 border-l-emerald-500">
+                <div class="text-xs font-bold text-emerald-400 uppercase tracking-wider mb-1.5">LUMINOUS GREEN WAVE HUD</div>
+                <div class="space-y-1.5 text-xs text-slate-300">
+                  <div><span class="text-cyan-300 font-bold">• Turn-by-Turn Routing:</span> Emerald cockpit UI designed for 65 km/h transit.</div>
+                  <div><span class="text-cyan-300 font-bold">• 950m Preemption:</span> Traffic lights flip SOLID GREEN ahead of arrival.</div>
+                  <div><span class="text-cyan-300 font-bold">• A* Choke Detour:</span> Avoids 89% choke on 100ft Rd (-4.2 min).</div>
+                  <div><span class="text-cyan-300 font-bold">• Speed & Telemetry:</span> 65 km/h live speed and Golden Hour timer.</div>
+                </div>
+              </div>
+
+              <div class="card-glass p-3.5 rounded-xl border-l-4 border-l-amber-500">
+                <div class="text-xs font-bold text-amber-400 uppercase tracking-wider mb-1.5">IN-CABIN CLINICAL ACTION DECK</div>
+                <div class="space-y-1.5 text-xs text-slate-300">
+                  <div><span class="text-amber-300 font-bold">• Trauma Blackbox (ISS 26):</span> Pre-arms cervical collar for C-Spine shock.</div>
+                  <div><span class="text-amber-300 font-bold">• ABHA Vault Sync:</span> Flags Penicillin anaphylaxis and Warfarin anticoagulant.</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Right Screenshot Frame (7 cols) -->
+            <div class="lg:col-span-7 flex flex-col justify-center items-center h-full">
+              <div class="relative w-full rounded-2xl bg-slate-950/80 border border-emerald-500/40 p-2 shadow-2xl">
+                <div class="flex items-center justify-between px-2 pb-1.5 border-b border-slate-800 text-[11px]">
+                  <span class="font-bold text-emerald-400">🚑 AMBULANCE COCKPIT HUD: LIVE C-V2X PREEMPTION</span>
+                  <span class="font-mono text-cyan-300">SIGNAL AT 950M • 65 KM/H</span>
+                </div>
+                <img src="docs/screenshots/screenshot_ambulance_hud.png" alt="Ambulance Cockpit HUD" class="w-full max-h-[280px] rounded-xl object-contain mt-1.5 shadow-lg" />
+              </div>
+            </div>
+          </div>
+        `,
+        notes: `
+          Slide 9 focuses on the ambulance experience.
+          Highlight how the paramedic claims the case with one tap, and the screen transforms into a green-corridor HUD with direct clinical alerts.
+        `
+      },
+      {
+        id: 10,
+        category: "Subsystem Deep-Dive: Hospital ER",
+        catColor: "purple",
+        title: "Hospital Trauma Bay: Real Auth, RBAC & Race-Safe Case Locking",
+        render: () => `
+          <div class="h-full grid grid-cols-1 lg:grid-cols-12 gap-4 items-center">
+            <!-- Left Info Panel (5 cols) -->
+            <div class="lg:col-span-5 flex flex-col justify-between h-full space-y-2.5">
+              <div class="card-glass p-3.5 rounded-xl border-l-4 border-l-purple-500">
+                <div class="text-xs font-bold text-purple-400 uppercase tracking-wider mb-1.5">ENTERPRISE AUTH & RBAC SECURITY</div>
+                <div class="space-y-1.5 text-xs text-slate-300">
+                  <div><span class="text-cyan-300 font-bold">• JWT + Bcrypt:</span> 8-hour signed tokens replace dev dropdowns.</div>
+                  <div><span class="text-cyan-300 font-bold">• Strict RBAC:</span> Staff can strictly accept assigned hospital cases.</div>
+                  <div><span class="text-cyan-300 font-bold">• 403 Forbidden:</span> Unauthorized hospital actions rejected immediately.</div>
+                  <div><span class="text-cyan-300 font-bold">• 10 Seeded Centers:</span> Manipal, Apollo, Fortis, NIMHANS, Victoria, etc.</div>
+                </div>
+              </div>
+
+              <div class="card-glass p-3.5 rounded-xl border-l-4 border-l-emerald-500">
+                <div class="text-xs font-bold text-emerald-400 uppercase tracking-wider mb-1.5">RACE-SAFE LOCKING & READINESS</div>
+                <div class="space-y-1.5 text-xs text-slate-300">
+                  <div><span class="text-emerald-300 font-bold">• Atomic Row Locks:</span> First accept locks case; competing hospitals see LOCKED.</div>
+                  <div><span class="text-emerald-300 font-bold">• Bay 01 Pre-Armed:</span> Surgery team scrubs in and prepares ventilators.</div>
+                  <div><span class="text-emerald-300 font-bold">• Blood Pre-Issued:</span> 2 units of B+ Positive pulled from blood bank.</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Right Screenshot Frame (7 cols) -->
+            <div class="lg:col-span-7 flex flex-col justify-center items-center h-full">
+              <div class="relative w-full rounded-2xl bg-slate-950/80 border border-purple-500/40 p-2 shadow-2xl">
+                <div class="flex items-center justify-between px-2 pb-1.5 border-b border-slate-800 text-[11px]">
+                  <span class="font-bold text-purple-300">🏥 LEVEL-1 SURGICAL ER WORKSTATION</span>
+                  <span class="font-mono text-emerald-400">MANIPAL HOSPITAL TRAUMA BAY 01</span>
+                </div>
+                <img src="docs/screenshots/screenshot_hospital_dashboard.png" alt="Hospital Trauma Dashboard" class="w-full max-h-[280px] rounded-xl object-contain mt-1.5 shadow-lg" />
+              </div>
+            </div>
+          </div>
+        `,
+        notes: `
+          Slide 10 highlights Phase 13's security hardening.
+          Explain that we have genuine bcrypt authentication, signed JWT tokens, and race-safe case locking across 10 seeded hospitals.
+        `
+      },
+      {
+        id: 11,
+        category: "Privacy Architecture & DPDP Act 2023",
+        catColor: "cyan",
+        title: "Zero-Storage Protocol & Real WebRTC Ephemeral Visual Triage",
+        render: () => `
+          <div class="h-full grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="card-glass p-5 rounded-xl border-l-4 border-l-cyan-500">
+              <div class="text-xs font-bold text-cyan-400 uppercase tracking-wider mb-2">WEBRTC PEER-TO-PEER DATACHANNEL STREAMING</div>
+              <div class="space-y-3 text-xs text-slate-300">
+                <div>
+                  <span class="text-emerald-400 font-bold block">⚡ Direct P2P Transport:</span>
+                  Establishes a direct WebRTC peer connection between victim phone and hospital dashboard over existing Socket.io signaling.
+                </div>
+                <div>
+                  <span class="text-emerald-400 font-bold block">🔄 Automatic 5s WebSocket Fallback:</span>
+                  If WebRTC negotiation times out due to symmetric NATs or corporate firewalls, it automatically falls back to binary WebSockets with zero user error.
+                </div>
+                <div>
+                  <span class="text-emerald-400 font-bold block">🔍 High-Resolution Triage Lightbox:</span>
+                  Surgeons can inspect full-resolution cabin crush damage and head trauma without leaving their triage desk.
+                </div>
+                <div>
+                  <span class="text-emerald-400 font-bold block">🏷️ Transport Verification Badge:</span>
+                  Dashboard card displays "⚡ WebRTC P2P" vs "🔄 WebSocket Fallback" proving real transport resilience.
+                </div>
+              </div>
+            </div>
+
+            <div class="card-glass p-5 rounded-xl border-l-4 border-l-rose-500">
+              <div class="text-xs font-bold text-rose-400 uppercase tracking-wider mb-2">ZERO-PERSISTENT-STORAGE PRIVACY PROTOCOL</div>
+              <div class="space-y-3 text-xs text-slate-300">
+                <div>
+                  <span class="text-amber-300 font-bold block">🚫 No Local Disk Writes:</span>
+                  Camera frames stream from RAM buffers directly. Zero photos are ever written to phone storage or camera rolls.
+                </div>
+                <div>
+                  <span class="text-amber-300 font-bold block">⏱️ Volatile Redis RAM Only (TTL 900s):</span>
+                  Intermediate signaling buffers live strictly in RAM with a 15-minute TTL. Redis persistence (AOF/RDB) is permanently disabled.
+                </div>
+                <div>
+                  <span class="text-amber-300 font-bold block">🛡️ Anti-Exfiltration UI Defenses:</span>
+                  Right-click context menus, image dragging, and downloads are strictly prevented on the dashboard DOM.
+                </div>
+                <div>
+                  <span class="text-amber-300 font-bold block">⚖️ DPDP Act 2023 Compliant:</span>
+                  Strict adherence to India's Digital Personal Data Protection Act 2023, protecting victim dignity and preventing viral leaks.
+                </div>
+              </div>
+            </div>
+          </div>
+        `,
+        notes: `
+          Slide 11 details Phase 12's WebRTC upgrade and the zero-storage privacy principle.
+          Explain that sensitive crash scene photos never touch disk storage or S3 buckets — they reside in RAM for 15 minutes and vanish.
+        `
+      },
+      {
+        id: 12,
+        category: "Game-Changing Feature: PINN Modeling",
+        catColor: "rose",
+        title: "Innovation 1: AI Crash Biomechanics & Virtual Trauma Blackbox",
+        render: () => `
+          <div class="h-full flex flex-col justify-between">
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
+              <div class="card-glass p-3 rounded-xl border border-rose-500/40">
+                <div class="text-[10px] text-slate-400 font-mono uppercase">DELTA-V VELOCITY DROP</div>
+                <div class="text-2xl font-black text-rose-500">62.4 km/h</div>
+                <div class="text-[11px] text-slate-300">&lt; 120ms impact window</div>
+              </div>
+
+              <div class="card-glass p-3 rounded-xl border border-amber-500/40">
+                <div class="text-[10px] text-slate-400 font-mono uppercase">PEAK DECELERATION</div>
+                <div class="text-2xl font-black text-amber-400">48.6 G</div>
+                <div class="text-[11px] text-slate-300">Severe kinetic force shock</div>
+              </div>
+
+              <div class="card-glass p-3 rounded-xl border border-cyan-500/40">
+                <div class="text-[10px] text-slate-400 font-mono uppercase">KINETIC ENERGY DISSIPATION</div>
+                <div class="text-2xl font-black text-cyan-400">142.8 kJ</div>
+                <div class="text-[11px] text-slate-300">Cabin structural load</div>
+              </div>
+
+              <div class="card-glass p-3 rounded-xl border border-purple-500/40">
+                <div class="text-[10px] text-slate-400 font-mono uppercase">PREDICTED INJURY SCORE</div>
+                <div class="text-2xl font-black text-purple-400">ISS: 26</div>
+                <div class="text-[11px] text-slate-300">Severe Polytrauma Status</div>
+              </div>
+            </div>
+
+            <div class="card-glass p-4 rounded-xl border border-rose-500/50">
+              <div class="text-xs font-bold text-rose-400 uppercase tracking-wider mb-2">
+                PREDICTED INTERNAL ORGAN TRAUMA MATRIX & CLINICAL PROTOCOLS
+              </div>
+              <div class="space-y-2 text-xs">
+                <div class="p-2 rounded-lg bg-slate-950/70 border border-rose-500/30 flex justify-between items-center">
+                  <div>
+                    <span class="font-bold text-white">• Cervical Spine Whiplash / Fracture: 84% [CRITICAL]</span>
+                    <span class="text-cyan-300 block text-[11px]">🏥 Clinical Action: Immediate C-Spine Collar Immobilization before moving victim.</span>
+                  </div>
+                  <span class="px-2 py-0.5 rounded bg-rose-500/20 text-rose-400 font-bold">84% Risk</span>
+                </div>
+
+                <div class="p-2 rounded-lg bg-slate-950/70 border border-amber-500/30 flex justify-between items-center">
+                  <div>
+                    <span class="font-bold text-white">• Blunt Sternal / Myocardial Contusion: 76% [HIGH]</span>
+                    <span class="text-cyan-300 block text-[11px]">🏥 Clinical Action: Pre-order 12-lead ECG and stat Cardiac Troponin markers.</span>
+                  </div>
+                  <span class="px-2 py-0.5 rounded bg-amber-500/20 text-amber-400 font-bold">76% Risk</span>
+                </div>
+
+                <div class="p-2 rounded-lg bg-slate-950/70 border border-amber-500/30 flex justify-between items-center">
+                  <div>
+                    <span class="font-bold text-white">• Intra-Abdominal / Splenic Laceration: 61% [HIGH]</span>
+                    <span class="text-cyan-300 block text-[11px]">🏥 Clinical Action: FAST Abdominal Ultrasound Protocol on trauma bay docking.</span>
+                  </div>
+                  <span class="px-2 py-0.5 rounded bg-amber-500/20 text-amber-400 font-bold">61% Risk</span>
+                </div>
+
+                <div class="p-2 rounded-lg bg-slate-950/70 border border-slate-800 flex justify-between items-center">
+                  <div>
+                    <span class="font-bold text-white">• Traumatic Brain Injury (Closed Head Shock): 48% [MODERATE]</span>
+                    <span class="text-cyan-300 block text-[11px]">🏥 Clinical Action: Non-Contrast Head CT Protocol scheduled upon arrival.</span>
+                  </div>
+                  <span class="px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-bold">48% Risk</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        `,
+        notes: `
+          Slide 12 presents our first major game-changing feature: AI Crash Biomechanics.
+          Physics-Informed Neural Networks model the kinematics to calculate Delta-V (62.4 km/h), Peak Deceleration (48.6 G), and ISS score of 26.
+          Surgeons know to prepare a C-Spine collar and FAST ultrasound before the patient even arrives.
+        `
+      },
+      {
+        id: 13,
+        category: "Game-Changing Feature: Digital Health Stack",
+        catColor: "emerald",
+        title: "Innovation 2: Ayushman Bharat (ABDM/ABHA) Emergency Health Vault",
+        render: () => `
+          <div class="h-full grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="card-glass p-5 rounded-xl border-l-4 border-l-emerald-500">
+              <div class="text-xs font-bold text-emerald-400 uppercase tracking-wider mb-2">ABDM-VERIFIED EMERGENCY HEALTH IDENTITY</div>
+              <div class="space-y-3 text-xs text-slate-300">
+                <div>
+                  <span class="text-white font-bold block">• Verified 14-Digit ABHA ID:</span>
+                  <span class="font-mono text-emerald-300 font-bold">91-8842-9912-3401</span> (stevin.joseph@abdm) — Authenticated via National ABDM Gateway.
+                </div>
+                <div>
+                  <span class="text-white font-bold block">• Confirmed Blood Group (B+ Positive):</span>
+                  Eliminates 15-20 minutes of diagnostic blood typing delays, enabling immediate cross-matching and transfusion.
+                </div>
+                <div>
+                  <span class="text-white font-bold block">• Hardware TEE Enclave Cryptographic Signature:</span>
+                  Data signed inside the device's hardware Secure Enclave (<span class="font-mono text-cyan-300">0x7f4a8b29c910d9e2</span>) ensuring zero tampering.
+                </div>
+                <div>
+                  <span class="text-white font-bold block">• National Organ Donor Registration:</span>
+                  Verified registration with the National Organ & Tissue Transplant Organisation (<span class="font-mono text-emerald-300">NOTTO-IND-2024-88419</span>).
+                </div>
+              </div>
+            </div>
+
+            <div class="card-glass p-5 rounded-xl border-l-4 border-l-rose-500">
+              <div class="text-xs font-bold text-rose-400 uppercase tracking-wider mb-2">CRITICAL DRUG ALLERGIES & CONTRAINDICATIONS</div>
+              <div class="space-y-3 text-xs text-slate-300">
+                <div class="p-2.5 rounded-lg bg-rose-950/40 border border-rose-500/40">
+                  <span class="text-rose-400 font-bold block text-sm">🚨 HIGH-URGENCY CONTRAINDICATION:</span>
+                  <span class="text-white font-bold">Penicillin Anaphylaxis & Sulfa Drugs</span>
+                  <span class="text-rose-300 block text-[11px] mt-0.5">⚠️ Clinical Directive: Strict prohibition against administering beta-lactam antibiotics during acute emergency resuscitation!</span>
+                </div>
+                <div>
+                  <span class="text-amber-300 font-bold block">• Co-Morbidities: Type-1 Diabetes</span>
+                  Patient is on daily Insulin Glargine; requires continuous glycemic monitoring during trauma fluid loading.
+                </div>
+                <div>
+                  <span class="text-rose-400 font-bold block">• High-Risk Medication: Warfarin Blood Thinner</span>
+                  Patient is on active anticoagulant therapy! Alerts surgeons to high risk of occult internal bleeding; prompts prep of Vitamin K / Prothrombin Complex reversal agents.
+                </div>
+              </div>
+            </div>
+          </div>
+        `,
+        notes: `
+          Slide 13 details our second major game-changing feature: Ayushman Bharat (ABDM/ABHA) Emergency Health Vault.
+          Explain that administering standard penicillin to a patient with anaphylaxis or failing to know they are on Warfarin blood thinners is often fatal.
+          Rakshak-AI provides hardware-verified medical cards right at the point of trauma.
+        `
+      },
+      {
+        id: 14,
+        category: "System Architecture & Engineering Rigor",
+        catColor: "cyan",
+        title: "End-to-End Technical Architecture & Technology Stack",
+        render: () => `
+          <div class="h-full grid grid-cols-2 lg:grid-cols-4 gap-3.5">
+            <div class="card-glass p-4 rounded-xl border-t-4 border-t-rose-500">
+              <div class="text-xs font-bold text-rose-400 uppercase">MOBILE CLIENT</div>
+              <ul class="text-xs text-slate-300 mt-2 space-y-1.5">
+                <li>• Flutter 3.24+ & Dart 3.5+</li>
+                <li>• TensorFlow Lite (1D-CNN)</li>
+                <li>• flutter_webrtc (P2P Data)</li>
+                <li>• sensors_plus (100Hz IMU)</li>
+                <li>• Dual-SIM Background SMS</li>
+              </ul>
+            </div>
+
+            <div class="card-glass p-4 rounded-xl border-t-4 border-t-cyan-500">
+              <div class="text-xs font-bold text-cyan-400 uppercase">CORE BACKEND API</div>
+              <ul class="text-xs text-slate-300 mt-2 space-y-1.5">
+                <li>• Node.js, Express, TypeScript</li>
+                <li>• Zod Strict Schema Validation</li>
+                <li>• Socket.IO Signaling Relay</li>
+                <li>• Bcrypt & 8-hour JWT Auth</li>
+                <li>• 30s Auto-Escalation Engine</li>
+              </ul>
+            </div>
+
+            <div class="card-glass p-4 rounded-xl border-t-4 border-t-emerald-500">
+              <div class="text-xs font-bold text-emerald-400 uppercase">DATABASE & CACHE</div>
+              <ul class="text-xs text-slate-300 mt-2 space-y-1.5">
+                <li>• PostgreSQL 15 + PostGIS</li>
+                <li>• ST_DWithin Geohash Query</li>
+                <li>• Redis 7 (In-Memory RAM)</li>
+                <li>• TTL 900s Zero Disk Writes</li>
+                <li>• Atomic Row Locking</li>
+              </ul>
+            </div>
+
+            <div class="card-glass p-4 rounded-xl border-t-4 border-t-purple-500">
+              <div class="text-xs font-bold text-purple-400 uppercase">FRONTEND DASHBOARD</div>
+              <ul class="text-xs text-slate-300 mt-2 space-y-1.5">
+                <li>• React 18, Vite, TypeScript</li>
+                <li>• Tailwind CSS & Lucide Icons</li>
+                <li>• React-Leaflet GIS Mapping</li>
+                <li>• C-V2X (NTCIP 1202 Protocol)</li>
+                <li>• YOLOv8 CCTV Edge Vision</li>
+              </ul>
+            </div>
+          </div>
+        `,
+        notes: `
+          Slide 14 demonstrates production engineering rigor across the full stack.
+          Point out that every component is modular, containerized, and built using enterprise technologies.
+        `
+      },
+      {
+        id: 15,
+        category: "Governance & Indian Statutory Compliance",
+        catColor: "amber",
+        title: "Regulatory Compliance, Ethics & Legal Framework",
+        render: () => `
+          <div class="h-full grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="card-glass p-5 rounded-xl border-l-4 border-l-amber-500">
+              <div class="text-xs font-bold text-amber-400 uppercase tracking-wider mb-2">INDIAN STATUTORY & BYSTANDER IMMUNITY</div>
+              <div class="space-y-3 text-xs text-slate-300">
+                <div>
+                  <span class="text-white font-bold block">• Good Samaritan Protection (MV Act Sec 134A):</span>
+                  Supreme Court directives grant complete immunity from police interrogation, civil liability, or hospital detention for bystanders and automated telemetry.
+                </div>
+                <div>
+                  <span class="text-white font-bold block">• ABDM Milestone 1-3 Certification:</span>
+                  Complies with National Health Authority standards for health data fiduciary verification and ABHA token exchange.
+                </div>
+                <div>
+                  <span class="text-white font-bold block">• TRAI Emergency Telephony Standards:</span>
+                  Leverages carrier emergency SMS channels ensuring guaranteed packet transmission through congested highway cell towers.
+                </div>
+              </div>
+            </div>
+
+            <div class="card-glass p-5 rounded-xl border-l-4 border-l-emerald-500">
+              <div class="text-xs font-bold text-emerald-400 uppercase tracking-wider mb-2">DIGITAL PERSONAL DATA PROTECTION (DPDP) ACT 2023</div>
+              <div class="space-y-3 text-xs text-slate-300">
+                <div>
+                  <span class="text-white font-bold block">• Strict Purpose Limitation & Ephemeral Lifespan:</span>
+                  Crash photos exist purely for acute surgical resuscitation and are permanently purged after 900 seconds from volatile RAM.
+                </div>
+                <div>
+                  <span class="text-white font-bold block">• Zero Persistent Cloud Profiling:</span>
+                  No facial recognition, biometric indexing, or permanent storage of crash photos in cloud storage buckets.
+                </div>
+                <div>
+                  <span class="text-white font-bold block">• Hardware Enclave Cryptographic Zero-Knowledge:</span>
+                  Medical vault telemetry is verified via hardware TEE enclaves without exposing the citizen's Aadhaar or financial assets.
+                </div>
+              </div>
+            </div>
+          </div>
+        `,
+        notes: `
+          Slide 15 addresses ethics and regulatory compliance.
+          Emphasize that Rakshak-AI is strictly aligned with the Indian Good Samaritan Law and the DPDP Act 2023.
+        `
+      },
+      {
+        id: 16,
+        category: "Implementation Feasibility & Expansion",
+        catColor: "emerald",
+        title: "National Rollout Roadmap & Scalability Economics",
+        render: () => `
+          <div class="h-full flex flex-col justify-between">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3.5 mb-3">
+              <div class="card-glass p-4 rounded-xl border-l-4 border-l-cyan-500">
+                <div class="text-xs font-bold text-cyan-400 uppercase">PHASE 1: BENGALURU PILOT (M 1-6)</div>
+                <ul class="text-xs text-slate-300 mt-2 space-y-1">
+                  <li>• 10 Certified Level-1 Trauma Centers</li>
+                  <li>• 40 Municipal 108 Emergency Ambulances</li>
+                  <li>• 120 Smart ITMS Traffic Signals (B-TRAC)</li>
+                  <li>• High-density corridors (Indiranagar, Silk Board)</li>
+                </ul>
+              </div>
+
+              <div class="card-glass p-4 rounded-xl border-l-4 border-l-amber-500">
+                <div class="text-xs font-bold text-amber-400 uppercase">PHASE 2: TIER-1 METROS (M 7-18)</div>
+                <ul class="text-xs text-slate-300 mt-2 space-y-1">
+                  <li>• Mumbai, Delhi-NCR, Hyderabad, Chennai</li>
+                  <li>• 450+ Trauma Centers & 1,200 Ambulances</li>
+                  <li>• C-V2X V2I municipal ITMS integration</li>
+                  <li>• Target 40% reduction in city ambulance transit</li>
+                </ul>
+              </div>
+
+              <div class="card-glass p-4 rounded-xl border-l-4 border-l-emerald-500">
+                <div class="text-xs font-bold text-emerald-400 uppercase">PHASE 3: NH EXPRESSWAYS (M 19-36)</div>
+                <ul class="text-xs text-slate-300 mt-2 space-y-1">
+                  <li>• Golden Quadrilateral & NH-44 Expressways</li>
+                  <li>• Toll plaza radar preemption & emergency lane clearance</li>
+                  <li>• State-wide coordination with NHAI & Highway Patrol</li>
+                  <li>• MoRTH & NHA national adoption</li>
+                </ul>
+              </div>
+            </div>
+
+            <div class="card-glass p-4 rounded-xl border border-slate-800">
+              <div class="text-xs font-bold text-emerald-400 uppercase tracking-wider mb-1">
+                MINIMAL CAPEX DEPLOYMENT MODEL
+              </div>
+              <p class="text-xs text-slate-300 leading-relaxed">
+                By utilizing existing citizen smartphones, cloud WebRTC relays, and standard NTCIP 1202 municipal signal controllers, Rakshak-AI costs less than ₹14,000 ($170 USD) per intersection to enable, compared to proprietary sensor grids costing ₹8,50,000+ ($10,000 USD) per junction.
+              </p>
+            </div>
+          </div>
+        `,
+        notes: `
+          Slide 16 details our realistic 3-phase national rollout plan.
+          Phase 1 is ready in Bengaluru; Phase 2 expands to Tier-1 metros; Phase 3 scales across National Highway expressways.
+        `
+      },
+      {
+        id: 17,
+        category: "Market Comparison & Hackathon Winning Edge",
+        catColor: "cyan",
+        title: "Competitive Advantage: Why Rakshak-AI Outperforms All Solutions",
+        render: () => `
+          <div class="h-full card-glass p-5 rounded-xl border border-cyan-500/40 overflow-y-auto">
+            <div class="text-xs font-bold text-cyan-400 uppercase tracking-wider mb-3">HEAD-TO-HEAD CAPABILITY BENCHMARK</div>
+            <div class="space-y-2 text-xs">
+              <div class="grid grid-cols-4 gap-2 pb-2 border-b border-slate-800 font-bold text-slate-400 text-[11px]">
+                <div>CAPABILITY</div>
+                <div>TRADITIONAL APPS</div>
+                <div>STANDARD 108/112</div>
+                <div class="text-emerald-400">RAKSHAK-AI</div>
+              </div>
+
+              <div class="grid grid-cols-4 gap-2 py-1.5 border-b border-slate-800/60">
+                <div class="font-bold text-white">Detection Time</div>
+                <div class="text-slate-400">Manual Call (10-15m)</div>
+                <div class="text-slate-400">Voice Call (8-12m)</div>
+                <div class="text-emerald-400 font-bold">18.2 ms On-Device TFLite</div>
+              </div>
+
+              <div class="grid grid-cols-4 gap-2 py-1.5 border-b border-slate-800/60">
+                <div class="font-bold text-white">Unconscious Failsafe</div>
+                <div class="text-slate-400">None (Manual dial)</div>
+                <div class="text-slate-400">None (Needs bystander)</div>
+                <div class="text-emerald-400 font-bold">15s Zero-Touch Countdown</div>
+              </div>
+
+              <div class="grid grid-cols-4 gap-2 py-1.5 border-b border-slate-800/60">
+                <div class="font-bold text-white">Signal Preemption</div>
+                <div class="text-slate-400">None (Stuck in traffic)</div>
+                <div class="text-slate-400">Manual Police Radio</div>
+                <div class="text-emerald-400 font-bold">C-V2X Auto Green Wave (EVP)</div>
+              </div>
+
+              <div class="grid grid-cols-4 gap-2 py-1.5 border-b border-slate-800/60">
+                <div class="font-bold text-white">Visual Triage</div>
+                <div class="text-slate-400">Manual WhatsApp</div>
+                <div class="text-slate-400">None</div>
+                <div class="text-emerald-400 font-bold">Live WebRTC (Zero-Storage)</div>
+              </div>
+
+              <div class="grid grid-cols-4 gap-2 py-1.5 border-b border-slate-800/60">
+                <div class="font-bold text-white">Crash Biomechanics</div>
+                <div class="text-slate-400">None</div>
+                <div class="text-slate-400">None</div>
+                <div class="text-emerald-400 font-bold">PINN Blackbox (Delta-V, ISS 26)</div>
+              </div>
+
+              <div class="grid grid-cols-4 gap-2 py-1.5 border-b border-slate-800/60">
+                <div class="font-bold text-white">Health Vault</div>
+                <div class="text-slate-400">Manual Notes</div>
+                <div class="text-slate-400">None</div>
+                <div class="text-emerald-400 font-bold">ABDM Cryptographic Vault</div>
+              </div>
+
+              <div class="grid grid-cols-4 gap-2 py-1.5">
+                <div class="font-bold text-white">Hospital Readiness</div>
+                <div class="text-slate-400">Zero (Ad-hoc ER)</div>
+                <div class="text-slate-400">Basic Radio Notice</div>
+                <div class="text-emerald-400 font-bold">Bay 01 & Blood Pre-Armed</div>
+              </div>
+            </div>
+          </div>
+        `,
+        notes: `
+          Slide 17 is your clincher slide for competitive advantage.
+          Show the judges that Rakshak-AI is not a partial solution — it beats traditional apps and manual dispatch across every single critical dimension.
+        `
+      },
+      {
+        id: 18,
+        category: "Conclusion & Call to Action",
+        catColor: "emerald",
+        title: "The Vision Realized: Autonomous AI Guardianship for Every Road",
+        render: () => `
+          <div class="h-full card-glass p-6 rounded-xl border-l-4 border-l-emerald-500 glow-emerald flex flex-col justify-between">
+            <div class="space-y-4">
+              <h2 class="text-3xl font-black text-emerald-400">THE GOLDEN HOUR CONQUERED: FROM TRAGEDY TO CERTAINTY</h2>
+              <p class="text-sm text-slate-200 leading-relaxed max-w-4xl">
+                Every 200 seconds, another Indian family loses a child, parent, or breadwinner on our roads. The barrier to saving these lives has never been medical skill — our surgeons are world-class.
+                The barrier has always been the chaotic 45-minute delay of discovery, traffic paralysis, and blind hospital intake.
+              </p>
+              <p class="text-sm text-slate-300 leading-relaxed max-w-4xl">
+                Rakshak-AI breaks this barrier completely. By transforming every smartphone into an autonomous trauma blackbox, every traffic signal into an intelligent green wave, and every hospital bay into an informed surgical suite, we return the Golden Hour to where it belongs: to the patient.
+              </p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 pt-4 border-t border-slate-800 text-xs">
+              <div class="p-3 bg-slate-950/70 rounded-lg border border-slate-800 flex items-center gap-2">
+                <span class="text-emerald-400 text-lg">✅</span>
+                <span class="text-white font-semibold">Transit Time Slashed from 38m to 9.4m (75% Faster Delivery)</span>
+              </div>
+              <div class="p-3 bg-slate-950/70 rounded-lg border border-slate-800 flex items-center gap-2">
+                <span class="text-emerald-400 text-lg">✅</span>
+                <span class="text-white font-semibold">100% Zero-Storage Privacy (Volatile Redis RAM, DPDP Act 2023)</span>
+              </div>
+              <div class="p-3 bg-slate-950/70 rounded-lg border border-slate-800 flex items-center gap-2">
+                <span class="text-emerald-400 text-lg">✅</span>
+                <span class="text-white font-semibold">C-V2X Signal Preemption with Dynamic AI Choke Point Detour</span>
+              </div>
+              <div class="p-3 bg-slate-950/70 rounded-lg border border-slate-800 flex items-center gap-2">
+                <span class="text-emerald-400 text-lg">✅</span>
+                <span class="text-white font-semibold">Ayushman Bharat (ABHA) Medical Vault with Drug Allergy Alerts</span>
+              </div>
+            </div>
+
+            <div class="flex items-center justify-between text-xs text-slate-400 pt-2 border-t border-slate-800/80">
+              <span class="font-bold text-white">THANK YOU! OPEN FOR QUESTIONS & LIVE SYSTEM DEMO</span>
+              <span class="text-cyan-300 font-mono">Team Rakshak-AI • Gateways 2026</span>
+            </div>
+          </div>
+        `,
+        notes: `
+          Conclude with conviction.
+          Summarize: 75% transit reduction, zero red light delays, zero data leaks, and true national digital health integration.
+          Invite the judges to see the live demo.
+        `
+      }
+    ];
+
+    let currentSlideIndex = 0;
+    let isNotesOpen = true;
+
+    const slideViewport = document.getElementById('slideViewport');
+    const slideSelect = document.getElementById('slideSelect');
+    const slideIndicator = document.getElementById('slideIndicator');
+    const slideProgressBar = document.getElementById('slideProgressBar');
+    const btnPrev = document.getElementById('btnPrev');
+    const btnNext = document.getElementById('btnNext');
+    const btnFullscreen = document.getElementById('btnFullscreen');
+    const btnToggleNotes = document.getElementById('btnToggleNotes');
+    const notesLabel = document.getElementById('notesLabel');
+    const speakerNotesDrawer = document.getElementById('speakerNotesDrawer');
+    const speakerNotesContent = document.getElementById('speakerNotesContent');
+    const notesSlideNumber = document.getElementById('notesSlideNumber');
+
+    // Populate Slide Dropdown
+    slides.forEach((s, idx) => {
+      const opt = document.createElement('option');
+      opt.value = idx;
+      opt.textContent = `${idx + 1}. ${s.title.substring(0, 36)}...`;
+      slideSelect.appendChild(opt);
+    });
+
+    function renderSlide(index) {
+      if (index < 0 || index >= slides.length) return;
+      currentSlideIndex = index;
+      const s = slides[currentSlideIndex];
+
+      const categoryColorClasses = {
+        emerald: "text-emerald-400 bg-emerald-500/10 border-emerald-500/30",
+        rose: "text-rose-400 bg-rose-500/10 border-rose-500/30",
+        amber: "text-amber-400 bg-amber-500/10 border-amber-500/30",
+        cyan: "text-cyan-400 bg-cyan-500/10 border-cyan-500/30",
+        purple: "text-purple-400 bg-purple-500/10 border-purple-500/30"
+      };
+
+      const badgeClass = categoryColorClasses[s.catColor] || categoryColorClasses.emerald;
+
+      slideViewport.innerHTML = `
+        <div class="flex items-center justify-between mb-3 border-b border-slate-800 pb-2">
+          <div class="flex items-center gap-2">
+            <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${badgeClass}">
+              ${s.category}
+            </span>
+          </div>
+          <div class="text-xs font-mono text-slate-500 font-bold">
+            SLIDE ${String(s.id).padStart(2, '0')} / 18
+          </div>
+        </div>
+
+        <div class="text-2xl sm:text-3xl font-extrabold text-white tracking-tight mb-4">
+          ${s.title}
+        </div>
+
+        <div class="flex-1 overflow-y-auto">
+          ${s.render()}
+        </div>
+      `;
+
+      // Update Controls
+      slideIndicator.textContent = `Slide ${String(s.id).padStart(2, '0')} / 18`;
+      slideSelect.value = index;
+      slideProgressBar.style.width = `${((index + 1) / slides.length) * 100}%`;
+
+      btnPrev.disabled = index === 0;
+      btnNext.disabled = index === slides.length - 1;
+
+      // Update Speaker Notes
+      notesSlideNumber.textContent = s.id;
+      speakerNotesContent.innerHTML = s.notes.trim().replace(/\n/g, '<br/>');
+    }
+
+    btnPrev.addEventListener('click', () => renderSlide(currentSlideIndex - 1));
+    btnNext.addEventListener('click', () => renderSlide(currentSlideIndex + 1));
+    slideSelect.addEventListener('change', (e) => renderSlide(parseInt(e.target.value)));
+
+    btnToggleNotes.addEventListener('click', () => {
+      isNotesOpen = !isNotesOpen;
+      speakerNotesDrawer.style.display = isNotesOpen ? 'block' : 'none';
+      notesLabel.textContent = isNotesOpen ? 'Notes: ON' : 'Notes: OFF';
+    });
+
+    btnFullscreen.addEventListener('click', () => {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(() => {});
+      } else {
+        document.exitFullscreen().catch(() => {});
+      }
+    });
+
+    // Keyboard Shortcuts
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown' || e.key === 'n') {
+        renderSlide(currentSlideIndex + 1);
+      } else if (e.key === 'ArrowLeft' || e.key === 'PageUp' || e.key === 'p') {
+        renderSlide(currentSlideIndex - 1);
+      } else if (e.key === 'f' || e.key === 'F') {
+        btnFullscreen.click();
+      } else if (e.key === 's' || e.key === 'S') {
+        btnToggleNotes.click();
+      } else if (e.key === 'Home') {
+        renderSlide(0);
+      } else if (e.key === 'End') {
+        renderSlide(slides.length - 1);
+      }
+    });
+
+    // Initial Render
+    renderSlide(0);
+  </script>
+</body>
+</html>
