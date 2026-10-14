@@ -11,6 +11,7 @@ class OfflineIncidentItem {
   final double latitude;
   final double longitude;
   final Map<String, dynamic> victimMetadata;
+  final Map<String, dynamic>? healthCard;
   final String originalTimestamp;
   int retryCount;
   DateTime nextRetryTime;
@@ -20,6 +21,7 @@ class OfflineIncidentItem {
     required this.latitude,
     required this.longitude,
     required this.victimMetadata,
+    this.healthCard,
     required this.originalTimestamp,
     this.retryCount = 0,
     DateTime? nextRetryTime,
@@ -30,6 +32,7 @@ class OfflineIncidentItem {
     'latitude': latitude,
     'longitude': longitude,
     'victimMetadata': victimMetadata,
+    if (healthCard != null) 'healthCard': healthCard,
     'originalTimestamp': originalTimestamp,
     'retryCount': retryCount,
     'nextRetryTime': nextRetryTime.toIso8601String(),
@@ -41,6 +44,9 @@ class OfflineIncidentItem {
       latitude: (json['latitude'] as num).toDouble(),
       longitude: (json['longitude'] as num).toDouble(),
       victimMetadata: Map<String, dynamic>.from(json['victimMetadata'] as Map),
+      healthCard: json['healthCard'] != null
+          ? Map<String, dynamic>.from(json['healthCard'] as Map)
+          : null,
       originalTimestamp: json['originalTimestamp'] as String,
       retryCount: (json['retryCount'] as num?)?.toInt() ?? 0,
       nextRetryTime: json['nextRetryTime'] != null
@@ -78,6 +84,7 @@ class OfflineDispatchQueue {
     required double latitude,
     required double longitude,
     required Map<String, dynamic> victimMetadata,
+    Map<String, dynamic>? healthCard,
     required String originalTimestamp,
   }) async {
     // Avoid duplicate queuing of same client UUID
@@ -88,6 +95,7 @@ class OfflineDispatchQueue {
       latitude: latitude,
       longitude: longitude,
       victimMetadata: victimMetadata,
+      healthCard: healthCard,
       originalTimestamp: originalTimestamp,
     );
 
@@ -142,6 +150,7 @@ class OfflineDispatchQueue {
           latitude: item.latitude,
           longitude: item.longitude,
           victimMetadata: metadataToSend,
+          healthCard: item.healthCard,
         );
 
         if (result.isSuccess) {

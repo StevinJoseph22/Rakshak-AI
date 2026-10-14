@@ -18,6 +18,10 @@ import 'services/trip_sentinel_client_service.dart';
 import 'services/pre_crash_microburst_service.dart';
 import 'services/offline_dispatch_queue.dart';
 import 'screens/detection_lab_screen.dart';
+import 'screens/onboarding_screen.dart';
+import 'screens/settings_screen.dart';
+import 'services/health_card_storage_service.dart';
+import 'services/abdm_mobile_service.dart';
 
 void main() {
   runApp(const RakshakApp());
@@ -342,6 +346,28 @@ class _CrashDetectionScreenState extends State<CrashDetectionScreen> {
                 ),
               );
               _loadEmergencyContacts();
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.badge_outlined, color: Colors.blueAccent),
+            tooltip: 'Onboarding & ABHA Setup',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => const OnboardingScreen(),
+                ),
+              );
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.settings_outlined, color: Colors.blueGrey),
+            tooltip: 'Emergency Health Settings',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => const SettingsScreen(),
+                ),
+              );
             },
           ),
           IconButton(

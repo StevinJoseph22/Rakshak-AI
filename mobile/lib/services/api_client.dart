@@ -55,6 +55,7 @@ class ApiClient {
     required double longitude,
     String? status,
     Map<String, dynamic>? victimMetadata,
+    Map<String, dynamic>? healthCard,
     Duration timeout = const Duration(seconds: 5),
   }) async {
     final payload = {
@@ -63,6 +64,7 @@ class ApiClient {
       'longitude': longitude,
       if (status != null) 'status': status,
       if (victimMetadata != null) 'victim_metadata': victimMetadata,
+      if (healthCard != null) 'health_card': healthCard,
     };
 
     final candidates = getBackendCandidates(baseUrl);

@@ -22,8 +22,9 @@ import {
   Layers,
   Stethoscope,
 } from 'lucide-react';
-import { IncidentPayload, Hospital } from '../types';
-import { getSocket } from '../services/socket';
+import { IncidentPayload, Hospital, EmergencyHealthCard, HealthCardField } from '../types';
+import { getSocket, BACKEND_API_BASE } from '../services/socket';
+import { authFetch } from '../services/auth';
 import { IncidentRouteMap } from './IncidentRouteMap';
 
 const REJECTION_REASONS = [
@@ -48,20 +49,6 @@ export interface CrashBiomechanicsData {
   energy_dissipation_kj: number;
   iss_score_estimate: number;
   predicted_injuries: PredictedInjury[];
-}
-
-export interface AbhaVaultData {
-  abha_id: string;
-  abha_address: string;
-  patient_name: string;
-  blood_group: string;
-  critical_allergies: string[];
-  chronic_conditions: string[];
-  current_medications: string[];
-  organ_donor_registered: boolean;
-  notto_id: string;
-  zk_proof_signature: string;
-  is_abdm_verified: boolean;
 }
 
 interface IncidentCardProps {
@@ -93,6 +80,37 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
   const [backsideTab, setBacksideTab] = useState<'clinical' | 'kinematics' | 'hospitals' | 'route'>(
     viewMode === 'hospital' ? 'clinical' : 'hospitals'
   );
+
+  // Phase 18: Emergency Health Card & Break-Glass Audit
+  const [healthCard, setHealthCard] = useState<EmergencyHealthCard | null | undefined>(undefined);
+  const [healthCardMode, setHealthCardMode] = useState<string>('MOCK');
+  const [unlockedAudit, setUnlockedAudit] = useState<{ by: string; at: string } | null>(null);
+  const [isBreakGlassModalOpen, setIsBreakGlassModalOpen] = useState<boolean>(false);
+  const [breakGlassReason, setBreakGlassReason] = useState<string>('Acute polytrauma resuscitation in emergency department');
+  const [breakGlassError, setBreakGlassError] = useState<string | null>(null);
+  const [isSubmittingBreakGlass, setIsSubmittingBreakGlass] = useState<boolean>(false);
+  const [policeHasCard, setPoliceHasCard] = useState<boolean | null>(null);
+
+  // Police view: query whether health card is on file (strictly yes/no only, zero medical content)
+  useEffect(() => {
+    if (viewMode !== 'police') return;
+    let isMounted = true;
+    const checkStatus = async () => {
+      try {
+        const res = await fetch(`${BACKEND_API_BASE}/incidents/${incident.id}/health-card/status`);
+        if (res.ok) {
+          const data = await res.json();
+          if (isMounted) setPoliceHasCard(Boolean(data.has_health_card));
+        }
+      } catch {
+        if (isMounted) setPoliceHasCard(false);
+      }
+    };
+    checkStatus();
+    return () => {
+      isMounted = false;
+    };
+  }, [incident.id, viewMode]);
 
   // WebRTC P2P DataChannel Receiver with WebSocket fallback
   useEffect(() => {
@@ -281,8 +299,6 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
   ];
 
   const rawBiomechanics = metadata.biomechanics as CrashBiomechanicsData | undefined;
-  const rawAbhaVault = metadata.abha_vault as AbhaVaultData | undefined;
-
   const biomechanics: CrashBiomechanicsData = rawBiomechanics || {
     deltaV_kmh: speedDropKmh,
     peak_g: isSaturated ? 16.0 : measuredPeakG,
@@ -298,18 +314,100 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
     ]
   };
 
-  const abhaVault: AbhaVaultData = rawAbhaVault || {
-    abha_id: '91-8842-9912-3401',
-    abha_address: 'aarav.sharma@abdm',
-    patient_name: (typeof metadata.victim_name === 'string' && metadata.victim_name) ? metadata.victim_name : 'Aarav Sharma (Verified)',
-    blood_group: (typeof metadata.blood_group === 'string' && metadata.blood_group) ? metadata.blood_group : 'B+ Positive',
-    critical_allergies: ['Penicillin Anaphylaxis', 'Sulfa Drugs'],
-    chronic_conditions: ['Type-1 Diabetes'],
-    current_medications: ['Warfarin (Blood Thinner - Severe Hemorrhage Risk)', 'Insulin Glargine'],
-    organ_donor_registered: true,
-    notto_id: 'NOTTO-IND-2024-88419',
-    zk_proof_signature: '0x7f4a8b29c910d9e2 (Hardware TEE Enclave Signed)',
-    is_abdm_verified: true,
+  const handleConfirmBreakGlass = async () => {
+    if (!breakGlassReason || breakGlassReason.trim().length < 5) {
+      setBreakGlassError('Please enter a clinical justification of at least 5 characters.');
+      return;
+    }
+    setIsSubmittingBreakGlass(true);
+    setBreakGlassError(null);
+    try {
+      const res = await authFetch(`${BACKEND_API_BASE}/incidents/${incident.id}/health-card/break-glass`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: breakGlassReason.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        if (res.status === 404) {
+          setHealthCard(null);
+          setIsBreakGlassModalOpen(false);
+          return;
+        }
+        throw new Error(data.message || data.error || 'Failed to authorize break-glass access');
+      }
+
+      setHealthCard(data.card as EmergencyHealthCard);
+      setHealthCardMode(data.mode || 'MOCK');
+      setUnlockedAudit({
+        by: data.accessed_by || 'Staff',
+        at: data.accessed_at ? new Date(data.accessed_at).toLocaleTimeString() : new Date().toLocaleTimeString(),
+      });
+      setIsBreakGlassModalOpen(false);
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : 'Error authorizing break-glass access';
+      setBreakGlassError(errorMsg);
+    } finally {
+      setIsSubmittingBreakGlass(false);
+    }
+  };
+
+  const renderFieldProvenanceChip = (field?: HealthCardField<unknown>) => {
+    if (!field || field.status === 'NOT_AVAILABLE') {
+      return (
+        <span
+          style={{
+            background: '#f1f5f9',
+            color: '#64748b',
+            fontSize: '0.65rem',
+            fontWeight: 700,
+            padding: '0.15rem 0.45rem',
+            borderRadius: '4px',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '0.2rem',
+          }}
+        >
+          ✕ Not Available {field?.reason ? `(${field.reason})` : ''}
+        </span>
+      );
+    }
+    if (field.source === 'ABDM_VERIFIED') {
+      return (
+        <span
+          style={{
+            background: '#dcfce7',
+            color: '#15803d',
+            fontSize: '0.65rem',
+            fontWeight: 700,
+            padding: '0.15rem 0.45rem',
+            borderRadius: '4px',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '0.25rem',
+          }}
+        >
+          <ShieldCheck size={11} /> ABDM Verified
+        </span>
+      );
+    }
+    if (field.source === 'SELF_DECLARED') {
+      return (
+        <span
+          style={{
+            background: '#fef3c7',
+            color: '#b45309',
+            fontSize: '0.65rem',
+            fontWeight: 700,
+            padding: '0.15rem 0.45rem',
+            borderRadius: '4px',
+          }}
+        >
+          Self-declared (Not verified)
+        </span>
+      );
+    }
+    return null;
   };
 
   const formattedTime = new Date(incident.created_at).toLocaleTimeString([], {
@@ -537,10 +635,10 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-              {/* Big Bold Blood Group Pill */}
+              {/* Blood Group Pill or Locked Indicator */}
               <div
                 style={{
-                  background: '#dc2626',
+                  background: healthCard?.blood_group?.status === 'AVAILABLE' ? '#dc2626' : '#475569',
                   color: '#ffffff',
                   padding: '0.45rem 0.85rem',
                   borderRadius: '0.5rem',
@@ -548,7 +646,7 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
                   flexDirection: 'column',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  boxShadow: '0 2px 6px rgba(220, 38, 38, 0.3)',
+                  boxShadow: '0 2px 6px rgba(0, 0, 0, 0.15)',
                   minWidth: '70px',
                 }}
               >
@@ -556,33 +654,52 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
                   BLOOD
                 </div>
                 <div style={{ fontSize: '1.15rem', fontWeight: 900, lineHeight: 1.1 }}>
-                  {abhaVault.blood_group}
+                  {healthCard
+                    ? (healthCard.blood_group.status === 'AVAILABLE' ? healthCard.blood_group.value : 'N/A')
+                    : '🔒'}
                 </div>
               </div>
 
               <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
                   <span style={{ fontSize: '1rem', fontWeight: 800, color: '#0f172a' }}>
-                    {abhaVault.patient_name}
+                    {healthCard
+                      ? (healthCard.name.status === 'AVAILABLE' ? healthCard.name.value : 'Emergency Patient')
+                      : isThisHospitalAccepted
+                      ? 'Trauma Patient (Break-Glass Required)'
+                      : 'Trauma Patient (Locked Prior to Acceptance)'}
                   </span>
-                  <span
-                    style={{
-                      background: '#dcfce7',
-                      color: '#15803d',
-                      fontSize: '0.65rem',
-                      fontWeight: 700,
-                      padding: '0.1rem 0.4rem',
-                      borderRadius: '4px',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '0.2rem',
-                    }}
-                  >
-                    <ShieldCheck size={11} /> ABHA VERIFIED
-                  </span>
+                  {healthCard ? (
+                    renderFieldProvenanceChip(healthCard.name)
+                  ) : (
+                    <span
+                      style={{
+                        background: '#f1f5f9',
+                        color: '#64748b',
+                        fontSize: '0.65rem',
+                        fontWeight: 700,
+                        padding: '0.1rem 0.4rem',
+                        borderRadius: '4px',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.2rem',
+                      }}
+                    >
+                      <Lock size={10} /> {isThisHospitalAccepted ? 'Break-Glass to Decrypt' : 'Accept Case to Access'}
+                    </span>
+                  )}
                 </div>
                 <div style={{ fontSize: '0.775rem', color: '#475569', marginTop: '0.15rem' }}>
-                  ABHA ID: <strong style={{ fontFamily: 'monospace' }}>{abhaVault.abha_id}</strong>
+                  {healthCard ? (
+                    <>
+                      ABHA Address:{' '}
+                      <strong style={{ fontFamily: 'monospace' }}>
+                        {healthCard.abha_address.status === 'AVAILABLE' ? healthCard.abha_address.value : 'None linked'}
+                      </strong>
+                    </>
+                  ) : (
+                    <span>ABHA Health Record: Ephemeral Volatile RAM (Audited Clinical Access)</span>
+                  )}
                 </div>
               </div>
             </div>
@@ -623,8 +740,8 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
             </div>
           </div>
 
-          {/* High-Urgency Critical Drug Allergy Alert (Front & Center for Physicians) */}
-          {abhaVault.critical_allergies && abhaVault.critical_allergies.length > 0 && (
+          {/* High-Urgency Critical Drug Allergy Alert (Displayed ONLY if decrypted & available) */}
+          {healthCard && healthCard.allergies.status === 'AVAILABLE' && healthCard.allergies.value && healthCard.allergies.value.length > 0 && (
             <div
               style={{
                 background: '#fef2f2',
@@ -640,7 +757,7 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
               <AlertTriangle size={16} color="#dc2626" />
               <div style={{ fontSize: '0.8rem', color: '#991b1b' }}>
                 <strong>CRITICAL DRUG CONTRAINDICATION:</strong> Patient is allergic to{' '}
-                <strong style={{ textDecoration: 'underline' }}>{abhaVault.critical_allergies.join(', ')}</strong>. Do not administer during acute resuscitation.
+                <strong style={{ textDecoration: 'underline' }}>{healthCard.allergies.value.join(', ')}</strong>. Do not administer during acute resuscitation.
               </div>
             </div>
           )}
@@ -927,6 +1044,15 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
                   {riderUnresponsive ? '⚠️ Unresponsive' : '✓ Responsive'}
                 </div>
               </div>
+
+              <div>
+                <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 600, textTransform: 'uppercase' }}>
+                  Health Card On File
+                </div>
+                <div style={{ fontSize: '0.875rem', fontWeight: 700, color: policeHasCard ? '#16a34a' : '#64748b' }}>
+                  {policeHasCard === null ? 'Checking...' : policeHasCard ? '✓ YES (Encrypted on File)' : 'NO'}
+                </div>
+              </div>
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -1200,20 +1326,214 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
                   </div>
                 </div>
 
-                {/* Extended ABHA Vault Info */}
+                {/* Phase 18: Emergency Health Card Panel (Hospital View, Break-Glass Protected) */}
                 <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.5rem', padding: '0.85rem' }}>
-                  <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#0f172a', marginBottom: '0.45rem' }}>
-                    PATIENT MEDICATIONS & MEDICAL BACKGROUND
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.65rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                      <ShieldCheck size={16} color="#059669" />
+                      <span style={{ fontSize: '0.8rem', fontWeight: 800, color: '#0f172a' }}>
+                        EMERGENCY HEALTH CARD
+                      </span>
+                      {healthCardMode === 'MOCK' && (
+                        <span
+                          style={{
+                            background: '#fef3c7',
+                            color: '#b45309',
+                            fontSize: '0.65rem',
+                            fontWeight: 800,
+                            padding: '0.1rem 0.4rem',
+                            borderRadius: '4px',
+                            border: '1px solid #fde68a',
+                          }}
+                        >
+                          MOCK DATA
+                        </span>
+                      )}
+                    </div>
+                    {unlockedAudit && (
+                      <span style={{ fontSize: '0.68rem', color: '#64748b' }}>
+                        Audited access by <strong>{unlockedAudit.by}</strong> at {unlockedAudit.at}
+                      </span>
+                    )}
                   </div>
-                  <div style={{ fontSize: '0.75rem', color: '#334155' }}>
-                    <strong>Chronic Conditions:</strong> {abhaVault.chronic_conditions.join(', ') || 'None reported'}
-                  </div>
-                  <div style={{ fontSize: '0.75rem', color: '#334155', marginTop: '0.25rem' }}>
-                    <strong>Current Medications:</strong> {abhaVault.current_medications.join(', ')}
-                  </div>
-                  <div style={{ fontSize: '0.7rem', color: '#059669', marginTop: '0.35rem' }}>
-                    ✓ NOTTO Organ Donor Registered: {abhaVault.notto_id}
-                  </div>
+
+                  {!isThisHospitalAccepted ? (
+                    <div
+                      style={{
+                        background: '#f8fafc',
+                        border: '1px dashed #cbd5e1',
+                        borderRadius: '0.375rem',
+                        padding: '1rem',
+                        textAlign: 'center',
+                      }}
+                    >
+                      <Lock size={20} color="#64748b" style={{ margin: '0 auto 0.4rem' }} />
+                      <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155' }}>
+                        Confidential Emergency Medical Records
+                      </div>
+                      <div style={{ fontSize: '0.725rem', color: '#64748b', marginTop: '0.2rem' }}>
+                        Health card data is restricted under ABDM regulations. Accessible only after your trauma center accepts this case.
+                      </div>
+                    </div>
+                  ) : healthCard === undefined ? (
+                    <div
+                      style={{
+                        background: '#fffbeb',
+                        border: '1.5px solid #fde68a',
+                        borderRadius: '0.375rem',
+                        padding: '0.85rem',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.65rem' }}>
+                        <div style={{ maxWidth: '420px' }}>
+                          <div style={{ fontSize: '0.775rem', fontWeight: 800, color: '#92400e', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                            <Lock size={14} />
+                            <span>CLINICAL BREAK-GLASS AUTHORIZATION REQUIRED</span>
+                          </div>
+                          <div style={{ fontSize: '0.725rem', color: '#78350f', marginTop: '0.2rem' }}>
+                            Under NHA/ABDM policy, viewing patient health data requires documented clinical justification. Every access is logged to the regulatory audit log.
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setIsBreakGlassModalOpen(true)}
+                          style={{
+                            background: '#dc2626',
+                            color: '#ffffff',
+                            border: 'none',
+                            borderRadius: '0.375rem',
+                            padding: '0.45rem 0.85rem',
+                            fontSize: '0.75rem',
+                            fontWeight: 800,
+                            cursor: 'pointer',
+                            boxShadow: '0 1px 3px rgba(220, 38, 38, 0.3)',
+                          }}
+                        >
+                          🔓 Break Glass to View
+                        </button>
+                      </div>
+                    </div>
+                  ) : healthCard === null ? (
+                    <div
+                      style={{
+                        background: '#f8fafc',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: '0.375rem',
+                        padding: '1rem',
+                        textAlign: 'center',
+                        color: '#64748b',
+                        fontSize: '0.775rem',
+                      }}
+                    >
+                      No health data available. The patient has not linked ABHA or shared emergency information.
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                      {/* Identity Row */}
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.5rem' }}>
+                        <div style={{ background: '#f8fafc', padding: '0.45rem 0.65rem', borderRadius: '4px', border: '1px solid #f1f5f9' }}>
+                          <div style={{ fontSize: '0.65rem', color: '#64748b', fontWeight: 600 }}>PATIENT NAME</div>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.4rem', marginTop: '0.15rem' }}>
+                            <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#0f172a' }}>
+                              {healthCard.name.status === 'AVAILABLE' ? healthCard.name.value : 'Unregistered'}
+                            </span>
+                            {renderFieldProvenanceChip(healthCard.name)}
+                          </div>
+                        </div>
+
+                        <div style={{ background: '#f8fafc', padding: '0.45rem 0.65rem', borderRadius: '4px', border: '1px solid #f1f5f9' }}>
+                          <div style={{ fontSize: '0.65rem', color: '#64748b', fontWeight: 600 }}>AGE / GENDER</div>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.4rem', marginTop: '0.15rem' }}>
+                            <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#0f172a' }}>
+                              {healthCard.age_gender.status === 'AVAILABLE' ? healthCard.age_gender.value : 'N/A'}
+                            </span>
+                            {renderFieldProvenanceChip(healthCard.age_gender)}
+                          </div>
+                        </div>
+
+                        <div style={{ background: '#f8fafc', padding: '0.45rem 0.65rem', borderRadius: '4px', border: '1px solid #f1f5f9' }}>
+                          <div style={{ fontSize: '0.65rem', color: '#64748b', fontWeight: 600 }}>ABHA ADDRESS</div>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.4rem', marginTop: '0.15rem' }}>
+                            <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#0f172a', fontFamily: 'monospace' }}>
+                              {healthCard.abha_address.status === 'AVAILABLE' ? healthCard.abha_address.value : 'None'}
+                            </span>
+                            {renderFieldProvenanceChip(healthCard.abha_address)}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Clinical Row */}
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.5rem' }}>
+                        <div style={{ background: '#f8fafc', padding: '0.45rem 0.65rem', borderRadius: '4px', border: '1px solid #f1f5f9' }}>
+                          <div style={{ fontSize: '0.65rem', color: '#64748b', fontWeight: 600 }}>BLOOD GROUP</div>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.4rem', marginTop: '0.15rem' }}>
+                            <span style={{ fontSize: '0.85rem', fontWeight: 800, color: '#dc2626' }}>
+                              {healthCard.blood_group.status === 'AVAILABLE' ? healthCard.blood_group.value : 'N/A'}
+                            </span>
+                            {renderFieldProvenanceChip(healthCard.blood_group)}
+                          </div>
+                        </div>
+
+                        <div style={{ background: '#f8fafc', padding: '0.45rem 0.65rem', borderRadius: '4px', border: '1px solid #f1f5f9' }}>
+                          <div style={{ fontSize: '0.65rem', color: '#64748b', fontWeight: 600 }}>NOTTO ORGAN DONOR</div>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.4rem', marginTop: '0.15rem' }}>
+                            <span style={{ fontSize: '0.8rem', fontWeight: 700, color: healthCard.organ_donor_status.value ? '#15803d' : '#64748b' }}>
+                              {healthCard.organ_donor_status.status === 'AVAILABLE'
+                                ? (healthCard.organ_donor_status.value ? '✓ YES (Registered)' : 'No')
+                                : 'N/A'}
+                            </span>
+                            {renderFieldProvenanceChip(healthCard.organ_donor_status)}
+                          </div>
+                        </div>
+
+                        <div style={{ background: '#f8fafc', padding: '0.45rem 0.65rem', borderRadius: '4px', border: '1px solid #f1f5f9' }}>
+                          <div style={{ fontSize: '0.65rem', color: '#64748b', fontWeight: 600 }}>LAST RECORD UPDATE</div>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.4rem', marginTop: '0.15rem' }}>
+                            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#334155' }}>
+                              {healthCard.last_updated ? new Date(healthCard.last_updated).toLocaleString() : 'Never'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Detailed Medical Rows: Allergies, Conditions, Medications */}
+                      <div style={{ background: '#f8fafc', padding: '0.5rem 0.65rem', borderRadius: '4px', border: '1px solid #f1f5f9' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.4rem', marginBottom: '0.2rem' }}>
+                          <span style={{ fontSize: '0.65rem', color: '#dc2626', fontWeight: 700 }}>CRITICAL ALLERGIES</span>
+                          {renderFieldProvenanceChip(healthCard.allergies)}
+                        </div>
+                        <div style={{ fontSize: '0.75rem', color: '#0f172a', fontWeight: 600 }}>
+                          {healthCard.allergies.status === 'AVAILABLE' && healthCard.allergies.value.length > 0
+                            ? healthCard.allergies.value.join(', ')
+                            : 'No known allergies reported'}
+                        </div>
+                      </div>
+
+                      <div style={{ background: '#f8fafc', padding: '0.5rem 0.65rem', borderRadius: '4px', border: '1px solid #f1f5f9' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.4rem', marginBottom: '0.2rem' }}>
+                          <span style={{ fontSize: '0.65rem', color: '#64748b', fontWeight: 700 }}>CHRONIC CONDITIONS</span>
+                          {renderFieldProvenanceChip(healthCard.chronic_conditions)}
+                        </div>
+                        <div style={{ fontSize: '0.75rem', color: '#0f172a', fontWeight: 600 }}>
+                          {healthCard.chronic_conditions.status === 'AVAILABLE' && healthCard.chronic_conditions.value.length > 0
+                            ? healthCard.chronic_conditions.value.join(', ')
+                            : 'None reported'}
+                        </div>
+                      </div>
+
+                      <div style={{ background: '#f8fafc', padding: '0.5rem 0.65rem', borderRadius: '4px', border: '1px solid #f1f5f9' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.4rem', marginBottom: '0.2rem' }}>
+                          <span style={{ fontSize: '0.65rem', color: '#64748b', fontWeight: 700 }}>CURRENT MEDICATIONS</span>
+                          {renderFieldProvenanceChip(healthCard.current_medications)}
+                        </div>
+                        <div style={{ fontSize: '0.75rem', color: '#0f172a', fontWeight: 600 }}>
+                          {healthCard.current_medications.status === 'AVAILABLE' && healthCard.current_medications.value.length > 0
+                            ? healthCard.current_medications.value.join(', ')
+                            : 'None reported'}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -1522,6 +1842,165 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
                 }}
               >
                 {isSubmittingReject ? 'Declining...' : 'Confirm Decline'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Phase 18: Break-Glass Authorization Modal */}
+      {isBreakGlassModalOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.75)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            padding: '1rem',
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !isSubmittingBreakGlass) {
+              setIsBreakGlassModalOpen(false);
+            }
+          }}
+        >
+          <div
+            style={{
+              background: '#ffffff',
+              borderRadius: '0.75rem',
+              maxWidth: '520px',
+              width: '100%',
+              padding: '1.5rem',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.25)',
+              border: '1.5px solid #f87171',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <div style={{ background: '#fee2e2', padding: '0.4rem', borderRadius: '0.375rem', color: '#dc2626' }}>
+                  <Lock size={20} />
+                </div>
+                <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#0f172a' }}>
+                  Break-Glass Clinical Access
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsBreakGlassModalOpen(false)}
+                disabled={isSubmittingBreakGlass}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#94a3b8',
+                  cursor: 'pointer',
+                  padding: '0.25rem',
+                }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div
+              style={{
+                background: '#fff1f2',
+                border: '1px solid #fecdd3',
+                borderRadius: '0.375rem',
+                padding: '0.75rem 0.85rem',
+                marginBottom: '1rem',
+                fontSize: '0.775rem',
+                color: '#9f1239',
+                lineHeight: 1.45,
+              }}
+            >
+              <strong>REGULATORY AUDIT MANDATE (ABDM / NHA):</strong> Accessing an emergency patient's health records without live OTP is restricted to verified clinical personnel treating acute trauma. Your staff username, hospital ID, timestamp, and clinical justification will be permanently written to the compliance audit table.
+            </div>
+
+            {breakGlassError && (
+              <div
+                style={{
+                  background: '#fef2f2',
+                  border: '1px solid #f87171',
+                  color: '#b91c1c',
+                  padding: '0.65rem 0.85rem',
+                  borderRadius: '0.375rem',
+                  fontSize: '0.8rem',
+                  marginBottom: '1rem',
+                  fontWeight: 600,
+                }}
+              >
+                ⚠️ {breakGlassError}
+              </div>
+            )}
+
+            <div style={{ marginBottom: '1.25rem' }}>
+              <label
+                htmlFor={`break_glass_reason_${incident.id}`}
+                style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#334155', marginBottom: '0.4rem' }}
+              >
+                Mandatory Clinical Reason / Justification:
+              </label>
+              <textarea
+                id={`break_glass_reason_${incident.id}`}
+                value={breakGlassReason}
+                onChange={(e) => setBreakGlassReason(e.target.value)}
+                placeholder="e.g. Acute polytrauma resuscitation in ED, unconscious victim, urgent blood crossmatch required"
+                rows={3}
+                disabled={isSubmittingBreakGlass}
+                style={{
+                  width: '100%',
+                  padding: '0.6rem 0.75rem',
+                  borderRadius: '0.375rem',
+                  border: '1px solid #cbd5e1',
+                  fontSize: '0.85rem',
+                  fontFamily: 'inherit',
+                  boxSizing: 'border-box',
+                  outline: 'none',
+                }}
+              />
+              <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: '0.25rem' }}>
+                Minimum 5 characters. Must reflect authentic clinical necessity.
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+              <button
+                type="button"
+                onClick={() => setIsBreakGlassModalOpen(false)}
+                disabled={isSubmittingBreakGlass}
+                style={{
+                  padding: '0.5rem 1rem',
+                  borderRadius: '0.375rem',
+                  border: '1px solid #cbd5e1',
+                  background: '#ffffff',
+                  color: '#475569',
+                  fontSize: '0.85rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmBreakGlass}
+                disabled={isSubmittingBreakGlass || breakGlassReason.trim().length < 5}
+                style={{
+                  padding: '0.5rem 1.15rem',
+                  borderRadius: '0.375rem',
+                  border: 'none',
+                  background: isSubmittingBreakGlass || breakGlassReason.trim().length < 5 ? '#fca5a5' : '#dc2626',
+                  color: '#ffffff',
+                  fontSize: '0.85rem',
+                  fontWeight: 700,
+                  cursor: isSubmittingBreakGlass || breakGlassReason.trim().length < 5 ? 'not-allowed' : 'pointer',
+                  boxShadow: '0 2px 4px rgba(220, 38, 38, 0.25)',
+                }}
+              >
+                {isSubmittingBreakGlass ? 'Authorizing & Decrypting...' : 'Authorize Break-Glass'}
               </button>
             </div>
           </div>

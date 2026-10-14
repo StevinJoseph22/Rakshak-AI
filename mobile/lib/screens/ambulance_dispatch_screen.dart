@@ -1993,8 +1993,8 @@ class _AmbulanceDispatchScreenState extends State<AmbulanceDispatchScreen> {
               ),
               const SizedBox(height: 4),
               const Text(
-                'Zero-Knowledge Emergency Medical Enclave • Government of India ABDM Compliant',
-                style: TextStyle(color: Colors.grey, fontSize: 11),
+                'Ephemeral Emergency Health Enclave (Volatile RAM) • ABDM / Self-Declared [MOCK DATA]',
+                style: TextStyle(color: Colors.amberAccent, fontSize: 11),
               ),
               const SizedBox(height: 14),
 

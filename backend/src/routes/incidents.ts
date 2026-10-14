@@ -19,7 +19,12 @@ import {
   broadcastAmbulanceArrived,
   getIO,
 } from '../socket';
-import { redis } from '../redis';
+import {
+  redis,
+  storeEphemeralHealthCard,
+  getEphemeralHealthCard,
+  hasEphemeralHealthCard,
+} from '../redis';
 import {
   scheduleAutoEscalation,
   cancelAutoEscalation,
@@ -34,7 +39,8 @@ import {
 } from '../services/preAlertService';
 import { TripSentinelService } from '../services/tripSentinelService';
 import { checkIncidentBlackspot, getAllBlackspotZones } from '../services/blackspotService';
-import { authenticateJWT, optionalAuth } from '../middleware/auth';
+import { authenticateJWT, optionalAuth, requireRole } from '../middleware/auth';
+import { getAbdmMode } from '../services/abdm';
 
 export const incidentsRouter = Router();
 
@@ -48,6 +54,39 @@ incidentsRouter.get('/blackspots', async (_req: Request, res: Response) => {
     return res.status(500).json({ error: 'Failed to retrieve blackspot zones' });
   }
 });
+
+/**
+ * Helper to strip any sensitive medical data from victim_metadata before Postgres persistence.
+ * Medical records and emergency health cards are NEVER stored in Postgres.
+ * If health_card is present, it is extracted for volatile Redis RAM storage only.
+ */
+export function sanitizeVictimMetadata(
+  rawMetadata: Record<string, unknown> | null | undefined,
+  healthCardObj?: unknown
+): { sanitized: Record<string, unknown> | null; healthCardToStore: unknown | null } {
+  const metadata = rawMetadata ? { ...rawMetadata } : {};
+  let card = healthCardObj || metadata.health_card;
+  if (!card && metadata.abha_vault) {
+    card = metadata.abha_vault;
+  }
+
+  delete metadata.health_card;
+  delete metadata.abha_vault;
+  delete metadata.blood_group;
+  delete metadata.critical_allergies;
+  delete metadata.chronic_conditions;
+  delete metadata.current_medications;
+  delete metadata.medical_history;
+
+  if (card) {
+    metadata.has_health_card = true;
+  }
+
+  return {
+    sanitized: Object.keys(metadata).length > 0 ? metadata : null,
+    healthCardToStore: card || null,
+  };
+}
 
 // POST /incidents/suspected - Fast-path for soft pre-alert to police only
 incidentsRouter.post('/suspected', async (req: Request, res: Response) => {
@@ -64,10 +103,15 @@ incidentsRouter.post('/suspected', async (req: Request, res: Response) => {
     });
   }
 
-  const { id, latitude, longitude, victim_metadata } = parseResult.data;
+  const { id, latitude, longitude, victim_metadata, health_card } = parseResult.data;
+  const { sanitized, healthCardToStore } = sanitizeVictimMetadata(victim_metadata, health_card);
 
   // Idempotency: check if already exists
   if (id) {
+    if (healthCardToStore) {
+      await storeEphemeralHealthCard(id, JSON.stringify(healthCardToStore));
+    }
+
     const checkExisting = await query<Incident>(
       `SELECT id, status, accepted_hospital_id, victim_metadata,
               ST_Y(location::geometry) AS latitude, ST_X(location::geometry) AS longitude,
@@ -105,11 +149,17 @@ incidentsRouter.post('/suspected', async (req: Request, res: Response) => {
     `;
 
   const params = id
-    ? [id, longitude, latitude, victim_metadata ? JSON.stringify(victim_metadata) : null]
-    : [longitude, latitude, victim_metadata ? JSON.stringify(victim_metadata) : null];
+    ? [id, longitude, latitude, sanitized ? JSON.stringify(sanitized) : null]
+    : [longitude, latitude, sanitized ? JSON.stringify(sanitized) : null];
 
   const insertResult = await query<Incident>(insertSql, params);
   const raw = insertResult.rows[0];
+
+  // Store Health Card strictly in Redis RAM (never in Postgres)
+  if (healthCardToStore) {
+    await storeEphemeralHealthCard(raw.id, JSON.stringify(healthCardToStore));
+  }
+
   const blackspotInfo = await checkIncidentBlackspot(Number(raw.latitude), Number(raw.longitude));
   const incident: Incident = {
     ...raw,
@@ -204,10 +254,15 @@ incidentsRouter.post('/', async (req: Request, res: Response) => {
       });
     }
 
-    const { id, latitude, longitude, victim_metadata, status } = parseResult.data;
+    const { id, latitude, longitude, victim_metadata, status, health_card } = parseResult.data;
+    const { sanitized, healthCardToStore } = sanitizeVictimMetadata(victim_metadata, health_card);
 
     // Idempotency check on client UUID
     if (id) {
+      if (healthCardToStore) {
+        await storeEphemeralHealthCard(id, JSON.stringify(healthCardToStore));
+      }
+
       const checkExisting = await query<Incident>(
         `SELECT id, status, accepted_hospital_id, victim_metadata,
                 ST_Y(location::geometry) AS latitude, ST_X(location::geometry) AS longitude,
@@ -259,11 +314,16 @@ incidentsRouter.post('/', async (req: Request, res: Response) => {
                     created_at, updated_at;
         `;
       const params = id
-        ? [id, longitude, latitude, victim_metadata ? JSON.stringify(victim_metadata) : null]
-        : [longitude, latitude, victim_metadata ? JSON.stringify(victim_metadata) : null];
+        ? [id, longitude, latitude, sanitized ? JSON.stringify(sanitized) : null]
+        : [longitude, latitude, sanitized ? JSON.stringify(sanitized) : null];
 
       const insertResult = await query<Incident>(insertSql, params);
       const raw = insertResult.rows[0];
+
+      if (healthCardToStore) {
+        await storeEphemeralHealthCard(raw.id, JSON.stringify(healthCardToStore));
+      }
+
       const blackspotInfo = await checkIncidentBlackspot(Number(raw.latitude), Number(raw.longitude));
       const incident: Incident = {
         ...raw,
@@ -309,12 +369,17 @@ incidentsRouter.post('/', async (req: Request, res: Response) => {
       `;
 
     const insertParams = id
-      ? [id, longitude, latitude, victim_metadata ? JSON.stringify(victim_metadata) : null]
-      : [longitude, latitude, victim_metadata ? JSON.stringify(victim_metadata) : null];
+      ? [id, longitude, latitude, sanitized ? JSON.stringify(sanitized) : null]
+      : [longitude, latitude, sanitized ? JSON.stringify(sanitized) : null];
 
     const insertResult = await query<Incident>(insertSql, insertParams);
 
     const rawIncident = insertResult.rows[0];
+
+    if (healthCardToStore) {
+      await storeEphemeralHealthCard(rawIncident.id, JSON.stringify(healthCardToStore));
+    }
+
     const blackspotInfo = await checkIncidentBlackspot(Number(rawIncident.latitude), Number(rawIncident.longitude));
     const incident: Incident = {
       ...rawIncident,
@@ -1340,6 +1405,143 @@ incidentsRouter.post('/:id/image', async (req: Request, res: Response) => {
     return res.status(500).json({ error: 'Failed to store image in volatile cache' });
   }
 });
+
+// GET /incidents/:id/health-card/status - Check if an ephemeral health card exists (Yes/No only, no contents)
+incidentsRouter.get('/:id/health-card/status', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const hasCard = await hasEphemeralHealthCard(id);
+    return res.status(200).json({
+      incident_id: id,
+      has_health_card: hasCard,
+    });
+  } catch (err: unknown) {
+    console.error('[GET /incidents/:id/health-card/status Error]', err);
+    return res.status(500).json({ error: 'Failed to check health card status' });
+  }
+});
+
+// POST /incidents/:id/health-card - Upload/update ephemeral health card snapshot (volatile Redis RAM only, TTL 2h)
+incidentsRouter.post('/:id/health-card', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const card = req.body.health_card || req.body;
+    if (!card || typeof card !== 'object') {
+      return res.status(400).json({ error: 'Missing health_card payload' });
+    }
+
+    await storeEphemeralHealthCard(id, JSON.stringify(card));
+
+    const io = getIO();
+    if (io) {
+      io.to('all_incidents').emit('incident_health_card_status', {
+        incident_id: id,
+        has_health_card: true,
+      });
+    }
+
+    return res.status(200).json({
+      status: 'ok',
+      incident_id: id,
+      message: 'Emergency health card stored in volatile Redis RAM (TTL 2h)',
+    });
+  } catch (err: unknown) {
+    console.error('[POST /incidents/:id/health-card Error]', err);
+    return res.status(500).json({ error: 'Failed to store health card' });
+  }
+});
+
+// POST /incidents/:id/health-card/break-glass - Hospital Staff Break-Glass access with mandatory clinical reason
+incidentsRouter.post(
+  '/:id/health-card/break-glass',
+  authenticateJWT,
+  requireRole('hospital_staff'),
+  async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { reason } = req.body;
+
+      if (!reason || typeof reason !== 'string' || reason.trim().length < 5) {
+        return res.status(400).json({
+          error: 'Bad Request',
+          message: 'Mandatory clinical break-glass reason required (minimum 5 characters).',
+        });
+      }
+
+      // Verify incident exists and has been accepted by this user's assigned hospital
+      const incRes = await query<{
+        id: string;
+        status: string;
+        accepted_hospital_id: string | null;
+      }>(
+        'SELECT id, status, accepted_hospital_id FROM incidents WHERE id = $1',
+        [id]
+      );
+
+      if (incRes.rows.length === 0) {
+        return res.status(404).json({ error: 'Incident not found' });
+      }
+
+      const incident = incRes.rows[0];
+
+      // 1. Must be accepted or en_route
+      if (incident.status !== 'accepted' && incident.status !== 'en_route') {
+        return res.status(403).json({
+          error: 'Forbidden',
+          message: 'Health card is accessible only after this hospital has officially accepted the case.',
+        });
+      }
+
+      // 2. Must be the accepting hospital's staff
+      if (incident.accepted_hospital_id !== req.user!.hospital_id) {
+        return res.status(403).json({
+          error: 'Forbidden',
+          message: 'Access restricted: Health card is only accessible to staff of the accepted hospital.',
+        });
+      }
+
+      // 3. Write access audit record
+      try {
+        await query(
+          `INSERT INTO health_card_access_audit (incident_id, hospital_id, user_id, username, reason)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [
+            id,
+            req.user!.hospital_id,
+            req.user!.id,
+            req.user!.username,
+            reason.trim(),
+          ]
+        );
+      } catch (auditErr) {
+        console.warn('[HealthCard Audit Warning] Audit write deferred:', auditErr);
+      }
+
+      // 4. Retrieve ephemeral card from volatile Redis RAM
+      const cardJson = await getEphemeralHealthCard(id);
+      if (!cardJson) {
+        return res.status(404).json({
+          status: 'NOT_FOUND',
+          message: 'No health data available. The patient has not linked ABHA or shared emergency information.',
+          card: null,
+        });
+      }
+
+      const card = JSON.parse(cardJson);
+      return res.status(200).json({
+        status: 'SUCCESS',
+        incident_id: id,
+        card,
+        mode: getAbdmMode().toUpperCase(),
+        accessed_by: req.user!.username,
+        accessed_at: new Date().toISOString(),
+      });
+    } catch (err: unknown) {
+      console.error('[POST /incidents/:id/health-card/break-glass Error]', err);
+      return res.status(500).json({ error: 'Internal server error retrieving health card' });
+    }
+  }
+);
 
 // Helper function to execute race-safe accept
 async function handleAcceptIncident(

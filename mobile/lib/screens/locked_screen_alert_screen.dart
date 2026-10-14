@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import '../models/crash_biomechanics_model.dart';
 import '../models/crash_severity_model.dart';
 import '../models/abha_emergency_vault_model.dart';
+import '../models/emergency_health_card_model.dart';
+import '../services/health_card_storage_service.dart';
 import '../services/api_client.dart';
 import '../services/crash_detector_service.dart';
 import '../services/crash_event_service.dart';
@@ -36,6 +38,7 @@ class _LockedScreenAlertScreenState extends State<LockedScreenAlertScreen>
   late final int _countdownDurationSeconds;
   bool _hasDispatched = false;
   bool _riderUnresponsive = true;
+  EmergencyHealthCard? _healthCard;
 
   @override
   void initState() {
@@ -46,6 +49,10 @@ class _LockedScreenAlertScreenState extends State<LockedScreenAlertScreen>
       vsync: this,
       duration: Duration(seconds: _countdownDurationSeconds),
     );
+
+    HealthCardStorageService.instance.getHealthCard().then((c) {
+      if (mounted) setState(() => _healthCard = c);
+    });
 
     // Initial alert haptic vibration
     try {
@@ -153,6 +160,8 @@ class _LockedScreenAlertScreenState extends State<LockedScreenAlertScreen>
 
     final clientIncidentId = PreCrashMicroBurstService.instance.currentSuspectedIncidentId;
 
+    final cardJson = (_healthCard ?? EmergencyHealthCard.empty()).toJson();
+
     // Auto-broadcast alert to backend (idempotently promotes suspected incident to broadcasting)
     _apiClient.reportIncident(
       id: clientIncidentId,
@@ -160,6 +169,7 @@ class _LockedScreenAlertScreenState extends State<LockedScreenAlertScreen>
       latitude: lat,
       longitude: lng,
       victimMetadata: metadata,
+      healthCard: cardJson,
     ).then((result) {
       if (result.isSuccess) {
         final incidentId = result.data?.incident.id;
@@ -177,6 +187,7 @@ class _LockedScreenAlertScreenState extends State<LockedScreenAlertScreen>
           latitude: lat,
           longitude: lng,
           victimMetadata: metadata,
+          healthCard: cardJson,
           originalTimestamp: (widget.crashEvent?.timestamp ?? DateTime.now()).toIso8601String(),
         );
       }
@@ -346,7 +357,7 @@ class _LockedScreenAlertScreenState extends State<LockedScreenAlertScreen>
                   ),
                   const SizedBox(height: 8),
 
-                  // Ayushman Bharat (ABDM / ABHA) Emergency Medical Vault Chip
+                  // Ayushman Bharat (ABDM / ABHA) Emergency Health Card Chip
                   Container(
                     margin: const EdgeInsets.symmetric(horizontal: 4),
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
@@ -355,23 +366,29 @@ class _LockedScreenAlertScreenState extends State<LockedScreenAlertScreen>
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(color: const Color(0xFF0EA5E9), width: 1.2),
                     ),
-                    child: const Row(
+                    child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.verified_user, color: Color(0xFF38BDF8), size: 20),
-                        SizedBox(width: 10),
+                        const Icon(Icons.verified_user, color: Color(0xFF38BDF8), size: 20),
+                        const SizedBox(width: 10),
                         Flexible(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Text(
-                                'ABHA: 91-8842-9912-3401 (Blood: B+)',
-                                style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                                _healthCard?.isLinked == true
+                                    ? 'ABHA: ${_healthCard!.abhaAddress.value ?? "Linked"} (${_healthCard!.bloodGroup.isAvailable ? _healthCard!.bloodGroup.value : "Verified Identity"})'
+                                    : 'Emergency Health Card: ${_healthCard?.bloodGroup.isAvailable == true ? _healthCard!.bloodGroup.value! : "Self-Declared"}',
+                                style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
                               ),
                               Text(
-                                '⚠️ Penicillin Anaphylaxis • On Warfarin',
-                                style: TextStyle(color: Color(0xFFFCA5A5), fontSize: 11, fontWeight: FontWeight.w600),
+                                _healthCard?.allergies.isAvailable == true && _healthCard!.allergies.value!.isNotEmpty
+                                    ? '⚠️ ${_healthCard!.allergies.value!.join(" • ")}'
+                                    : (_healthCard?.isLinked == true
+                                        ? 'ABDM Verified Identity • Volatile RAM (2h TTL)'
+                                        : 'Self-Declared • Shared strictly upon crash claim'),
+                                style: const TextStyle(color: Color(0xFFFCA5A5), fontSize: 11, fontWeight: FontWeight.w600),
                               ),
                             ],
                           ),

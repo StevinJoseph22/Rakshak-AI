@@ -19,6 +19,7 @@ export const createIncidentSchema = z.object({
     .min(-180, 'Longitude must be >= -180')
     .max(180, 'Longitude must be <= 180'),
   victim_metadata: z.record(z.unknown()).optional().nullable(),
+  health_card: z.record(z.unknown()).optional().nullable(),
 });
 
 export const incidentIdParamsSchema = z.object({

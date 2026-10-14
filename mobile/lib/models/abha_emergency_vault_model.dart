@@ -1,7 +1,7 @@
 /// Model representing Ayushman Bharat Digital Mission (ABDM / ABHA)
-/// Zero-Knowledge Emergency Medical Vault.
-/// Transmits verified life-saving parameters (Blood Group, Drug Allergies, Chronic Conditions)
-/// with tamper-proof cryptographic attestation while preserving strict privacy.
+/// Emergency Medical Vault Data.
+/// Transmits emergency clinical parameters (Blood Group, Drug Allergies, Chronic Conditions)
+/// with verified provenance while preserving patient privacy.
 class AbhaEmergencyVault {
   final String abhaId;
   final String abhaAddress;
@@ -55,7 +55,7 @@ class AbhaEmergencyVault {
           ['Warfarin (Blood Thinner - High Hemorrhage Risk)', 'Insulin Glargine'],
       organDonorRegistered: json['organ_donor_registered'] as bool? ?? true,
       nottoId: json['notto_id'] as String? ?? 'NOTTO-IND-2024-88419',
-      zkProofSignature: json['zk_proof_signature'] as String? ?? '0x7f4a8b29c910d9e2 (Hardware TEE Enclave Signed)',
+      zkProofSignature: json['zk_proof_signature'] as String? ?? 'ABDM-MOCK-SIGNATURE',
       isAbdmVerified: json['is_abdm_verified'] as bool? ?? true,
     );
   }
@@ -101,7 +101,7 @@ class AbhaEmergencyVault {
       ],
       organDonorRegistered: true,
       nottoId: 'NOTTO-IND-2024-88419',
-      zkProofSignature: '0x7f4a8b29c910d9e2 (Hardware TEE Enclave Signed)',
+      zkProofSignature: 'ABDM-MOCK-SIGNATURE',
       isAbdmVerified: true,
     );
   }

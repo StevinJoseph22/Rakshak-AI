@@ -103,6 +103,39 @@ export interface AuthUser {
   hospital_name?: string | null;
 }
 
+// Phase 18: ABDM & Emergency Health Card Types
+export type AbdmMode = 'sandbox' | 'mock';
+export type AbdmStatus =
+  | 'VERIFIED'
+  | 'NOT_FOUND'
+  | 'OTP_FAILED'
+  | 'ABDM_UNAVAILABLE'
+  | 'NOT_LINKED'
+  | 'OTP_SENT';
+
+export type HealthCardFieldSource = 'ABDM_VERIFIED' | 'SELF_DECLARED' | 'NONE';
+export type HealthCardFieldStatus = 'AVAILABLE' | 'NOT_AVAILABLE';
+
+export interface HealthCardField<T> {
+  value: T;
+  source: HealthCardFieldSource;
+  status: HealthCardFieldStatus;
+  reason?: string;
+}
+
+export interface EmergencyHealthCard {
+  name: HealthCardField<string | null>;
+  age_gender: HealthCardField<string | null>;
+  abha_address: HealthCardField<string | null>;
+  blood_group: HealthCardField<string | null>;
+  allergies: HealthCardField<string[]>;
+  chronic_conditions: HealthCardField<string[]>;
+  current_medications: HealthCardField<string[]>;
+  organ_donor_status: HealthCardField<string | null>;
+  last_updated: string;
+  abdm_mode?: 'SANDBOX' | 'MOCK';
+}
+
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace Express {

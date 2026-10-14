@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
 import { ShieldAlert, Hospital, Activity, Radio, Wifi, WifiOff, Settings } from 'lucide-react';
 import { ConnectionStatus } from '../types';
+import { BACKEND_API_BASE } from '../services/socket';
 
 interface NavbarProps {
   status: ConnectionStatus;
@@ -10,6 +11,31 @@ interface NavbarProps {
 }
 
 export const Navbar: React.FC<NavbarProps> = ({ status, demoMode = false, onToggleDemoMode }) => {
+  const [abdmMode, setAbdmMode] = useState<'SANDBOX' | 'MOCK'>('MOCK');
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchAbdmStatus = async () => {
+      try {
+        const res = await fetch(`${BACKEND_API_BASE}/abha/status`);
+        if (res.ok) {
+          const data = await res.json();
+          if (isMounted && data.mode) {
+            setAbdmMode(data.mode.toUpperCase() === 'SANDBOX' ? 'SANDBOX' : 'MOCK');
+          }
+        }
+      } catch (err) {
+        // Fallback default is MOCK
+      }
+    };
+
+    fetchAbdmStatus();
+    const interval = setInterval(fetchAbdmStatus, 30000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, []);
   return (
     <header
       style={{
@@ -180,6 +206,35 @@ export const Navbar: React.FC<NavbarProps> = ({ status, demoMode = false, onTogg
               </span>
             </button>
           )}
+
+          {/* ABDM Active Adapter Mode Pill */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.45rem',
+              padding: '0.35rem 0.85rem',
+              borderRadius: '9999px',
+              fontSize: '0.775rem',
+              fontWeight: 700,
+              background: abdmMode === 'SANDBOX' ? '#ecfdf5' : '#fffbeb',
+              color: abdmMode === 'SANDBOX' ? '#047857' : '#b45309',
+              border: `1px solid ${abdmMode === 'SANDBOX' ? '#a7f3d0' : '#fde68a'}`,
+              letterSpacing: '0.02em',
+            }}
+            title={`ABDM Integration Mode: ${abdmMode} (National Health Authority)`}
+          >
+            <span
+              style={{
+                width: '7px',
+                height: '7px',
+                borderRadius: '50%',
+                backgroundColor: abdmMode === 'SANDBOX' ? '#10b981' : '#f59e0b',
+                display: 'inline-block',
+              }}
+            />
+            <span>ABDM: {abdmMode}</span>
+          </div>
 
           {/* Global Connection Status Pill */}
           <div

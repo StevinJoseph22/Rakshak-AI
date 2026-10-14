@@ -7,6 +7,7 @@ import { hospitalsRouter } from './routes/hospitals';
 import { incidentsRouter } from './routes/incidents';
 import { authRouter } from './routes/auth';
 import { sentinelRouter } from './routes/sentinel';
+import { abhaRouter } from './routes/abha';
 import { initSocketIO } from './socket';
 
 dotenv.config();
@@ -64,6 +65,7 @@ app.use('/auth', authRouter);
 app.use('/hospitals', hospitalsRouter);
 app.use('/incidents', incidentsRouter);
 app.use('/sentinel', sentinelRouter);
+app.use('/abha', abhaRouter);
 
 // 404 Handler for undefined routes
 app.use((req: Request, res: Response) => {
