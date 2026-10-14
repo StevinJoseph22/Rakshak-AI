@@ -27,8 +27,8 @@ const String kDefaultBackendUrl = String.fromEnvironment(
 
 /// Workstation Wi-Fi / Hotspot LAN IP for physical device testing without ADB reverse.
 /// Current active Wi-Fi IP on workstation:
-const String kDemoWorkstationIp = 'http://10.167.12.149:5000';
-const String kDemoWorkstationAltIp = 'http://10.215.58.149:5000';
+const String kDemoWorkstationIp = 'http://192.168.1.21:5000';
+const String kDemoWorkstationAltIp = 'http://10.167.12.149:5000';
 
 /// Ordered list of candidate backend URLs attempted during network failover:
 List<String> getBackendCandidates([String? overrideBaseUrl]) {
