@@ -75,7 +75,13 @@ class OfflineDispatchQueue {
   Future<void> initialize({ApiClient? apiClient}) async {
     _apiClient = apiClient ?? ApiClient();
     await _loadFromDisk();
+    // Reset backoff so persisted pending items retry immediately upon app launch/resume
+    final now = DateTime.now();
+    for (final item in _queue) {
+      item.nextRetryTime = now;
+    }
     _startWatchdog();
+    triggerDrain(forceImmediate: true);
   }
 
   /// Enqueues an un-dispatched incident into persistent storage.
@@ -104,18 +110,35 @@ class OfflineDispatchQueue {
     debugPrint('[OfflineDispatchQueue] Enqueued incident $id for store-and-forward retry.');
     
     // Attempt immediate drain in case connectivity just recovered
-    triggerDrain();
+    triggerDrain(forceImmediate: true);
   }
 
   /// Triggers an immediate retry attempt for all ready items in the queue.
-  void triggerDrain() {
+  void triggerDrain({bool forceImmediate = false}) {
+    if (forceImmediate) {
+      final now = DateTime.now();
+      for (final item in _queue) {
+        item.nextRetryTime = now;
+      }
+    }
     if (_isProcessing) return;
     _processQueue();
   }
 
+  /// Public hook to immediately reset backoff and flush all queued items.
+  Future<void> retryAllImmediately() async {
+    final now = DateTime.now();
+    for (final item in _queue) {
+      item.nextRetryTime = now;
+      item.retryCount = 0;
+    }
+    await _saveToDisk();
+    triggerDrain(forceImmediate: true);
+  }
+
   void _startWatchdog() {
     _retryTimer?.cancel();
-    _retryTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+    _retryTimer = Timer.periodic(const Duration(seconds: 2), (_) {
       _processQueue();
     });
   }
@@ -159,10 +182,10 @@ class OfflineDispatchQueue {
           await _saveToDisk();
         } else {
           item.retryCount++;
-          // Exponential backoff: 2s, 4s, 8s, 16s, 32s, max 60s
-          final backoffSeconds = min(pow(2, item.retryCount).toInt(), 60);
+          // Fast backoff capped at 6s (2s, 4s, 6s) instead of 60s
+          final backoffSeconds = min(pow(2, item.retryCount).toInt(), 6);
           item.nextRetryTime = now.add(Duration(seconds: backoffSeconds));
-          debugPrint('[OfflineDispatchQueue] Retry failed for ${item.id}. Backoff: ${backoffSeconds}s (Retry #${item.retryCount})');
+          debugPrint('[OfflineDispatchQueue] Retry failed for ${item.id}. Fast Backoff: ${backoffSeconds}s (Retry #${item.retryCount})');
           await _saveToDisk();
         }
       }

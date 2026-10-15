@@ -13,6 +13,7 @@
 //    This allows the phone to talk directly to `http://127.0.0.1:5000` with 0ms latency.
 // ==============================================================================
 
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
@@ -27,48 +28,58 @@ const String kDefaultBackendUrl = String.fromEnvironment(
 
 /// Workstation Wi-Fi / Hotspot LAN IP for physical device testing without ADB reverse.
 /// Current active Wi-Fi IP on workstation:
-const String kDemoWorkstationIp = 'http://192.168.1.21:5000';
+const String kDemoWorkstationIp = 'http://10.137.61.149:5000';
 const String kDemoWorkstationAltIp = 'http://10.167.12.149:5000';
 
 /// Ordered list of candidate backend URLs attempted during network failover:
 List<String> getBackendCandidates([String? overrideBaseUrl]) {
   return <String>[
     if (gActiveBackendUrl != null) gActiveBackendUrl!,
-    'http://127.0.0.1:5000', // 1. Fast path: 0ms latency when `adb reverse tcp:5000 tcp:5000` is active
-    kDemoWorkstationIp,      // 2. Workstation current Wi-Fi LAN IP (10.215.58.149:5000)
-    kDemoWorkstationAltIp,   // 3. Workstation hotspot / alternate LAN IP (192.168.1.21:5000)
+    kDemoWorkstationIp,      // 1. Primary Wi-Fi LAN IP (10.137.61.149:5000)
+    'http://127.0.0.1:5000', // 2. Fast path: 0ms latency when `adb reverse tcp:5000 tcp:5000` is active
+    kDemoWorkstationAltIp,   // 3. Workstation hotspot / alternate LAN IP
+    'http://10.215.58.149:5000',
     if (kDefaultBackendUrl != 'http://10.0.2.2:5000') kDefaultBackendUrl,
     if (overrideBaseUrl != null && overrideBaseUrl != kDefaultBackendUrl) overrideBaseUrl,
     'http://10.0.2.2:5000',  // 4. Android Emulator host loopback
   ].toSet().toList();
 }
 
-/// Fast concurrent / sequential health-check to discover the active backend URL for WebSockets
+/// Fast concurrent health-check to discover the active backend URL in parallel
 Future<String> resolveReachableBackendUrl({
-  Duration timeout = const Duration(milliseconds: 1200),
+  Duration timeout = const Duration(milliseconds: 1500),
 }) async {
   if (gActiveBackendUrl != null) {
     return gActiveBackendUrl!;
   }
   final candidates = getBackendCandidates();
   final client = http.Client();
-  try {
-    for (final url in candidates) {
-      try {
-        final res = await client.get(Uri.parse('$url/health')).timeout(timeout);
-        if (res.statusCode == 200) {
-          gActiveBackendUrl = url;
-          debugPrint('[BackendConfig] Discovered active backend at: $url');
-          return url;
-        }
-      } catch (_) {
-        // Continue to next candidate
+  final completer = Completer<String>();
+  int remaining = candidates.length;
+
+  for (final url in candidates) {
+    client.get(Uri.parse('$url/health')).timeout(timeout).then((res) {
+      if (res.statusCode == 200 && !completer.isCompleted) {
+        gActiveBackendUrl = url;
+        debugPrint('[BackendConfig] Fast concurrent discovery reached active backend at: $url');
+        completer.complete(url);
       }
-    }
+    }).catchError((_) {}).whenComplete(() {
+      remaining--;
+      if (remaining == 0 && !completer.isCompleted) {
+        completer.complete(kDemoWorkstationIp);
+      }
+    });
+  }
+
+  try {
+    return await completer.future.timeout(
+      timeout + const Duration(milliseconds: 200),
+      onTimeout: () => kDemoWorkstationIp,
+    );
   } finally {
     client.close();
   }
-  return candidates.isNotEmpty ? candidates.first : kDemoWorkstationIp;
 }
 
 /// Helper class providing clean access to active base HTTP URL

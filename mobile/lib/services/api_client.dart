@@ -56,7 +56,7 @@ class ApiClient {
     String? status,
     Map<String, dynamic>? victimMetadata,
     Map<String, dynamic>? healthCard,
-    Duration timeout = const Duration(seconds: 5),
+    Duration timeout = const Duration(milliseconds: 3000),
   }) async {
     final payload = {
       if (id != null) 'id': id,
