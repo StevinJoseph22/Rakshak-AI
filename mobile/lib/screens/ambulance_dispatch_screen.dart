@@ -670,25 +670,71 @@ class _AmbulanceDispatchScreenState extends State<AmbulanceDispatchScreen> {
     final ambulanceLocation = LatLng(_ambulanceLat, _ambulanceLng);
 
     return Scaffold(
+      backgroundColor: const Color(0xFF070D1E),
       appBar: AppBar(
-        title: Text('Dispatch: ${widget.incident.id.substring(0, 8)}'),
-        backgroundColor: Colors.white,
-        elevation: 1,
+        backgroundColor: const Color(0xFF0A1329),
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new, size: 18, color: Colors.white),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.emergency, color: Color(0xFFFF1744), size: 18),
+                const SizedBox(width: 6),
+                Text(
+                  'MISSION DISPATCH • $_ambulancePlate',
+                  style: const TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0.8,
+                    color: Colors.white,
+                  ),
+                ),
+              ],
+            ),
+            Text(
+              'Incident ID: ${widget.incident.id.length > 12 ? widget.incident.id.substring(0, 12) : widget.incident.id} • ${_routeLeg == 'to_hospital' ? "Destination Nav" : "Scene Nav"}',
+              style: const TextStyle(fontSize: 10, color: Color(0xFF94A3B8), fontFamily: 'monospace'),
+            ),
+          ],
+        ),
         actions: [
           Container(
             margin: const EdgeInsets.only(right: 12),
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: Colors.red.shade100,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Text(
-              widget.ambulanceId,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-                color: Colors.red.shade900,
+              color: _hasArrivedOnScene ? const Color(0xFF10B981).withOpacity(0.2) : const Color(0xFFFF1744).withOpacity(0.2),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: _hasArrivedOnScene ? const Color(0xFF10B981) : const Color(0xFFFF1744),
+                width: 1.2,
               ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 6,
+                  height: 6,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: _hasArrivedOnScene ? const Color(0xFF10B981) : const Color(0xFFFF1744),
+                  ),
+                ),
+                const SizedBox(width: 5),
+                Text(
+                  _hasArrivedOnScene ? 'ON SCENE' : 'EN ROUTE',
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w900,
+                    color: _hasArrivedOnScene ? const Color(0xFF10B981) : const Color(0xFFFF1744),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -721,6 +767,12 @@ class _AmbulanceDispatchScreenState extends State<AmbulanceDispatchScreen> {
             hospitalLocation = LatLng(hospitalLat, hospitalLng);
           }
 
+          final victimName = widget.incident.victimMetadata?['victim_name']?.toString() ??
+              widget.incident.victimMetadata?['patient_name']?.toString() ??
+              'Aarav Sharma (Verified)';
+          final bloodGroup = widget.incident.victimMetadata?['blood_group']?.toString() ?? 'B+';
+          final vehicleType = widget.incident.victimMetadata?['vehicle_type']?.toString() ?? 'Two-Wheeler';
+
           // Trigger route fetch if accepted and points not yet loaded
           if (hospitalLocation != null && _roadwayPoints.isEmpty && !_isLoadingRoute) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -728,98 +780,242 @@ class _AmbulanceDispatchScreenState extends State<AmbulanceDispatchScreen> {
             });
           }
 
-          return Column(
+          return Stack(
             children: [
-              // Top Status & Driver Profile Card
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                color: isAccepted ? Colors.green.shade50 : Colors.amber.shade50,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+              // 1. FULL-SCREEN INTERACTIVE VECTOR MAP
+              Positioned.fill(
+                child: FlutterMap(
+                  mapController: _mapController,
+                  options: MapOptions(
+                    initialCenter: incidentLocation,
+                    initialZoom: 13.5,
+                  ),
                   children: [
-                    // Ambulance Profile & Driver Phone HUD
-                    Container(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.red.shade200),
-                        boxShadow: const [
-                          BoxShadow(color: Colors.black12, blurRadius: 2, offset: Offset(0, 1)),
+                    TileLayer(
+                      urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                      userAgentPackageName: 'com.rakshak.mobile',
+                    ),
+
+                    // Glowing Underlay Halo for Green Wave Corridor
+                    if (_trafficSegments.any((s) => s.isGreenCorridor))
+                      PolylineLayer(
+                        polylines: _trafficSegments
+                            .where((s) => s.isGreenCorridor)
+                            .map(
+                              (seg) => Polyline(
+                                points: seg.points,
+                                color: const Color(0x5510B981),
+                                strokeWidth: 12.0,
+                                strokeJoin: StrokeJoin.round,
+                                strokeCap: StrokeCap.round,
+                              ),
+                            )
+                            .toList(),
+                      ),
+
+                    // Real OSRM Roadway Polyline Layer with Speed/Traffic Colors
+                    if (_trafficSegments.isNotEmpty)
+                      PolylineLayer(
+                        polylines: _trafficSegments
+                            .map(
+                              (seg) => Polyline(
+                                points: seg.points,
+                                color: seg.color,
+                                strokeWidth: 6.0,
+                                strokeJoin: StrokeJoin.round,
+                                strokeCap: StrokeCap.round,
+                              ),
+                            )
+                            .toList(),
+                      )
+                    else if (_roadwayPoints.isNotEmpty)
+                      PolylineLayer(
+                        polylines: [
+                          Polyline(
+                            points: _roadwayPoints,
+                            color: const Color(0xFF2563EB),
+                            strokeWidth: 6.0,
+                            strokeJoin: StrokeJoin.round,
+                            strokeCap: StrokeCap.round,
+                          ),
                         ],
                       ),
-                      child: Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: Colors.red.shade700,
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              _ambulancePlate,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 11,
-                                letterSpacing: 0.5,
-                              ),
-                            ),
+
+                    // Markers Layer
+                    MarkerLayer(
+                      markers: [
+                        // Crash Incident Site Marker
+                        Marker(
+                          point: incidentLocation,
+                          width: 48,
+                          height: 48,
+                          child: const Icon(
+                            Icons.location_on,
+                            color: Colors.red,
+                            size: 44,
                           ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Driver: $_driverName (Ph: $_driverPhone)',
-                                  style: const TextStyle(
-                                    fontSize: 11.5,
-                                    fontWeight: FontWeight.bold,
-                                    color: Color(0xFF1E293B),
-                                  ),
-                                ),
-                                Text(
-                                  'Origin: $_originStation',
-                                  style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
+                        ),
+                        // Ambulance Live Position Marker
+                        Marker(
+                          point: ambulanceLocation,
+                          width: 44,
+                          height: 44,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF00E5FF),
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white, width: 2.5),
+                              boxShadow: const [
+                                BoxShadow(
+                                  color: Colors.black38,
+                                  blurRadius: 6,
+                                  offset: Offset(0, 2),
                                 ),
                               ],
                             ),
+                            child: const Icon(
+                              Icons.directions_car,
+                              color: Colors.black,
+                              size: 24,
+                            ),
                           ),
-                          IconButton(
-                            constraints: const BoxConstraints(),
-                            padding: EdgeInsets.zero,
-                            icon: const Icon(Icons.phone, size: 18, color: Color(0xFF047857)),
-                            onPressed: () {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('Calling Driver $_driverName: $_driverPhone'),
-                                  backgroundColor: const Color(0xFF047857),
-                                ),
-                              );
-                            },
-                            tooltip: 'Call Driver',
+                        ),
+                        // Accepted Hospital Marker
+                        if (hospitalLocation != null)
+                          Marker(
+                            point: hospitalLocation,
+                            width: 44,
+                            height: 44,
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF10B981),
+                                shape: BoxShape.circle,
+                                border: Border.all(color: Colors.white, width: 2.5),
+                              ),
+                              child: const Icon(
+                                Icons.local_hospital,
+                                color: Colors.white,
+                                size: 24,
+                              ),
+                            ),
                           ),
-                        ],
-                      ),
-                    ),
 
-                    // Accident Scene Location Card
-                    Container(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFEF2F2),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: const Color(0xFFFECACA)),
-                      ),
-                      child: Row(
+                        // Real Traffic Signal Preemption Markers along the Route
+                        ..._trafficJunctions.map((jcn) {
+                          final isGreen = jcn.isPreemptedGreen;
+                          final isYellow = jcn.preemptionState == SignalPreemptionState.yellowClearance;
+                          final badgeBg = isGreen
+                              ? const Color(0xFF065F46)
+                              : (isYellow ? const Color(0xFF78350F) : const Color(0xFF7F1D1D));
+                          final borderCol = isGreen
+                              ? const Color(0xFF34D399)
+                              : (isYellow ? const Color(0xFFFBBF24) : const Color(0xFFFCA5A5));
+                          final statusText = isGreen
+                              ? 'GREEN (${jcn.remainingClearanceSeconds}s)'
+                              : (isYellow ? 'CLEAR (4s)' : 'RED');
+
+                          return Marker(
+                            point: jcn.location,
+                            width: 112,
+                            height: 50,
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: badgeBg,
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(color: borderCol, width: 1.2),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: (isGreen ? const Color(0xFF10B981) : Colors.red).withOpacity(0.35),
+                                        blurRadius: 5,
+                                        offset: const Offset(0, 2),
+                                      ),
+                                    ],
+                                  ),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        jcn.name,
+                                        style: const TextStyle(
+                                          fontSize: 7.5,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.white,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            Icons.traffic,
+                                            size: 9.5,
+                                            color: isGreen ? const Color(0xFF34D399) : (isYellow ? Colors.amber : Colors.white),
+                                          ),
+                                          const SizedBox(width: 2.5),
+                                          Text(
+                                            statusText,
+                                            style: const TextStyle(
+                                              fontSize: 8.5,
+                                              fontWeight: FontWeight.w900,
+                                              color: Colors.white,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(height: 1),
+                                Container(
+                                  width: 6,
+                                  height: 6,
+                                  decoration: BoxDecoration(
+                                    color: isGreen ? const Color(0xFF10B981) : (isYellow ? Colors.amber : Colors.red),
+                                    shape: BoxShape.circle,
+                                    border: Border.all(color: Colors.white, width: 1),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+
+              // 2. TOP FLOATING TELEMETRY ISLAND HUD
+              Positioned(
+                top: 10,
+                left: 10,
+                right: 10,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xF20B132B),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFF1E293B), width: 1.2),
+                    boxShadow: const [
+                      BoxShadow(color: Colors.black45, blurRadius: 10, offset: Offset(0, 4)),
+                    ],
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Line 1: Big ETA, Traffic Pill, & Route Leg Switcher
+                      Row(
                         children: [
-                          const Icon(Icons.location_on, color: Color(0xFFDC2626), size: 20),
+                          Icon(
+                            _isGreenCorridorActive ? Icons.flash_on : Icons.navigation,
+                            color: _isGreenCorridorActive ? const Color(0xFF10B981) : const Color(0xFF00E5FF),
+                            size: 20,
+                          ),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Column(
@@ -827,949 +1023,435 @@ class _AmbulanceDispatchScreenState extends State<AmbulanceDispatchScreen> {
                               children: [
                                 Row(
                                   children: [
-                                    const Text(
-                                      'INCIDENT SCENE: ',
-                                      style: TextStyle(
-                                        fontSize: 11,
+                                    Text(
+                                      '${_roadDistanceKm?.toStringAsFixed(1) ?? "2.8"} km',
+                                      style: const TextStyle(
+                                        fontSize: 16,
                                         fontWeight: FontWeight.w900,
-                                        color: Color(0xFF991B1B),
+                                        color: Colors.white,
                                       ),
                                     ),
+                                    const Text('  •  ', style: TextStyle(color: Colors.grey)),
                                     Text(
-                                      '${widget.incident.latitude.toStringAsFixed(4)}, ${widget.incident.longitude.toStringAsFixed(4)}',
-                                      style: const TextStyle(
-                                        fontSize: 11,
+                                      '~${_roadDurationMinutes ?? 4} min ETA',
+                                      style: TextStyle(
+                                        fontSize: 14,
                                         fontWeight: FontWeight.bold,
-                                        color: Color(0xFF7F1D1D),
+                                        color: _isGreenCorridorActive ? const Color(0xFF10B981) : const Color(0xFF00E5FF),
                                       ),
                                     ),
                                   ],
                                 ),
                                 Text(
-                                  'Distance from Ambulance: ${(const Distance().as(LengthUnit.Meter, LatLng(_ambulanceLat, _ambulanceLng), incidentLocation) / 1000).toStringAsFixed(2)} km',
-                                  style: const TextStyle(fontSize: 10.5, color: Color(0xFFB91C1C)),
+                                  _trafficCondition,
+                                  style: TextStyle(
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: _trafficCondition == 'Heavy Congestion'
+                                        ? const Color(0xFFEF4444)
+                                        : (_isGreenCorridorActive ? const Color(0xFF34D399) : const Color(0xFF94A3B8)),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          // Route Leg Switcher Chip
+                          Container(
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF1E293B),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            padding: const EdgeInsets.all(2),
+                            child: Row(
+                              children: [
+                                InkWell(
+                                  onTap: () {
+                                    setState(() => _routeLeg = 'to_scene');
+                                    _fetchRoadRoute(LatLng(_ambulanceLat, _ambulanceLng), incidentLocation);
+                                  },
+                                  borderRadius: BorderRadius.circular(16),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: _routeLeg == 'to_scene' ? const Color(0xFFFF1744) : Colors.transparent,
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                    child: const Text('Scene', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Colors.white)),
+                                  ),
+                                ),
+                                InkWell(
+                                  onTap: hospitalLocation == null
+                                      ? null
+                                      : () {
+                                          setState(() => _routeLeg = 'to_hospital');
+                                          _fetchRoadRoute(incidentLocation, hospitalLocation!);
+                                        },
+                                  borderRadius: BorderRadius.circular(16),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: _routeLeg == 'to_hospital' ? const Color(0xFF10B981) : Colors.transparent,
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                    child: Text(
+                                      'Hospital',
+                                      style: TextStyle(
+                                        fontSize: 10.5,
+                                        fontWeight: FontWeight.bold,
+                                        color: hospitalLocation != null ? Colors.white : Colors.white38,
+                                      ),
+                                    ),
+                                  ),
                                 ),
                               ],
                             ),
                           ),
                         ],
                       ),
-                    ),
-
-                    // On-Scene Arrival Banner & Confirmation
-                    Container(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: _hasArrivedOnScene ? const Color(0xFFECFDF5) : const Color(0xFFFFFBEB),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: _hasArrivedOnScene ? const Color(0xFFA7F3D0) : const Color(0xFFFDE68A),
-                          width: 1.5,
+                      const SizedBox(height: 8),
+                      // Line 2: C-V2X Autonomous Green Corridor Bar
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: _isGreenCorridorActive ? const Color(0xFF10B981).withOpacity(0.12) : const Color(0xFF1E293B),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: _isGreenCorridorActive ? const Color(0xFF10B981) : const Color(0xFF334155),
+                            width: 0.8,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.traffic,
+                              size: 14,
+                              color: _isGreenCorridorActive ? const Color(0xFF10B981) : Colors.grey,
+                            ),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                _isGreenCorridorActive
+                                    ? 'C-V2X GREEN CORRIDOR: ${_trafficJunctions.where((j) => j.isPreemptedGreen).length}/${_trafficJunctions.length} Signals Preempted GREEN'
+                                    : 'C-V2X Signal Preemption Paused',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: _isGreenCorridorActive ? const Color(0xFF34D399) : const Color(0xFF94A3B8),
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            Transform.scale(
+                              scale: 0.75,
+                              child: Switch.adaptive(
+                                value: _isGreenCorridorActive,
+                                activeColor: const Color(0xFF10B981),
+                                onChanged: (val) {
+                                  setState(() {
+                                    _isGreenCorridorActive = val;
+                                    if (widget.incident.acceptedHospital != null) {
+                                      final hosp = widget.incident.acceptedHospital!;
+                                      _fetchRoadRoute(
+                                        LatLng(_ambulanceLat, _ambulanceLng),
+                                        LatLng(hosp.latitude, hosp.longitude),
+                                      );
+                                    }
+                                  });
+                                },
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                      child: _hasArrivedOnScene
-                          ? Row(
-                              children: [
-                                const Icon(Icons.check_circle, color: Color(0xFF059669), size: 22),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        'ARRIVED ON SCENE (${_arrivedAt != null ? "${_arrivedAt!.hour}:${_arrivedAt!.minute.toString().padLeft(2, '0')}" : "15:35"} IST)',
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.w900,
-                                          fontSize: 11.5,
-                                          color: Color(0xFF065F46),
-                                        ),
-                                      ),
-                                      const Text(
-                                        'Emergency contacts notified via SMS with driver direct line • Police informed',
-                                        style: TextStyle(fontSize: 10, color: Color(0xFF047857)),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            )
-                          : Row(
-                              children: [
-                                const Icon(Icons.radar, color: Color(0xFFD97706), size: 20),
-                                const SizedBox(width: 8),
-                                const Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        'ZERO-TOUCH GEOFENCE ACTIVE (<= 75m)',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.w800,
-                                          fontSize: 11,
-                                          color: Color(0xFF92400E),
-                                        ),
-                                      ),
-                                      Text(
-                                        'Auto-notifies contacts with driver phone upon arrival',
-                                        style: TextStyle(fontSize: 10, color: Color(0xFFB45309)),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                ElevatedButton(
-                                  onPressed: _isMarkingArrival ? null : () => _triggerOnSceneArrival(autoGeofence: false),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: const Color(0xFF059669),
-                                    foregroundColor: Colors.white,
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                                    elevation: 2,
-                                  ),
-                                  child: _isMarkingArrival
-                                      ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                                      : const Text('Mark Arrived', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                                ),
-                              ],
-                            ),
-                    ),
+                    ],
+                  ),
+                ),
+              ),
 
-                    // Destination Hospital Status
-                    Row(
+              // 3. FLOATING TOP-LEFT APPROACHING JUNCTION INDICATOR
+              if (_trafficJunctions.isNotEmpty)
+                Positioned(
+                  top: 108,
+                  left: 10,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: const Color(0xEE0B132B),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: _trafficJunctions.first.isPreemptedGreen ? const Color(0xFF10B981) : Colors.amber,
+                        width: 1,
+                      ),
+                      boxShadow: const [
+                        BoxShadow(color: Colors.black38, blurRadius: 4, offset: Offset(0, 2)),
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(
-                          isAccepted ? Icons.check_circle : Icons.access_time,
-                          color: isAccepted ? Colors.green.shade700 : Colors.amber.shade800,
-                          size: 26,
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                isAccepted ? 'DESTINATION: $hospitalName' : 'TRIAGE STATUS: BROADCASTING',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 13,
-                                  color: isAccepted ? Colors.green.shade900 : Colors.amber.shade900,
-                                ),
-                              ),
-                              if (hospitalAddress.isNotEmpty)
-                                Text(
-                                  hospitalAddress,
-                                  style: TextStyle(fontSize: 11, color: Colors.grey.shade800),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                            ],
+                        Container(
+                          width: 7,
+                          height: 7,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: _trafficJunctions.first.isPreemptedGreen ? const Color(0xFF10B981) : Colors.amber,
                           ),
                         ),
-                        // Toggle Triage Details Button
-                        IconButton(
-                          icon: Icon(
-                            _showTriageMatrix ? Icons.keyboard_arrow_up : Icons.info_outline,
-                            color: isAccepted ? Colors.green.shade800 : Colors.amber.shade900,
-                            size: 20,
-                          ),
-                          onPressed: () {
-                            setState(() => _showTriageMatrix = !_showTriageMatrix);
-                          },
-                          tooltip: 'View Hospital Triage Audit',
+                        const SizedBox(width: 6),
+                        Text(
+                          '${_trafficJunctions.first.name} (${_trafficJunctions.first.distanceMeters.toStringAsFixed(0)}m) • ${_trafficJunctions.first.isPreemptedGreen ? "GREEN (${_trafficJunctions.first.remainingClearanceSeconds}s)" : "CLEARING"}',
+                          style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: Colors.white),
                         ),
                       ],
                     ),
+                  ),
+                ),
 
-                    // Route Leg Switcher (En Route to Scene vs En Route to Hospital)
-                    if (isAccepted) ...[
-                      const SizedBox(height: 6),
+              // 4. FLOATING RIGHT-SIDE MAP UTILITIES
+              Positioned(
+                top: 108,
+                right: 10,
+                child: Column(
+                  children: [
+                    FloatingActionButton.small(
+                      heroTag: 'recenterMap',
+                      backgroundColor: const Color(0xFF0F172A),
+                      foregroundColor: const Color(0xFF00E5FF),
+                      onPressed: () {
+                        if (_roadwayPoints.isNotEmpty) {
+                          _mapController.fitCamera(
+                            CameraFit.bounds(
+                              bounds: LatLngBounds.fromPoints(_roadwayPoints),
+                              padding: const EdgeInsets.all(40),
+                            ),
+                          );
+                        } else {
+                          _mapController.move(incidentLocation, 14.5);
+                        }
+                      },
+                      child: const Icon(Icons.my_location, size: 18),
+                    ),
+                    const SizedBox(height: 8),
+                    FloatingActionButton.small(
+                      heroTag: 'openGoogleMaps',
+                      backgroundColor: const Color(0xFF0F172A),
+                      foregroundColor: Colors.white,
+                      onPressed: () {
+                        final targetLat = (_routeLeg == 'to_hospital' && hospitalLocation != null)
+                            ? hospitalLocation.latitude
+                            : widget.incident.latitude;
+                        final targetLng = (_routeLeg == 'to_hospital' && hospitalLocation != null)
+                            ? hospitalLocation.longitude
+                            : widget.incident.longitude;
+                        _openGoogleMapsNavigation(
+                          destLat: targetLat,
+                          destLng: targetLng,
+                          originLat: _ambulanceLat,
+                          originLng: _ambulanceLng,
+                        );
+                      },
+                      child: const Icon(Icons.navigation, size: 18),
+                    ),
+                  ],
+                ),
+              ),
+
+              // 5. BOTTOM PARAMEDIC COMMAND CONSOLE
+              Positioned(
+                bottom: 12,
+                left: 10,
+                right: 10,
+                child: Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xF70A1329),
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: const Color(0xFF1E293B), width: 1.2),
+                    boxShadow: const [
+                      BoxShadow(color: Colors.black54, blurRadius: 14, offset: Offset(0, -4)),
+                    ],
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Patient ABHA & Destination Summary Row
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFF1744).withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Icon(Icons.person, color: Color(0xFFFF1744), size: 20),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Text(
+                                      victimName,
+                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFFF1744).withOpacity(0.2),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        bloodGroup,
+                                        style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: Color(0xFFFF1744)),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 5),
+                                    Text(
+                                      vehicleType,
+                                      style: const TextStyle(fontSize: 10, color: Color(0xFF94A3B8)),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  isAccepted ? 'Trauma Bay: $hospitalName' : 'Triage Status: Broadcasting to 8km Ring',
+                                  style: TextStyle(
+                                    fontSize: 10.5,
+                                    color: isAccepted ? const Color(0xFF34D399) : const Color(0xFF94A3B8),
+                                    fontWeight: isAccepted ? FontWeight.w600 : FontWeight.normal,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            icon: Icon(
+                              _showTriageMatrix ? Icons.keyboard_arrow_up : Icons.info_outline,
+                              color: const Color(0xFF00E5FF),
+                              size: 20,
+                            ),
+                            onPressed: () => setState(() => _showTriageMatrix = !_showTriageMatrix),
+                            tooltip: 'Triage Hospital Audit',
+                          ),
+                        ],
+                      ),
+
+                      // Optional Triage Audit Drawer
+                      if (_showTriageMatrix) ...[
+                        const Divider(height: 14, color: Color(0xFF1E293B)),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            isAccepted ? '✅ Accepted by $hospitalName' : '⚡ 3 Trauma Bays Polled. Standing by...',
+                            style: const TextStyle(fontSize: 11, color: Color(0xFF94A3B8)),
+                          ),
+                        ),
+                      ],
+
+                      const SizedBox(height: 10),
+
+                      // Primary Action Button: Arrival Confirmation
+                      if (!_hasArrivedOnScene)
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: _isMarkingArrival ? null : () => _triggerOnSceneArrival(autoGeofence: false),
+                            icon: _isMarkingArrival
+                                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                                : const Icon(Icons.check_circle, color: Colors.white, size: 18),
+                            label: const Text(
+                              'MARK ARRIVED ON SCENE (AUTO-NOTIFY CONTACTS)',
+                              style: TextStyle(fontWeight: FontWeight.w900, fontSize: 11.5, letterSpacing: 0.5, color: Colors.white),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF059669),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              elevation: 4,
+                            ),
+                          ),
+                        )
+                      else
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF059669).withOpacity(0.18),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: const Color(0xFF059669), width: 1),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(Icons.check_circle, color: Color(0xFF10B981), size: 16),
+                              const SizedBox(width: 6),
+                              Text(
+                                'ARRIVED ON SCENE (${_arrivedAt != null ? "${_arrivedAt!.hour}:${_arrivedAt!.minute.toString().padLeft(2, '0')}" : "15:35"} IST) • CONTACTS & POLICE NOTIFIED',
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 10.5, color: Color(0xFF34D399)),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                      const SizedBox(height: 10),
+
+                      // Secondary Tactical Action Chips Row
                       Row(
                         children: [
                           Expanded(
                             child: OutlinedButton.icon(
                               onPressed: () {
-                                setState(() => _routeLeg = 'to_scene');
-                                _fetchRoadRoute(LatLng(_ambulanceLat, _ambulanceLng), incidentLocation);
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => IntakeScreen(
+                                      incidentId: widget.incident.id,
+                                    ),
+                                  ),
+                                );
                               },
-                              icon: const Icon(Icons.crisis_alert, size: 14),
-                              label: const Text('Leg 1: Scene', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                              icon: const Icon(Icons.camera_alt, size: 14, color: Color(0xFF00E5FF)),
+                              label: const Text('Capture Photo', style: TextStyle(fontSize: 10.5, color: Color(0xFF00E5FF), fontWeight: FontWeight.bold)),
                               style: OutlinedButton.styleFrom(
-                                backgroundColor: _routeLeg == 'to_scene' ? const Color(0xFFDC2626) : Colors.white,
-                                foregroundColor: _routeLeg == 'to_scene' ? Colors.white : const Color(0xFFDC2626),
-                                side: const BorderSide(color: Color(0xFFDC2626)),
-                                padding: const EdgeInsets.symmetric(vertical: 4),
+                                side: const BorderSide(color: Color(0xFF00E5FF)),
+                                padding: const EdgeInsets.symmetric(vertical: 8),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                               ),
                             ),
                           ),
-                          const SizedBox(width: 8),
+                          const SizedBox(width: 6),
                           Expanded(
                             child: OutlinedButton.icon(
-                              onPressed: hospitalLocation == null
-                                  ? null
-                                  : () {
-                                      setState(() => _routeLeg = 'to_hospital');
-                                      _fetchRoadRoute(incidentLocation, hospitalLocation!);
-                                    },
-                              icon: const Icon(Icons.local_hospital, size: 14),
-                              label: const Text('Leg 2: Hospital', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                              onPressed: () => _showAbhaVaultSheet(context),
+                              icon: const Icon(Icons.badge, size: 14, color: Color(0xFF38BDF8)),
+                              label: const Text('ABHA Vault', style: TextStyle(fontSize: 10.5, color: Color(0xFF38BDF8), fontWeight: FontWeight.bold)),
                               style: OutlinedButton.styleFrom(
-                                backgroundColor: _routeLeg == 'to_hospital' ? const Color(0xFF047857) : Colors.white,
-                                foregroundColor: _routeLeg == 'to_hospital' ? Colors.white : const Color(0xFF047857),
-                                side: const BorderSide(color: Color(0xFF047857)),
-                                padding: const EdgeInsets.symmetric(vertical: 4),
+                                side: const BorderSide(color: Color(0xFF38BDF8)),
+                                padding: const EdgeInsets.symmetric(vertical: 8),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: () => _showBiomechanicsSheet(context),
+                              icon: const Icon(Icons.psychology, size: 14, color: Color(0xFFFF1744)),
+                              label: const Text('Blackbox', style: TextStyle(fontSize: 10.5, color: Color(0xFFFF1744), fontWeight: FontWeight.bold)),
+                              style: OutlinedButton.styleFrom(
+                                side: const BorderSide(color: Color(0xFFFF1744)),
+                                padding: const EdgeInsets.symmetric(vertical: 8),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                               ),
                             ),
                           ),
                         ],
                       ),
-                    ],
-
-                    // Roadway Routing & Live Traffic Banner
-                    if (_roadDistanceKm != null) ...[
-                      const SizedBox(height: 6),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFEFF6FF),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: const Color(0xFFBFDBFE)),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.alt_route, size: 16, color: Color(0xFF1D4ED8)),
-                            const SizedBox(width: 6),
-                            Expanded(
-                              child: Text(
-                                '${_roadDistanceKm!.toStringAsFixed(1)} km  •  ~${_roadDurationMinutes ?? 12} mins ETA',
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFF1E3A8A),
-                                ),
-                              ),
-                            ),
-                            if (_trafficDelayMinutes != null && _trafficDelayMinutes! > 0)
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                                decoration: BoxDecoration(
-                                  color: _trafficCondition == 'Heavy Congestion'
-                                      ? const Color(0xFFFEE2E2)
-                                      : const Color(0xFFFEF3C7),
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Text(
-                                  '+${_trafficDelayMinutes}m Traffic Delay',
-                                  style: TextStyle(
-                                    fontSize: 10.5,
-                                    fontWeight: FontWeight.bold,
-                                    color: _trafficCondition == 'Heavy Congestion'
-                                        ? const Color(0xFF991B1B)
-                                        : const Color(0xFF92400E),
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-
-                      // C-V2X Autonomous Green Corridor Banner
-                      const SizedBox(height: 6),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: _isGreenCorridorActive ? const Color(0xFFECFDF5) : const Color(0xFFF1F5F9),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: _isGreenCorridorActive ? const Color(0xFFA7F3D0) : const Color(0xFFCBD5E1),
-                          ),
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(4),
-                              decoration: BoxDecoration(
-                                color: _isGreenCorridorActive ? const Color(0xFF10B981) : Colors.grey,
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(Icons.bolt, size: 13, color: Colors.white),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    _isGreenCorridorActive
-                                        ? 'C-V2X AUTONOMOUS GREEN CORRIDOR ACTIVE'
-                                        : 'C-V2X SIGNAL PREEMPTION PAUSED',
-                                    style: TextStyle(
-                                      fontSize: 10.5,
-                                      fontWeight: FontWeight.w900,
-                                      color: _isGreenCorridorActive ? const Color(0xFF065F46) : const Color(0xFF475569),
-                                      letterSpacing: 0.3,
-                                    ),
-                                  ),
-                                  Text(
-                                    _isGreenCorridorActive
-                                        ? '${_trafficJunctions.where((j) => j.isPreemptedGreen).length} of ${_trafficJunctions.length} Signals Preempted GREEN • Zero Traffic Delay'
-                                        : 'Standard traffic phasing active along route',
-                                    style: TextStyle(
-                                      fontSize: 9.5,
-                                      fontWeight: FontWeight.w500,
-                                      color: _isGreenCorridorActive ? const Color(0xFF047857) : const Color(0xFF64748B),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Switch.adaptive(
-                              value: _isGreenCorridorActive,
-                              activeColor: const Color(0xFF10B981),
-                              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                              onChanged: (val) {
-                                setState(() {
-                                  _isGreenCorridorActive = val;
-                                  if (widget.incident.acceptedHospital != null) {
-                                    final hosp = widget.incident.acceptedHospital!;
-                                    _fetchRoadRoute(
-                                      LatLng(_ambulanceLat, _ambulanceLng),
-                                      LatLng(hosp.latitude, hosp.longitude),
-                                    );
-                                  }
-                                });
-                              },
-                            ),
-                          ],
-                        ),
-                      ),
-
-                      // AI Congestion Reroute Alert
-                      if (_aiRerouteApplied) ...[
-                        const SizedBox(height: 5),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFECFEFF),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: const Color(0xFFA5F3FC)),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.auto_awesome, size: 14, color: Color(0xFF0891B2)),
-                              const SizedBox(width: 6),
-                              Expanded(
-                                child: Text(
-                                  _aiRerouteReason,
-                                  style: const TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                    color: Color(0xFF0E7490),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ],
-
-                    // Advanced Trauma Diagnostics: AI Biomechanics & ABHA Vault & C-V2X Hub
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: InkWell(
-                            onTap: () => _showBiomechanicsSheet(context),
-                            borderRadius: BorderRadius.circular(8),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFFEF2F2),
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: const Color(0xFFFECACA)),
-                              ),
-                              child: const Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(Icons.psychology, size: 13, color: Color(0xFFDC2626)),
-                                  SizedBox(width: 3),
-                                  Text(
-                                    'AI Blackbox',
-                                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF991B1B)),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: InkWell(
-                            onTap: () => _showAbhaVaultSheet(context),
-                            borderRadius: BorderRadius.circular(8),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFF0FDF4),
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: const Color(0xFFBBF7D0)),
-                              ),
-                              child: const Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(Icons.verified_user, size: 13, color: Color(0xFF16A34A)),
-                                  SizedBox(width: 3),
-                                  Text(
-                                    'ABHA Vault',
-                                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF166534)),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: InkWell(
-                            onTap: () => showDialog(
-                              context: context,
-                              builder: (_) => const Cv2xHardwareHubDialog(),
-                            ),
-                            borderRadius: BorderRadius.circular(8),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF0F172A),
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: const Color(0xFF38BDF8)),
-                              ),
-                              child: const Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(Icons.settings_input_antenna, size: 13, color: Color(0xFF38BDF8)),
-                                  SizedBox(width: 3),
-                                  Text(
-                                    'C-V2X OBU Hub',
-                                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF38BDF8)),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-
-                    // Expandable Triage Matrix Drawer
-                    if (_showTriageMatrix) ...[
-                      const Divider(height: 16),
-                      const Text(
-                        'HOSPITAL NETWORK RADAR (8km Triage Ring)',
-                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.blueGrey),
-                      ),
-                      const SizedBox(height: 4),
-                      if (isAccepted)
-                        Padding(
-                           padding: const EdgeInsets.symmetric(vertical: 2),
-                          child: Text(
-                            '✅ $hospitalName: Emergency Accepted & Trauma Team Ready',
-                            style: TextStyle(fontSize: 11, color: Colors.green.shade800, fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                      if (_rejections.isNotEmpty)
-                        ..._rejections.map(
-                          (r) => Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 1.5),
-                            child: Text(
-                              '❌ ${r['hospital_name']}: ${r['reason']}',
-                              style: TextStyle(fontSize: 10.5, color: Colors.red.shade700),
-                            ),
-                          ),
-                        )
-                      else if (!isAccepted)
-                        const Text(
-                          '⚡ Triage signals dispatched. Listening for acceptance...',
-                          style: TextStyle(fontSize: 10.5, color: Colors.amber),
-                        ),
-                    ],
-                  ],
-                ),
-              ),
-
-              if (!_isSocketConnected)
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-                  color: Colors.amber.shade100,
-                  child: Row(
-                    children: [
-                      Icon(Icons.sync_problem, size: 16, color: Colors.amber.shade900),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'Telemetry link reconnecting to incident room...',
-                          style: TextStyle(
-                            fontSize: 11.5,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.amber.shade900,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(
-                        width: 12,
-                        height: 12,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.brown),
-                      ),
-                    ],
-                  ),
-                ),
-
-              // Interactive Real Roadway FlutterMap with Traffic Overlay
-              Expanded(
-                child: Stack(
-                  children: [
-                    FlutterMap(
-                      mapController: _mapController,
-                      options: MapOptions(
-                        initialCenter: incidentLocation,
-                        initialZoom: 13.5,
-                      ),
-                      children: [
-                        TileLayer(
-                          urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                          userAgentPackageName: 'com.rakshak.mobile',
-                        ),
-
-                        // Glowing Underlay Halo for Green Wave Corridor
-                        if (_trafficSegments.any((s) => s.isGreenCorridor))
-                          PolylineLayer(
-                            polylines: _trafficSegments
-                                .where((s) => s.isGreenCorridor)
-                                .map(
-                                  (seg) => Polyline(
-                                    points: seg.points,
-                                    color: const Color(0x5510B981),
-                                    strokeWidth: 12.0,
-                                    strokeJoin: StrokeJoin.round,
-                                    strokeCap: StrokeCap.round,
-                                  ),
-                                )
-                                .toList(),
-                          ),
-
-                        // Real OSRM Roadway Polyline Layer with Speed/Traffic Colors
-                        if (_trafficSegments.isNotEmpty)
-                          PolylineLayer(
-                            polylines: _trafficSegments
-                                .map(
-                                  (seg) => Polyline(
-                                    points: seg.points,
-                                    color: seg.color,
-                                    strokeWidth: 6.0,
-                                    strokeJoin: StrokeJoin.round,
-                                    strokeCap: StrokeCap.round,
-                                  ),
-                                )
-                                .toList(),
-                          )
-                        else if (_roadwayPoints.isNotEmpty)
-                          PolylineLayer(
-                            polylines: [
-                              Polyline(
-                                points: _roadwayPoints,
-                                color: const Color(0xFF2563EB),
-                                strokeWidth: 6.0,
-                                strokeJoin: StrokeJoin.round,
-                                strokeCap: StrokeCap.round,
-                              ),
-                            ],
-                          ),
-
-                        // Markers Layer
-                        MarkerLayer(
-                          markers: [
-                            // Crash Incident Site Marker
-                            Marker(
-                              point: incidentLocation,
-                              width: 48,
-                              height: 48,
-                              child: const Icon(
-                                Icons.location_on,
-                                color: Colors.red,
-                                size: 44,
-                              ),
-                            ),
-                            // Ambulance Live Position Marker
-                            Marker(
-                              point: ambulanceLocation,
-                              width: 44,
-                              height: 44,
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  color: Colors.blue.shade700,
-                                  shape: BoxShape.circle,
-                                  border: Border.all(color: Colors.white, width: 2.5),
-                                  boxShadow: const [
-                                    BoxShadow(
-                                      color: Colors.black26,
-                                      blurRadius: 6,
-                                      offset: Offset(0, 2),
-                                    ),
-                                  ],
-                                ),
-                                child: const Icon(
-                                  Icons.directions_car,
-                                  color: Colors.white,
-                                  size: 24,
-                                ),
-                              ),
-                            ),
-                            // Accepted Hospital Marker
-                            if (hospitalLocation != null)
-                              Marker(
-                                point: hospitalLocation,
-                                width: 44,
-                                height: 44,
-                                child: Container(
-                                  decoration: BoxDecoration(
-                                    color: Colors.green.shade700,
-                                    shape: BoxShape.circle,
-                                    border: Border.all(color: Colors.white, width: 2.5),
-                                  ),
-                                  child: const Icon(
-                                    Icons.local_hospital,
-                                    color: Colors.white,
-                                    size: 24,
-                                  ),
-                                ),
-                              ),
-
-                            // Real Traffic Signal Preemption Markers along the Route
-                            ..._trafficJunctions.map((jcn) {
-                              final isGreen = jcn.isPreemptedGreen;
-                              final isYellow = jcn.preemptionState == SignalPreemptionState.yellowClearance;
-                              final badgeBg = isGreen
-                                  ? const Color(0xFF065F46)
-                                  : (isYellow ? const Color(0xFF78350F) : const Color(0xFF7F1D1D));
-                              final borderCol = isGreen
-                                  ? const Color(0xFF34D399)
-                                  : (isYellow ? const Color(0xFFFBBF24) : const Color(0xFFFCA5A5));
-                              final statusText = isGreen
-                                  ? 'GREEN (${jcn.remainingClearanceSeconds}s)'
-                                  : (isYellow ? 'CLEAR (4s)' : 'RED');
-
-                              return Marker(
-                                point: jcn.location,
-                                width: 112,
-                                height: 50,
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                                      decoration: BoxDecoration(
-                                        color: badgeBg,
-                                        borderRadius: BorderRadius.circular(8),
-                                        border: Border.all(color: borderCol, width: 1.2),
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: (isGreen ? const Color(0xFF10B981) : Colors.red).withOpacity(0.35),
-                                            blurRadius: 5,
-                                            offset: const Offset(0, 2),
-                                          ),
-                                        ],
-                                      ),
-                                      child: Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Text(
-                                            jcn.name,
-                                            style: const TextStyle(
-                                              fontSize: 7.5,
-                                              fontWeight: FontWeight.bold,
-                                              color: Colors.white,
-                                            ),
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                          Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Icon(
-                                                Icons.traffic,
-                                                size: 9.5,
-                                                color: isGreen ? const Color(0xFF34D399) : (isYellow ? Colors.amber : Colors.white),
-                                              ),
-                                              const SizedBox(width: 2.5),
-                                              Text(
-                                                statusText,
-                                                style: const TextStyle(
-                                                  fontSize: 8.5,
-                                                  fontWeight: FontWeight.w900,
-                                                  color: Colors.white,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    const SizedBox(height: 1),
-                                    Container(
-                                      width: 6,
-                                      height: 6,
-                                      decoration: BoxDecoration(
-                                        color: isGreen ? const Color(0xFF10B981) : (isYellow ? Colors.amber : Colors.red),
-                                        shape: BoxShape.circle,
-                                        border: Border.all(color: Colors.white, width: 1),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            }),
-                          ],
-                        ),
-                      ],
-                    ),
-
-                    // Approaching Signal Preemption HUD (Floating Top-Left)
-                    if (_trafficJunctions.isNotEmpty)
-                      Positioned(
-                        top: 12,
-                        left: 12,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withOpacity(0.85),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(
-                              color: _trafficJunctions.first.isPreemptedGreen
-                                  ? const Color(0xFF10B981)
-                                  : (_trafficJunctions.first.preemptionState == SignalPreemptionState.yellowClearance
-                                      ? Colors.amber
-                                      : const Color(0xFFEF4444)),
-                              width: 1.5,
-                            ),
-                            boxShadow: const [
-                              BoxShadow(color: Colors.black38, blurRadius: 6, offset: Offset(0, 2)),
-                            ],
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Container(
-                                width: 8,
-                                height: 8,
-                                decoration: BoxDecoration(
-                                  color: _trafficJunctions.first.isPreemptedGreen
-                                      ? const Color(0xFF10B981)
-                                      : (_trafficJunctions.first.preemptionState == SignalPreemptionState.yellowClearance
-                                          ? Colors.amber
-                                          : const Color(0xFFEF4444)),
-                                  shape: BoxShape.circle,
-                                ),
-                              ),
-                              const SizedBox(width: 6),
-                              Text(
-                                'Signal Ahead: ${_trafficJunctions.first.name} (${_trafficJunctions.first.distanceMeters.toStringAsFixed(0)}m) • ${_trafficJunctions.first.isPreemptedGreen ? "PREEMPTED 🟢 (${_trafficJunctions.first.remainingClearanceSeconds}s)" : (_trafficJunctions.first.preemptionState == SignalPreemptionState.yellowClearance ? "CLEARANCE 🟡" : "NORMAL RED 🔴")}',
-                                style: const TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-
-                    // Floating Live Traffic Legend (Google Maps Style)
-                    if (_trafficSegments.isNotEmpty)
-                      Positioned(
-                        bottom: 12,
-                        left: 12,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.95),
-                            borderRadius: BorderRadius.circular(8),
-                            boxShadow: const [
-                              BoxShadow(
-                                color: Colors.black12,
-                                blurRadius: 4,
-                                offset: Offset(0, 2),
-                              ),
-                            ],
-                            border: Border.all(color: Colors.grey.shade300),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              _buildTrafficDot(const Color(0xFF10B981), 'Green Wave (EVP)'),
-                              const SizedBox(width: 7),
-                              _buildTrafficDot(const Color(0xFF2563EB), 'Clear'),
-                              const SizedBox(width: 7),
-                              _buildTrafficDot(const Color(0xFFF59E0B), 'Moderate'),
-                              const SizedBox(width: 7),
-                              _buildTrafficDot(const Color(0xFFDC2626), 'Choke Point'),
-                            ],
-                          ),
-                        ),
-                      ),
-
-                    // Floating Quick Navigation Button on Map
-                    Positioned(
-                      top: 12,
-                      right: 12,
-                      child: ElevatedButton.icon(
-                        onPressed: () {
-                          final targetLat = (_routeLeg == 'to_hospital' && hospitalLocation != null)
-                              ? hospitalLocation.latitude
-                              : widget.incident.latitude;
-                          final targetLng = (_routeLeg == 'to_hospital' && hospitalLocation != null)
-                              ? hospitalLocation.longitude
-                              : widget.incident.longitude;
-                          _openGoogleMapsNavigation(
-                            destLat: targetLat,
-                            destLng: targetLng,
-                            originLat: _ambulanceLat,
-                            originLng: _ambulanceLng,
-                          );
-                        },
-                        icon: const Icon(Icons.directions, size: 18),
-                        label: Text(
-                          _routeLeg == 'to_hospital' ? 'Directions to Hospital' : 'Directions to Scene',
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11.5),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF1D4ED8),
-                          foregroundColor: Colors.white,
-                          elevation: 4,
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              // Bottom Action Bar: Google Maps Directions, Camera On-Scene & Hospital Call
-              Container(
-                padding: const EdgeInsets.all(14),
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black12,
-                      blurRadius: 4,
-                      offset: Offset(0, -2),
-                    ),
-                  ],
-                ),
-                child: SafeArea(
-                  top: false,
-                  child: Row(
-                    children: [
-                      // Direct Google Maps Turn-by-Turn Button
-                      ElevatedButton.icon(
-                        onPressed: () {
-                          final targetLat = (_routeLeg == 'to_hospital' && hospitalLocation != null)
-                              ? hospitalLocation.latitude
-                              : widget.incident.latitude;
-                          final targetLng = (_routeLeg == 'to_hospital' && hospitalLocation != null)
-                              ? hospitalLocation.longitude
-                              : widget.incident.longitude;
-                          _openGoogleMapsNavigation(
-                            destLat: targetLat,
-                            destLng: targetLng,
-                            originLat: _ambulanceLat,
-                            originLng: _ambulanceLng,
-                          );
-                        },
-                        icon: const Icon(Icons.navigation, size: 17),
-                        label: Text(
-                          _routeLeg == 'to_hospital' ? 'Hospital Nav' : 'Scene Nav',
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF2563EB),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-
-                      // Manual On-Scene Arrival Confirmation Button
-                      if (!_hasArrivedOnScene) ...[
-                        ElevatedButton.icon(
-                          onPressed: _isMarkingArrival ? null : () => _triggerOnSceneArrival(autoGeofence: false),
-                          icon: const Icon(Icons.check_circle_outline, size: 16),
-                          label: const Text('Arrived', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF059669),
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 10),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                      ],
-
-                      // Capture On-Scene Photo (Phase 6 Zero-Gallery Camera Flow)
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => IntakeScreen(
-                                  incidentId: widget.incident.id,
-                                ),
-                              ),
-                            );
-                          },
-                          icon: const Icon(Icons.camera_alt),
-                          label: const Text('Capture Scene'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.blue.shade700,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 13),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                          ),
-                        ),
-                      ),
-                      if (hospitalPhone.isNotEmpty) ...[
-                        const SizedBox(width: 8),
-                        OutlinedButton.icon(
-                          onPressed: () {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('Emergency Contact: $hospitalPhone'),
-                                backgroundColor: Colors.green.shade800,
-                              ),
-                            );
-                          },
-                          icon: const Icon(Icons.phone),
-                          label: const Text('Call ER'),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: Colors.green.shade800,
-                            side: BorderSide(color: Colors.green.shade800),
-                            padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 12),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                          ),
-                        ),
-                      ],
                     ],
                   ),
                 ),

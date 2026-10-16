@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import '../services/crash_event_service.dart';
 import '../services/photo_stream_service.dart';
 import '../services/incident_tracking_service.dart';
+import '../services/offline_dispatch_queue.dart';
 
 /// Camera intake screen with strict Zero-Gallery privacy guarantee.
 /// Captures photo directly to volatile RAM (`Uint8List`) and purges temp cache.
@@ -378,44 +379,85 @@ class _IntakeScreenState extends State<IntakeScreen> {
                       ),
                     );
                   } else if (widget.incidentId == null && CrashEventService.instance.lastDispatchedIncidentId == null) {
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 16),
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: Colors.amber.shade50,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.amber.shade700, width: 1.5),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(Icons.cloud_off, color: Colors.amber.shade800, size: 24),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Offline Dispatch Queued',
-                                  style: TextStyle(
-                                    color: Colors.amber.shade900,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 14,
+                    if (OfflineDispatchQueue.instance.pendingItems.isNotEmpty) {
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 16),
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: Colors.amber.shade50,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.amber.shade700, width: 1.5),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.cloud_off, color: Colors.amber.shade800, size: 24),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Offline Dispatch Queued (${OfflineDispatchQueue.instance.pendingItems.length})',
+                                    style: TextStyle(
+                                      color: Colors.amber.shade900,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                    ),
                                   ),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  'Telemetry preserved locally in volatile memory. Auto-syncing when backend connects...',
-                                  style: TextStyle(
-                                    color: Colors.amber.shade800,
-                                    fontSize: 12,
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'Telemetry preserved locally in volatile storage. Auto-syncing when backend connects...',
+                                    style: TextStyle(
+                                      color: Colors.amber.shade800,
+                                      fontSize: 12,
+                                    ),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
-                          ),
-                        ],
-                      ),
-                    );
+                          ],
+                        ),
+                      );
+                    } else {
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 16),
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF0FDF4),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFF86EFAC), width: 1.5),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.add_a_photo_outlined, color: Color(0xFF16A34A), size: 24),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: const [
+                                  Text(
+                                    'On-Scene Medical Photographic Intake',
+                                    style: TextStyle(
+                                      color: Color(0xFF15803D),
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                  SizedBox(height: 2),
+                                  Text(
+                                    'Volatile RAM streaming direct to trauma bay surgeons. Zero gallery storage.',
+                                    style: TextStyle(
+                                      color: Color(0xFF166534),
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
                   }
                   return const SizedBox.shrink();
                 },
