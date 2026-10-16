@@ -380,79 +380,65 @@ class _IntakeScreenState extends State<IntakeScreen> {
                     );
                   } else if (widget.incidentId == null && CrashEventService.instance.lastDispatchedIncidentId == null) {
                     if (OfflineDispatchQueue.instance.pendingItems.isNotEmpty) {
+                      final count = OfflineDispatchQueue.instance.pendingItems.length;
                       return Container(
-                        margin: const EdgeInsets.only(bottom: 16),
-                        padding: const EdgeInsets.all(14),
+                        margin: const EdgeInsets.only(bottom: 14),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                         decoration: BoxDecoration(
-                          color: Colors.amber.shade50,
+                          color: const Color(0xFFFFFBEB),
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.amber.shade700, width: 1.5),
+                          border: Border.all(color: const Color(0xFFF59E0B), width: 1.2),
                         ),
                         child: Row(
                           children: [
-                            Icon(Icons.cloud_off, color: Colors.amber.shade800, size: 24),
-                            const SizedBox(width: 12),
+                            const Icon(Icons.cloud_sync, color: Color(0xFFD97706), size: 22),
+                            const SizedBox(width: 10),
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    'Offline Dispatch Queued (${OfflineDispatchQueue.instance.pendingItems.length})',
-                                    style: TextStyle(
-                                      color: Colors.amber.shade900,
+                                    'Offline Dispatch Queued ($count)',
+                                    style: const TextStyle(
+                                      color: Color(0xFF92400E),
                                       fontWeight: FontWeight.bold,
-                                      fontSize: 14,
+                                      fontSize: 13,
                                     ),
                                   ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    'Telemetry preserved locally in volatile storage. Auto-syncing when backend connects...',
+                                  const Text(
+                                    'Telemetry preserved in RAM storage.',
                                     style: TextStyle(
-                                      color: Colors.amber.shade800,
-                                      fontSize: 12,
+                                      color: Color(0xFFB45309),
+                                      fontSize: 11,
                                     ),
                                   ),
                                 ],
                               ),
                             ),
-                          ],
-                        ),
-                      );
-                    } else {
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 16),
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF0FDF4),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: const Color(0xFF86EFAC), width: 1.5),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.add_a_photo_outlined, color: Color(0xFF16A34A), size: 24),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: const [
-                                  Text(
-                                    'On-Scene Medical Photographic Intake',
-                                    style: TextStyle(
-                                      color: Color(0xFF15803D),
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                                  SizedBox(height: 2),
-                                  Text(
-                                    'Volatile RAM streaming direct to trauma bay surgeons. Zero gallery storage.',
-                                    style: TextStyle(
-                                      color: Color(0xFF166534),
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ],
+                            // Quick Action: Sync Now
+                            TextButton(
+                              onPressed: () async {
+                                await OfflineDispatchQueue.instance.retryAllImmediately();
+                                if (mounted) setState(() {});
+                              },
+                              style: TextButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                minimumSize: Size.zero,
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                               ),
+                              child: const Text('SYNC', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 11.5, color: Color(0xFFD97706))),
+                            ),
+                            const SizedBox(width: 4),
+                            // Quick Action: Clear
+                            IconButton(
+                              icon: const Icon(Icons.close, size: 18, color: Color(0xFFB45309)),
+                              tooltip: 'Clear offline queue',
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                              onPressed: () async {
+                                await OfflineDispatchQueue.instance.clearQueue();
+                                if (mounted) setState(() {});
+                              },
                             ),
                           ],
                         ),
@@ -596,30 +582,52 @@ class _IntakeScreenState extends State<IntakeScreen> {
                               ),
                             ],
                           )
-                        : Center(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.camera_alt_outlined,
-                                    size: 64, color: Colors.grey.shade400),
-                                const SizedBox(height: 12),
-                                Text(
-                                  'No photo captured',
-                                  style: TextStyle(
-                                    color: Colors.grey.shade600,
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w500,
+                        : InkWell(
+                            onTap: _isCapturing ? null : _capturePhoto,
+                            child: Center(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(16),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFDC2626).withOpacity(0.1),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(Icons.camera_alt,
+                                        size: 40, color: Color(0xFFDC2626)),
                                   ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  'Capture injury or vehicle impact scene for AI triage',
-                                  style: TextStyle(
-                                    color: Colors.grey.shade500,
-                                    fontSize: 12,
+                                  const SizedBox(height: 12),
+                                  const Text(
+                                    'No photo captured',
+                                    style: TextStyle(
+                                      color: Color(0xFF1E293B),
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.bold,
+                                    ),
                                   ),
-                                ),
-                              ],
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Capture injury or vehicle impact scene for AI triage',
+                                    style: TextStyle(
+                                      color: Colors.grey.shade600,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey.shade200,
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: const Text(
+                                      'Tap anywhere to open camera',
+                                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF475569)),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
               ),

@@ -136,6 +136,13 @@ class OfflineDispatchQueue {
     triggerDrain(forceImmediate: true);
   }
 
+  /// Public hook to clear and flush all queued items from disk and memory.
+  Future<void> clearQueue() async {
+    _queue.clear();
+    await _saveToDisk();
+    debugPrint('[OfflineDispatchQueue] Queue cleared.');
+  }
+
   void _startWatchdog() {
     _retryTimer?.cancel();
     _retryTimer = Timer.periodic(const Duration(seconds: 2), (_) {

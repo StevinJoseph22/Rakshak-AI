@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import '../models/incident_model.dart';
 import '../services/api_client.dart';
 import '../services/crash_detector_service.dart';
@@ -26,6 +28,8 @@ class AmbulancePilotHomeScreen extends StatefulWidget {
 
 class _AmbulancePilotHomeScreenState extends State<AmbulancePilotHomeScreen> {
   late final ApiClient _apiClient;
+  final MapController _mapController = MapController();
+  bool _isMapExpanded = false;
   List<NearbyIncident> _incidents = [];
   bool _isLoading = true;
   String? _errorMessage;
@@ -189,37 +193,46 @@ class _AmbulancePilotHomeScreenState extends State<AmbulancePilotHomeScreen> {
                 ),
                 child: const Icon(Icons.emergency, color: Colors.white, size: 20),
               ),
-              const SizedBox(width: 10),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'RAKSHAK ResQ PILOT',
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 1.1,
-                      color: Colors.white,
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'RAKSHAK ResQ PILOT',
+                      style: TextStyle(
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 0.8,
+                        color: Colors.white,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
                     ),
-                  ),
-                  Row(
-                    children: [
-                      Container(
-                        width: 6,
-                        height: 6,
-                        decoration: const BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Color(0xFF00E5FF),
+                    Row(
+                      children: [
+                        Container(
+                          width: 6,
+                          height: 6,
+                          decoration: const BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Color(0xFF00E5FF),
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 5),
-                      Text(
-                        'EMS Tactical Cockpit • ${widget.ambulanceId}',
-                        style: const TextStyle(fontSize: 10, color: Color(0xFF94A3B8)),
-                      ),
-                    ],
-                  ),
-                ],
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            'EMS Tactical Cockpit • ${widget.ambulanceId}',
+                            style: const TextStyle(fontSize: 10, color: Color(0xFF94A3B8)),
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
@@ -229,14 +242,15 @@ class _AmbulancePilotHomeScreenState extends State<AmbulancePilotHomeScreen> {
                 padding: const EdgeInsets.only(right: 8.0),
                 child: OutlinedButton.icon(
                   onPressed: widget.onSwitchToCitizenApp,
-                  icon: const Icon(Icons.person_pin, size: 14, color: Color(0xFF00E5FF)),
+                  icon: const Icon(Icons.person_pin, size: 13, color: Color(0xFF00E5FF)),
                   label: const Text(
                     'Citizen App',
-                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF00E5FF)),
+                    style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Color(0xFF00E5FF)),
                   ),
                   style: OutlinedButton.styleFrom(
                     side: const BorderSide(color: Color(0xFF00E5FF)),
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    minimumSize: const Size(0, 30),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                   ),
                 ),
@@ -474,13 +488,222 @@ class _AmbulancePilotHomeScreenState extends State<AmbulancePilotHomeScreen> {
   // TAB 1: DISPATCH RADAR
   // ===========================================================================
 
+  Widget _buildTacticalRadarMap(List<NearbyIncident> incidents) {
+    final ambulanceLocation = LatLng(_currentLat, _currentLng);
+
+    return Container(
+      height: _isMapExpanded ? 320 : 210,
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0F172A),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFF1E293B), width: 1.5),
+        boxShadow: const [
+          BoxShadow(color: Colors.black45, blurRadius: 10, offset: Offset(0, 4)),
+        ],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Stack(
+        children: [
+          FlutterMap(
+            mapController: _mapController,
+            options: MapOptions(
+              initialCenter: ambulanceLocation,
+              initialZoom: 12.3,
+            ),
+            children: [
+              TileLayer(
+                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                userAgentPackageName: 'com.rakshak.mobile',
+              ),
+
+              // Translucent 8km / 25km geofence coverage circle
+              CircleLayer(
+                circles: [
+                  CircleMarker(
+                    point: ambulanceLocation,
+                    radius: 8000,
+                    useRadiusInMeter: true,
+                    color: const Color(0x1800E5FF),
+                    borderColor: const Color(0x6600E5FF),
+                    borderStrokeWidth: 1.5,
+                  ),
+                ],
+              ),
+
+              // Markers Layer: Ambulance + All Active Crashes
+              MarkerLayer(
+                markers: [
+                  // Ambulance Current Location Marker
+                  Marker(
+                    point: ambulanceLocation,
+                    width: 44,
+                    height: 44,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF00E5FF),
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 2.5),
+                        boxShadow: const [
+                          BoxShadow(color: Colors.black45, blurRadius: 6),
+                        ],
+                      ),
+                      child: const Icon(
+                        Icons.directions_car,
+                        color: Colors.black,
+                        size: 22,
+                      ),
+                    ),
+                  ),
+
+                  // Incident Markers
+                  ...incidents.map((inc) {
+                    final isCrit = inc.status == 'escalated' || inc.victimMetadata?['severity'] == 'CRITICAL';
+                    final label = inc.victimMetadata?['blackspot'] as String? ?? 'Crash Site';
+                    final shortLabel = label.split(' ').first;
+
+                    return Marker(
+                      point: LatLng(inc.latitude, inc.longitude),
+                      width: 100,
+                      height: 52,
+                      child: GestureDetector(
+                        onTap: () {
+                          _mapController.move(LatLng(inc.latitude, inc.longitude), 14.5);
+                        },
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: isCrit ? const Color(0xFFDC2626) : const Color(0xFFF59E0B),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(color: Colors.white, width: 1),
+                                boxShadow: const [
+                                  BoxShadow(color: Colors.black45, blurRadius: 4),
+                                ],
+                              ),
+                              child: Text(
+                                '$shortLabel • ${inc.distanceKm.toStringAsFixed(1)}k',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 9.5,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const Icon(
+                              Icons.location_on,
+                              color: Color(0xFFFF1744),
+                              size: 26,
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }),
+                ],
+              ),
+            ],
+          ),
+
+          // Top Left: Tactical Radar Header Pill
+          Positioned(
+            top: 10,
+            left: 10,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: const Color(0xF20B132B),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFF1E293B)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 6,
+                    height: 6,
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Color(0xFF00E5FF),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    'GPS RADAR: ${incidents.length} IN RANGE',
+                    style: const TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFF00E5FF),
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // Bottom Right: Quick Map Utility Buttons
+          Positioned(
+            bottom: 10,
+            right: 10,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                InkWell(
+                  onTap: () {
+                    _mapController.move(ambulanceLocation, 12.8);
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.all(7),
+                    decoration: BoxDecoration(
+                      color: const Color(0xF20B132B),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFF334155)),
+                    ),
+                    child: const Icon(Icons.my_location, size: 16, color: Color(0xFF00E5FF)),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                InkWell(
+                  onTap: () {
+                    setState(() => _isMapExpanded = !_isMapExpanded);
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.all(7),
+                    decoration: BoxDecoration(
+                      color: const Color(0xF20B132B),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFF334155)),
+                    ),
+                    child: Icon(
+                      _isMapExpanded ? Icons.unfold_less : Icons.aspect_ratio,
+                      size: 16,
+                      color: Colors.white70,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildDispatchRadarTab(List<NearbyIncident> incidents) {
     return RefreshIndicator(
       onRefresh: _fetchIncidents,
       child: ListView(
         padding: const EdgeInsets.all(12),
         children: [
-          // Banner for live stream
+          // 1. Tactical GPS Radar Map View
+          _buildTacticalRadarMap(incidents),
+
+          // 2. Banner for live stream
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -551,29 +774,32 @@ class _AmbulancePilotHomeScreenState extends State<AmbulancePilotHomeScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Top Badge Row
+            // Top Badge Row (Zero Overflow Architecture)
             Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
                   decoration: BoxDecoration(
                     color: isCritical ? const Color(0xFFFF1744) : const Color(0xFFF59E0B),
-                    borderRadius: BorderRadius.circular(6),
+                    borderRadius: BorderRadius.circular(5),
                   ),
                   child: Text(
                     isCritical ? '🚨 CRITICAL SEVERITY' : '⚠️ HIGH PRIORITY',
-                    style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white),
+                    style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: Colors.white),
                   ),
                 ),
                 const SizedBox(width: 8),
-                Text(
-                  '${incident.distanceKm.toStringAsFixed(1)} km away • Est. ${(incident.distanceKm * 1.8).round()} min',
-                  style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: Color(0xFF00E5FF)),
+                Expanded(
+                  child: Text(
+                    '${incident.distanceKm.toStringAsFixed(1)} km away • Est. ${(incident.distanceKm * 1.8).round()} min',
+                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF00E5FF)),
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
-                const Spacer(),
+                const SizedBox(width: 4),
                 Text(
-                  incident.id.length > 12 ? incident.id.substring(0, 12) : incident.id,
-                  style: const TextStyle(fontSize: 10, fontFamily: 'monospace', color: Colors.grey),
+                  incident.id.length > 10 ? incident.id.substring(0, 10) : incident.id,
+                  style: const TextStyle(fontSize: 9.5, fontFamily: 'monospace', color: Colors.grey),
                 ),
               ],
             ),
