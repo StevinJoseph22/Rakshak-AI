@@ -692,6 +692,7 @@ incidentsRouter.get('/', optionalAuth, async (req: Request, res: Response) => {
         status: row.status,
         accepted_hospital_id: row.accepted_hospital_id,
         accepted_hospital: row.accepted_hospital || null,
+        accepted_hospital_name: (row.accepted_hospital as { name?: string } | null)?.name || undefined,
         ambulance_id: row.ambulance_id || null,
         ambulance_plate: (row.ambulance_plate as string) || (row.ambulance_id ? 'KA-01-EA-108' : null),
         ambulance_driver_name: (row.ambulance_driver_name as string) || (row.ambulance_id ? 'Ramesh Kumar' : null),

@@ -1009,9 +1009,16 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
                 <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 600, textTransform: 'uppercase' }}>
                   Admitting Trauma Center
                 </div>
-                <div style={{ fontSize: '0.875rem', fontWeight: 700, color: incident.accepted_hospital_name ? '#16a34a' : '#d97706' }}>
-                  {incident.accepted_hospital_name ? `🏥 ${incident.accepted_hospital_name}` : 'Triage In Progress (8km Sector)'}
-                </div>
+                {(() => {
+                  const hospName = incident.accepted_hospital_name ||
+                    incident.accepted_hospital?.name ||
+                    (isAccepted && incident.matched_hospitals && incident.matched_hospitals.length > 0 ? incident.matched_hospitals[0].name : null);
+                  return (
+                    <div style={{ fontSize: '0.875rem', fontWeight: 700, color: hospName ? '#16a34a' : '#d97706' }}>
+                      {hospName ? `🏥 ${hospName}` : 'Triage In Progress (8km Sector)'}
+                    </div>
+                  );
+                })()}
               </div>
 
               <div>
