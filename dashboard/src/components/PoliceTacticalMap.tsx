@@ -33,6 +33,9 @@ const BENGALURU_MUNICIPAL_SIGNALS: MunicipalTrafficSignal[] = [
   { id: 'SIG-BLR-010', name: 'Adugodi Signal (Hosur Road)', controllerId: 'ITMS-BTP-ADU10', latitude: 12.9438, longitude: 77.6102 },
 ];
 
+import { parseTimestamp } from '../utils/dateUtils';
+
+
 function createSignalMarkerIcon(name: string, isPreempted: boolean) {
   const bgColor = isPreempted ? '#10b981' : '#334155';
   const pulseStyle = isPreempted
@@ -780,7 +783,7 @@ export const PoliceTacticalMap: React.FC<PoliceTacticalMapProps> = ({
               <b>GPS:</b> {activeIncident.latitude.toFixed(5)}, {activeIncident.longitude.toFixed(5)}
             </div>
             <div>
-              <b>Detected:</b> {new Date(activeIncident.created_at).toLocaleTimeString()}
+              <b>Detected:</b> {parseTimestamp(activeIncident.created_at)?.toLocaleTimeString() || 'Just now'}
             </div>
           </div>
 
@@ -872,7 +875,7 @@ export const PoliceTacticalMap: React.FC<PoliceTacticalMapProps> = ({
                       borderRadius: '4px',
                     }}
                   >
-                    {new Date(activeIncident.ambulance_arrived_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    {parseTimestamp(activeIncident.ambulance_arrived_at)?.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </span>
                 )}
               </div>

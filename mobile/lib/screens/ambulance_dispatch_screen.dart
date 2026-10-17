@@ -1391,7 +1391,13 @@ class _AmbulanceDispatchScreenState extends State<AmbulanceDispatchScreen> {
                               const Icon(Icons.check_circle, color: Color(0xFF10B981), size: 16),
                               const SizedBox(width: 6),
                               Text(
-                                'ARRIVED ON SCENE (${_arrivedAt != null ? "${_arrivedAt!.hour}:${_arrivedAt!.minute.toString().padLeft(2, '0')}" : "15:35"} IST) • CONTACTS & POLICE NOTIFIED',
+                                'ARRIVED ON SCENE (${(() {
+                                  final dt = (_arrivedAt ?? DateTime.now()).toLocal();
+                                  final hour = dt.hour > 12 ? dt.hour - 12 : (dt.hour == 0 ? 12 : dt.hour);
+                                  final min = dt.minute.toString().padLeft(2, '0');
+                                  final ampm = dt.hour >= 12 ? 'PM' : 'AM';
+                                  return '$hour:$min $ampm';
+                                })()} IST) • CONTACTS & POLICE NOTIFIED',
                                 style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 10.5, color: Color(0xFF34D399)),
                               ),
                             ],

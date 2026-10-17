@@ -26,6 +26,7 @@ import { IncidentPayload, Hospital, EmergencyHealthCard, HealthCardField } from 
 import { getSocket, BACKEND_API_BASE } from '../services/socket';
 import { authFetch } from '../services/auth';
 import { IncidentRouteMap } from './IncidentRouteMap';
+import { formatTimeSafe, formatDateTimeSafe } from '../utils/dateUtils';
 
 const REJECTION_REASONS = [
   'No ICU capacity',
@@ -410,11 +411,12 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
     return null;
   };
 
-  const formattedTime = new Date(incident.created_at).toLocaleTimeString([], {
+  const formattedTime = formatTimeSafe(incident.created_at, {
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
   });
+
 
   const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${incident.latitude},${incident.longitude}`;
 
@@ -1484,8 +1486,10 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
                           <div style={{ fontSize: '0.65rem', color: '#64748b', fontWeight: 600 }}>LAST RECORD UPDATE</div>
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.4rem', marginTop: '0.15rem' }}>
                             <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#334155' }}>
-                              {healthCard.last_updated ? new Date(healthCard.last_updated).toLocaleString() : 'Never'}
+                              {formatDateTimeSafe(healthCard.last_updated)}
                             </span>
+
+
                           </div>
                         </div>
                       </div>
