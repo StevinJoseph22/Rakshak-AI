@@ -635,6 +635,7 @@ export const HospitalView: React.FC = () => {
 
       if (res.status === 409) {
         // Already accepted by another facility
+        const acceptingName = data.accepted_hospital_name || 'another trauma facility';
         setIncidentsByHospital((prev) => {
           const list = prev[selectedHospitalId] || [];
           const updatedList = list.map((inc) =>
@@ -642,7 +643,8 @@ export const HospitalView: React.FC = () => {
               ? {
                   ...inc,
                   case_locked: true,
-                  accepted_hospital_name: data.accepted_hospital_name || 'Another facility',
+                  status: 'accepted' as const,
+                  accepted_hospital_name: acceptingName,
                 }
               : inc
           );
@@ -654,7 +656,7 @@ export const HospitalView: React.FC = () => {
           }
           return updated;
         });
-        alert('This emergency case has already been accepted by another facility.');
+        alert(data.message || `This emergency case has already been accepted by ${acceptingName}.`);
         return;
       }
 

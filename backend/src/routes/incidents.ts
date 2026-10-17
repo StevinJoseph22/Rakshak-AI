@@ -1572,14 +1572,14 @@ async function handleAcceptIncident(
   };
 
   // 2. Atomic race-safe accept query:
-  // Exactly ONE winner updates from 'broadcasting' or 'escalated' to 'accepted'
+  // Updates from 'broadcasting', 'escalated', or 'unmatched' to 'accepted'
   const acceptSql = `
     UPDATE incidents
     SET 
       status = 'accepted',
       accepted_hospital_id = $1,
       updated_at = CURRENT_TIMESTAMP
-    WHERE id = $2 AND status IN ('broadcasting', 'escalated')
+    WHERE id = $2 AND status IN ('broadcasting', 'escalated', 'unmatched')
     RETURNING 
       id,
       status,
@@ -1591,11 +1591,11 @@ async function handleAcceptIncident(
       updated_at;
   `;
 
-  const updateResult = await query<Incident>(acceptSql, [hospitalId, incidentId]);
+  let updateResult = await query<Incident>(acceptSql, [hospitalId, incidentId]);
 
   if (updateResult.rowCount === 0) {
     // Check if incident exists
-    const checkInc = await query<{ id: string; status: string; accepted_hospital_id: string }>(
+    const checkInc = await query<{ id: string; status: string; accepted_hospital_id: string | null }>(
       `SELECT id, status, accepted_hospital_id FROM incidents WHERE id = $1;`,
       [incidentId]
     );
@@ -1607,13 +1607,38 @@ async function handleAcceptIncident(
       });
     }
 
+    // Idempotent re-accept: if this hospital ALREADY accepted it, return 200 OK
+    if (checkInc.rows[0].status === 'accepted' && checkInc.rows[0].accepted_hospital_id === hospitalId) {
+      return res.json({
+        message: `Emergency incident was already accepted by '${hospital.name}'.`,
+        incident: {
+          ...checkInc.rows[0],
+          accepted_hospital_name: hospital.name,
+        },
+        accepted_hospital: hospital,
+      });
+    }
+
+    // Find the accepting hospital name for friendly feedback
+    let acceptingName = 'Another facility';
+    if (checkInc.rows[0].accepted_hospital_id) {
+      const accHosp = await query<{ name: string }>(
+        `SELECT name FROM hospitals WHERE id = $1;`,
+        [checkInc.rows[0].accepted_hospital_id]
+      );
+      if (accHosp.rowCount && accHosp.rows[0]?.name) {
+        acceptingName = accHosp.rows[0].name;
+      }
+    }
+
     // Already accepted by another hospital or already resolved
     return res.status(409).json({
       error: 'Conflict',
-      message: 'Emergency incident has already been accepted by another facility.',
+      message: `Emergency incident has already been accepted by '${acceptingName}'.`,
       incident_id: incidentId,
       status: checkInc.rows[0].status,
       accepted_hospital_id: checkInc.rows[0].accepted_hospital_id,
+      accepted_hospital_name: acceptingName,
     });
   }
 
