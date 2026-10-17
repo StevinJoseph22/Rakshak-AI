@@ -635,59 +635,46 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-              {/* Blood Group Pill or Locked Indicator */}
-              <div
-                style={{
-                  background: healthCard?.blood_group?.status === 'AVAILABLE' ? '#dc2626' : '#475569',
-                  color: '#ffffff',
-                  padding: '0.45rem 0.85rem',
-                  borderRadius: '0.5rem',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  boxShadow: '0 2px 6px rgba(0, 0, 0, 0.15)',
-                  minWidth: '70px',
-                }}
-              >
-                <div style={{ fontSize: '0.65rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                  BLOOD
-                </div>
-                <div style={{ fontSize: '1.15rem', fontWeight: 900, lineHeight: 1.1 }}>
-                  {healthCard
-                    ? (healthCard.blood_group.status === 'AVAILABLE' ? healthCard.blood_group.value : 'N/A')
-                    : '🔒'}
-                </div>
-              </div>
+              {/* Blood Group Pill — shows victim self-declared data; ABHA verified data loads after break-glass */}
+              {(() => {
+                const vmBlood = incident.victim_metadata?.blood_group as string | undefined;
+                const displayBlood = healthCard?.blood_group?.status === 'AVAILABLE'
+                  ? healthCard.blood_group.value
+                  : (vmBlood || null);
+                const hasBlood = !!displayBlood;
+                return (
+                  <div
+                    style={{
+                      background: hasBlood ? '#dc2626' : '#94a3b8',
+                      color: '#ffffff',
+                      padding: '0.45rem 0.85rem',
+                      borderRadius: '0.5rem',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      boxShadow: '0 2px 6px rgba(0, 0, 0, 0.15)',
+                      minWidth: '70px',
+                    }}
+                  >
+                    <div style={{ fontSize: '0.65rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      BLOOD
+                    </div>
+                    <div style={{ fontSize: '1.15rem', fontWeight: 900, lineHeight: 1.1 }}>
+                      {displayBlood ?? '—'}
+                    </div>
+                  </div>
+                );
+              })()}
 
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
                   <span style={{ fontSize: '1rem', fontWeight: 800, color: '#0f172a' }}>
-                    {healthCard
-                      ? (healthCard.name.status === 'AVAILABLE' ? healthCard.name.value : 'Emergency Patient')
-                      : isThisHospitalAccepted
-                      ? 'Trauma Patient (Break-Glass Required)'
-                      : 'Trauma Patient (Locked Prior to Acceptance)'}
+                    {healthCard?.name?.status === 'AVAILABLE'
+                      ? healthCard.name.value
+                      : ((incident.victim_metadata?.victim_name as string) || 'Unknown Patient')}
                   </span>
-                  {healthCard ? (
-                    renderFieldProvenanceChip(healthCard.name)
-                  ) : (
-                    <span
-                      style={{
-                        background: '#f1f5f9',
-                        color: '#64748b',
-                        fontSize: '0.65rem',
-                        fontWeight: 700,
-                        padding: '0.1rem 0.4rem',
-                        borderRadius: '4px',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '0.2rem',
-                      }}
-                    >
-                      <Lock size={10} /> {isThisHospitalAccepted ? 'Break-Glass to Decrypt' : 'Accept Case to Access'}
-                    </span>
-                  )}
+                  {healthCard && renderFieldProvenanceChip(healthCard.name)}
                 </div>
                 <div style={{ fontSize: '0.775rem', color: '#475569', marginTop: '0.15rem' }}>
                   {healthCard ? (
@@ -698,7 +685,7 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
                       </strong>
                     </>
                   ) : (
-                    <span>ABHA Health Record: Ephemeral Volatile RAM (Audited Clinical Access)</span>
+                    <span>ABHA Health Record: Clinical access available after case acceptance</span>
                   )}
                 </div>
               </div>

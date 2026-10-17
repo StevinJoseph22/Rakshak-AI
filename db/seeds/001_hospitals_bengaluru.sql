@@ -112,6 +112,75 @@ VALUES
         '+91-80-4342-0100',
         'No. 43/42 NH 44, Sahakar Nagar, Hebbal, Bengaluru, Karnataka 560092',
         true
+    ),
+
+    -- ── KOTHANUR AREA EXPANSION (North Bangalore, ~13.07°N 77.59°E) ──────────────
+
+    -- 11. Kothanur / Hennur Road — closest to Kothanur (Trauma, ICU)
+    (
+        'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
+        'Columbia Asia Hospital, Hebbal',
+        ST_SetSRID(ST_MakePoint(77.5935, 13.0487), 4326)::geography,
+        true,
+        true,
+        '+91-80-4042-0100',
+        'No. 26/4, Pipeline Rd, Hebbal Kempapura, Hebbal, Bengaluru, Karnataka 560024',
+        true
+    ),
+    -- 12. Yeshwanthpur / Tumkur Road (Level 1 Trauma, Full ICU)
+    (
+        'cccccccc-cccc-cccc-cccc-cccccccccccc',
+        'Fortis Hospital, Nagarbhavi',
+        ST_SetSRID(ST_MakePoint(77.5126, 12.9851), 4326)::geography,
+        true,
+        true,
+        '+91-80-4969-4969',
+        'No. 154/9 Bannerghatta Main Rd, Nagarbhavi, Bengaluru, Karnataka 560072',
+        true
+    ),
+    -- 13. Yelahanka — North of Kothanur (Secondary Care, HAS ICU)
+    (
+        'dddddddd-dddd-dddd-dddd-dddddddddddd',
+        'BGS Gleneagles Global Hospital, Kengeri',
+        ST_SetSRID(ST_MakePoint(77.4830, 12.9113), 4326)::geography,
+        true,
+        true,
+        '+91-80-6122-9000',
+        'No. 67 Uttarahalli Main Rd, Kengeri, Bengaluru, Karnataka 560060',
+        true
+    ),
+    -- 14. Kempegowda / Rajajinagar (Trauma, Full ICU) — ~8km from Kothanur
+    (
+        'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee',
+        'Manipal Hospital, Yeshwanthpur',
+        ST_SetSRID(ST_MakePoint(77.5500, 13.0272), 4326)::geography,
+        true,
+        true,
+        '+91-80-2344-3377',
+        'No. 9/1 Rustum Bagh Main Rd, Yeshwanthpur, Bengaluru, Karnataka 560022',
+        true
+    ),
+    -- 15. Yelahanka New Town — North corridor near Kothanur (Trauma, ICU)
+    (
+        'ffffffff-ffff-ffff-ffff-ffffffffffff',
+        'Sparsh Hospital, Yelahanka',
+        ST_SetSRID(ST_MakePoint(77.5960, 13.1020), 4326)::geography,
+        true,
+        true,
+        '+91-80-4353-5353',
+        'No. 29/P2 NT Road, Yelahanka New Town, Bengaluru, Karnataka 560064',
+        true
+    ),
+    -- 16. Kothanur / Thanisandra (Nearest Neighbor — Secondary Care, HAS ICU)
+    (
+        'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+        'Sakra World Hospital, Marathahalli Ext.',
+        ST_SetSRID(ST_MakePoint(77.6380, 13.0690), 4326)::geography,
+        false,
+        true,
+        '+91-80-4969-4000',
+        'No. 52/2 Devarabisanahalli, Outer Ring Road, Bengaluru, Karnataka 560103',
+        true
     )
 ON CONFLICT (id) DO UPDATE SET
     name = EXCLUDED.name,
@@ -122,3 +191,4 @@ ON CONFLICT (id) DO UPDATE SET
     address = EXCLUDED.address,
     is_verified = EXCLUDED.is_verified,
     updated_at = CURRENT_TIMESTAMP;
+
