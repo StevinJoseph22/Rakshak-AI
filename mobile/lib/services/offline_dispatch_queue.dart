@@ -64,6 +64,7 @@ class OfflineDispatchQueue {
   static OfflineDispatchQueue get instance => _instance;
 
   static const String _storageKey = 'rakshak_offline_incident_queue_v1';
+  static const int maxTtlSeconds = 1800; // 30-minute maximum emergency dispatch TTL
   final List<OfflineIncidentItem> _queue = [];
   Timer? _retryTimer;
   ApiClient? _apiClient;
@@ -164,6 +165,15 @@ class OfflineDispatchQueue {
         // Tag with delayed delivery flag if gap > 15 seconds
         final origTime = DateTime.tryParse(item.originalTimestamp) ?? now;
         final delaySeconds = now.difference(origTime).inSeconds;
+
+        // Drop expired incidents older than 30 minutes to prevent replaying stale crash alerts
+        if (delaySeconds > maxTtlSeconds) {
+          debugPrint('[OfflineDispatchQueue] Dropped expired queued incident ${item.id} (age: ${delaySeconds}s > 1800s)');
+          _queue.removeWhere((i) => i.id == item.id);
+          await _saveToDisk();
+          continue;
+        }
+
         final bool isDelayed = delaySeconds > 15;
 
         final metadataToSend = Map<String, dynamic>.from(item.victimMetadata);
@@ -210,9 +220,17 @@ class OfflineDispatchQueue {
       if (jsonStr != null && jsonStr.isNotEmpty) {
         final List<dynamic> list = jsonDecode(jsonStr);
         _queue.clear();
+        final now = DateTime.now();
         for (final item in list) {
-          _queue.add(OfflineIncidentItem.fromJson(Map<String, dynamic>.from(item as Map)));
+          final offlineItem = OfflineIncidentItem.fromJson(Map<String, dynamic>.from(item as Map));
+          final orig = DateTime.tryParse(offlineItem.originalTimestamp) ?? now;
+          if (now.difference(orig).inSeconds <= maxTtlSeconds) {
+            _queue.add(offlineItem);
+          } else {
+            debugPrint('[OfflineDispatchQueue] Purging expired offline incident ${offlineItem.id} (exceeded 30m TTL)');
+          }
         }
+        await _saveToDisk();
         debugPrint('[OfflineDispatchQueue] Loaded ${_queue.length} stored incidents from disk.');
       }
     } catch (e) {

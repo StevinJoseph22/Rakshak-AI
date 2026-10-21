@@ -333,6 +333,8 @@ export const HospitalView: React.FC = () => {
       incident_id: string;
       status: string;
       search_radius: string;
+      all_matched_hospitals?: Hospital[];
+      newly_matched_hospitals?: Hospital[];
     }) => {
       setIncidentsByHospital((prev) => {
         let hasChanges = false;
@@ -343,10 +345,30 @@ export const HospitalView: React.FC = () => {
           if (idx !== -1) {
             hasChanges = true;
             const updatedList = [...list];
+            const currentHospitals = updatedList[idx].matched_hospitals || [];
+            const finalHospitals =
+              payload.all_matched_hospitals && payload.all_matched_hospitals.length > 0
+                ? payload.all_matched_hospitals
+                : payload.newly_matched_hospitals
+                ? (() => {
+                    const ids = new Set(currentHospitals.map((h) => h.id));
+                    const additions = payload.newly_matched_hospitals.filter((h) => !ids.has(h.id));
+                    return [...currentHospitals, ...additions];
+                  })()
+                : currentHospitals;
+
+            const currentMeta = (updatedList[idx].victim_metadata || {}) as Record<string, unknown>;
+
             updatedList[idx] = {
               ...updatedList[idx],
               status: 'escalated',
               escalated: true,
+              search_radius: payload.search_radius || '20km',
+              matched_hospitals: finalHospitals,
+              victim_metadata: {
+                ...currentMeta,
+                search_radius: payload.search_radius || '20km',
+              },
             };
             updated[hId] = updatedList;
           } else {

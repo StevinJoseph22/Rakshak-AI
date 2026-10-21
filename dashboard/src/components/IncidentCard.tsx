@@ -420,12 +420,101 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
 
   const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${incident.latitude},${incident.longitude}`;
 
+  const [currentRadius, setCurrentRadius] = useState<string>(() => {
+    const meta = (incident.victim_metadata || {}) as Record<string, unknown>;
+    if (meta.search_radius) return String(meta.search_radius);
+    if (incident.status === 'escalated' || incident.escalated) return '20km';
+    return '8km';
+  });
+
+  const [hospitalsList, setHospitalsList] = useState<Hospital[]>(() => {
+    return incident.matched_hospitals || [];
+  });
+
+  const [escalatedPulse, setEscalatedPulse] = useState<boolean>(false);
+
+  useEffect(() => {
+    const socket = getSocket();
+    const handleEscalated = (payload: {
+      incident_id: string;
+      status: string;
+      search_radius?: string;
+      all_matched_hospitals?: Hospital[];
+      newly_matched_hospitals?: Hospital[];
+    }) => {
+      if (payload.incident_id === incident.id) {
+        if (payload.search_radius) {
+          setCurrentRadius(payload.search_radius);
+        }
+        if (payload.all_matched_hospitals && payload.all_matched_hospitals.length > 0) {
+          setHospitalsList(payload.all_matched_hospitals);
+        } else if (payload.newly_matched_hospitals && payload.newly_matched_hospitals.length > 0) {
+          setHospitalsList((prev) => {
+            const ids = new Set(prev.map((h) => h.id));
+            const additions = payload.newly_matched_hospitals!.filter((h) => !ids.has(h.id));
+            return [...prev, ...additions];
+          });
+        }
+        setEscalatedPulse(true);
+        setTimeout(() => setEscalatedPulse(false), 5000);
+      }
+    };
+
+    socket.on('incident_escalated', handleEscalated);
+    return () => {
+      socket.off('incident_escalated', handleEscalated);
+    };
+  }, [incident.id]);
+
+  useEffect(() => {
+    if (incident.matched_hospitals && incident.matched_hospitals.length > 0) {
+      setHospitalsList(incident.matched_hospitals);
+    }
+    const meta = (incident.victim_metadata || {}) as Record<string, unknown>;
+    if (meta.search_radius) {
+      setCurrentRadius(String(meta.search_radius));
+    } else if (incident.status === 'escalated' || incident.escalated) {
+      setCurrentRadius('20km');
+    }
+  }, [incident.matched_hospitals, incident.status, incident.escalated, incident.victim_metadata]);
+
+  const isBroadcasting = incident.status === 'broadcasting';
+
+  // 45-second auto-escalation countdown timer
+  const [secondsUntilEscalation, setSecondsUntilEscalation] = useState<number | null>(() => {
+    if (incident.status !== 'broadcasting' && !isBroadcasting) return null;
+    const createdMs = new Date(incident.created_at).getTime();
+    const elapsedSec = Math.floor((Date.now() - createdMs) / 1000);
+    const remaining = 45 - elapsedSec;
+    return remaining > 0 ? remaining : 0;
+  });
+
+  useEffect(() => {
+    if (incident.status !== 'broadcasting' && !isBroadcasting) {
+      setSecondsUntilEscalation(null);
+      return;
+    }
+    const interval = setInterval(() => {
+      const createdMs = new Date(incident.created_at).getTime();
+      const elapsedSec = Math.floor((Date.now() - createdMs) / 1000);
+      const remaining = 45 - elapsedSec;
+      if (remaining <= 0) {
+        setSecondsUntilEscalation(0);
+        clearInterval(interval);
+      } else {
+        setSecondsUntilEscalation(remaining);
+      }
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [incident.status, incident.created_at, isBroadcasting]);
+
   const acceptedHospital: Hospital | undefined = incident.accepted_hospital ||
-    (incident.matched_hospitals && incident.matched_hospitals.length > 0
-      ? incident.matched_hospitals[0]
+    (hospitalsList && hospitalsList.length > 0
+      ? hospitalsList[0]
       : undefined);
 
-  const matchedHospitalsList: Hospital[] = incident.matched_hospitals || [];
+  const matchedHospitalsList: Hospital[] = hospitalsList;
+  const isEscalatedTier = currentRadius === '20km' || isEscalated;
 
   return (
     <div
@@ -520,7 +609,7 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
               <Zap size={13} />
               IMPACT SUSPECTED (PRE-ALERT)
             </span>
-          ) : isEscalated ? (
+          ) : isEscalatedTier ? (
             <span
               style={{
                 display: 'inline-flex',
@@ -532,10 +621,13 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
                 borderRadius: '9999px',
                 fontSize: '0.75rem',
                 fontWeight: 800,
+                border: '1px solid #ea580c',
+                boxShadow: escalatedPulse ? '0 0 10px rgba(234, 88, 12, 0.5)' : undefined,
+                transition: 'all 0.3s ease',
               }}
             >
-              <AlertTriangle size={13} />
-              ESCALATED (SEARCH AREA EXPANDED)
+              <Zap size={13} color="#ea580c" />
+              45s AUTO-ESCALATED: {currentRadius.toUpperCase()} PERIMETER
             </span>
           ) : isUnmatched ? (
             <span
@@ -570,6 +662,26 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
             >
               <AlertTriangle size={13} />
               CRITICAL TRAUMA DISPATCH (BROADCASTING)
+            </span>
+          )}
+
+          {!isEscalatedTier && isBroadcasting && secondsUntilEscalation !== null && secondsUntilEscalation > 0 && (
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.25rem',
+                background: '#eff6ff',
+                color: '#1d4ed8',
+                border: '1px solid #bfdbfe',
+                padding: '0.2rem 0.55rem',
+                borderRadius: '9999px',
+                fontSize: '0.7rem',
+                fontWeight: 700,
+              }}
+            >
+              <Clock size={11} color="#2563eb" />
+              Auto-Escalates in: {secondsUntilEscalation}s (8km → 20km)
             </span>
           )}
 
@@ -1219,18 +1331,24 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
                     style={{
                       padding: '0.4rem 0.85rem',
                       borderRadius: '0.375rem',
-                      border: 'none',
-                      background: backsideTab === 'hospitals' ? '#1e293b' : '#ffffff',
-                      color: backsideTab === 'hospitals' ? '#ffffff' : '#475569',
+                      border: isEscalatedTier ? '1px solid #f59e0b' : 'none',
+                      background: backsideTab === 'hospitals' ? '#1e293b' : isEscalatedTier ? '#fffbeb' : '#ffffff',
+                      color: backsideTab === 'hospitals' ? '#ffffff' : isEscalatedTier ? '#b45309' : '#475569',
                       fontWeight: 700,
                       fontSize: '0.75rem',
                       cursor: 'pointer',
                       display: 'flex',
                       alignItems: 'center',
                       gap: '0.35rem',
+                      transition: 'all 0.3s ease',
                     }}
                   >
-                    <Building2 size={13} /> 8km Hospital Network ({matchedHospitalsList.length})
+                    <Building2 size={13} color={isEscalatedTier && backsideTab !== 'hospitals' ? '#d97706' : undefined} />
+                    {isEscalatedTier ? (
+                      <span>⚡ {currentRadius} Escalated Network ({matchedHospitalsList.length})</span>
+                    ) : (
+                      `8km Hospital Network (${matchedHospitalsList.length})`
+                    )}
                   </button>
 
                   <button
@@ -1571,53 +1689,99 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
               </div>
             )}
 
-            {/* TAB CONTENT: 8km Hospital Network (Police) */}
+            {/* TAB CONTENT: Hospital Network (Auto-Escalated Perimeter) */}
             {backsideTab === 'hospitals' && (
               <div>
-                <div style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '0.5rem' }}>
-                  Trauma centers within 8km radius dispatched for this incident:
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                  {matchedHospitalsList.map((h, idx) => (
-                    <div
-                      key={h.id || idx}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.65rem' }}>
+                  <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                    {isEscalatedTier ? (
+                      <span style={{ color: '#b45309', fontWeight: 600 }}>
+                        ⚡ Triage search perimeter auto-escalated to <strong>{currentRadius} (+45s Tier)</strong>. Broadcast dispatched to trauma centers:
+                      </span>
+                    ) : (
+                      'Trauma centers within 8km radius dispatched for this incident:'
+                    )}
+                  </div>
+                  {isEscalatedTier && (
+                    <span
                       style={{
-                        background: '#ffffff',
-                        border: '1px solid #e2e8f0',
-                        borderRadius: '0.375rem',
-                        padding: '0.5rem 0.75rem',
-                        display: 'flex',
+                        background: '#fef3c7',
+                        color: '#92400e',
+                        border: '1px solid #f59e0b',
+                        padding: '0.15rem 0.5rem',
+                        borderRadius: '9999px',
+                        fontSize: '0.68rem',
+                        fontWeight: 800,
+                        display: 'inline-flex',
                         alignItems: 'center',
-                        justifyContent: 'space-between',
-                        flexWrap: 'wrap',
-                        gap: '0.5rem',
+                        gap: '0.25rem',
                       }}
                     >
-                      <div>
-                        <strong style={{ fontSize: '0.85rem', color: '#0f172a' }}>{h.name}</strong>
-                        <div style={{ fontSize: '0.7rem', color: '#64748b' }}>{h.address}</div>
+                      <Zap size={11} /> 45s AUTO-ESCALATED (8km → 20km)
+                    </span>
+                  )}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                  {matchedHospitalsList.map((h, idx) => {
+                    const isFarEscalated = isEscalatedTier && Number(h.distance_km || 0) > 8.0;
+                    return (
+                      <div
+                        key={h.id || idx}
+                        style={{
+                          background: isFarEscalated ? '#fffdf5' : '#ffffff',
+                          border: isFarEscalated ? '1px solid #fef08a' : '1px solid #e2e8f0',
+                          borderRadius: '0.375rem',
+                          padding: '0.5rem 0.75rem',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          flexWrap: 'wrap',
+                          gap: '0.5rem',
+                        }}
+                      >
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                            <strong style={{ fontSize: '0.85rem', color: '#0f172a' }}>{h.name}</strong>
+                            {isFarEscalated && (
+                              <span
+                                style={{
+                                  background: '#fef3c7',
+                                  color: '#92400e',
+                                  fontSize: '0.62rem',
+                                  fontWeight: 800,
+                                  padding: '0.1rem 0.35rem',
+                                  borderRadius: '3px',
+                                  border: '1px solid #fde68a',
+                                }}
+                              >
+                                +45s ESCALATION TIER
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ fontSize: '0.7rem', color: '#64748b' }}>{h.address}</div>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#dc2626' }}>
+                            ~{h.distance_km ? Number(h.distance_km).toFixed(1) : '3.2'} km
+                          </span>
+                          <a
+                            href={`tel:${h.phone}`}
+                            style={{
+                              padding: '0.25rem 0.5rem',
+                              background: '#f1f5f9',
+                              color: '#334155',
+                              borderRadius: '3px',
+                              fontSize: '0.7rem',
+                              fontWeight: 600,
+                              textDecoration: 'none',
+                            }}
+                          >
+                            <Phone size={10} style={{ display: 'inline' }} /> Call
+                          </a>
+                        </div>
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#dc2626' }}>
-                          ~{h.distance_km ? Number(h.distance_km).toFixed(1) : '3.2'} km
-                        </span>
-                        <a
-                          href={`tel:${h.phone}`}
-                          style={{
-                            padding: '0.25rem 0.5rem',
-                            background: '#f1f5f9',
-                            color: '#334155',
-                            borderRadius: '3px',
-                            fontSize: '0.7rem',
-                            fontWeight: 600,
-                            textDecoration: 'none',
-                          }}
-                        >
-                          <Phone size={10} style={{ display: 'inline' }} /> Call
-                        </a>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}

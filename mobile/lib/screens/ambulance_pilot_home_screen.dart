@@ -933,9 +933,12 @@ class _AmbulancePilotHomeScreenState extends State<AmbulancePilotHomeScreen> {
             children: const [
               Icon(Icons.science, size: 16, color: Color(0xFFF59E0B)),
               SizedBox(width: 6),
-              Text(
-                'Paramedic Simulation Injector (Demo Mode)',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFFF59E0B)),
+              Flexible(
+                child: Text(
+                  'Paramedic Simulation Injector (Demo Mode)',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFFF59E0B)),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ],
           ),
@@ -1062,7 +1065,7 @@ class _AmbulancePilotHomeScreenState extends State<AmbulancePilotHomeScreen> {
                       children: [
                         const Icon(Icons.check_circle_outline, size: 14, color: Color(0xFF10B981)),
                         const SizedBox(width: 6),
-                        Text(h['icu_beds']!, style: const TextStyle(fontSize: 11, color: Color(0xFF10B981), fontWeight: FontWeight.w600)),
+                        Expanded(child: Text(h['icu_beds']!, style: const TextStyle(fontSize: 11, color: Color(0xFF10B981), fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis)),
                       ],
                     ),
                     const SizedBox(height: 4),
@@ -1070,7 +1073,7 @@ class _AmbulancePilotHomeScreenState extends State<AmbulancePilotHomeScreen> {
                       children: [
                         const Icon(Icons.medical_information_outlined, size: 14, color: Color(0xFF38BDF8)),
                         const SizedBox(width: 6),
-                        Text(h['ct_status']!, style: const TextStyle(fontSize: 11, color: Color(0xFFE2E8F0))),
+                        Expanded(child: Text(h['ct_status']!, style: const TextStyle(fontSize: 11, color: Color(0xFFE2E8F0)), overflow: TextOverflow.ellipsis)),
                       ],
                     ),
                     const SizedBox(height: 4),
@@ -1078,7 +1081,7 @@ class _AmbulancePilotHomeScreenState extends State<AmbulancePilotHomeScreen> {
                       children: [
                         const Icon(Icons.bloodtype_outlined, size: 14, color: Color(0xFFFF1744)),
                         const SizedBox(width: 6),
-                        Text(h['blood_bank']!, style: const TextStyle(fontSize: 11, color: Color(0xFFE2E8F0))),
+                        Expanded(child: Text(h['blood_bank']!, style: const TextStyle(fontSize: 11, color: Color(0xFFE2E8F0)), overflow: TextOverflow.ellipsis)),
                       ],
                     ),
                     const SizedBox(height: 12),

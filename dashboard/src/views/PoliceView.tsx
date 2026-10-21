@@ -11,7 +11,7 @@ import {
   X,
   LogOut,
 } from 'lucide-react';
-import { IncidentPayload, ConnectionStatus, PreemptedSignalPayload } from '../types';
+import { IncidentPayload, ConnectionStatus, PreemptedSignalPayload, Hospital } from '../types';
 import { getSocket, BACKEND_API_BASE, updateSocketAuth } from '../services/socket';
 import { getStoredUser, clearStoredSession, AuthUser, authFetch } from '../services/auth';
 import { LoginView } from '../components/LoginView';
@@ -268,6 +268,8 @@ export const PoliceView: React.FC = () => {
       incident_id: string;
       status: string;
       search_radius?: string;
+      all_matched_hospitals?: Hospital[];
+      newly_matched_hospitals?: Hospital[];
     }) => {
       setIncidents((prev) => {
         const existingIndex = prev.findIndex((item) => item.id === payload.incident_id);
@@ -276,10 +278,30 @@ export const PoliceView: React.FC = () => {
           return prev;
         }
         const updatedList = [...prev];
+        const currentHospitals = updatedList[existingIndex].matched_hospitals || [];
+        const finalHospitals =
+          payload.all_matched_hospitals && payload.all_matched_hospitals.length > 0
+            ? payload.all_matched_hospitals
+            : payload.newly_matched_hospitals
+            ? (() => {
+                const ids = new Set(currentHospitals.map((h) => h.id));
+                const additions = payload.newly_matched_hospitals.filter((h) => !ids.has(h.id));
+                return [...currentHospitals, ...additions];
+              })()
+            : currentHospitals;
+
+        const currentMeta = (updatedList[existingIndex].victim_metadata || {}) as Record<string, unknown>;
+
         updatedList[existingIndex] = {
           ...updatedList[existingIndex],
           status: 'escalated',
           escalated: true,
+          search_radius: payload.search_radius || '20km',
+          matched_hospitals: finalHospitals,
+          victim_metadata: {
+            ...currentMeta,
+            search_radius: payload.search_radius || '20km',
+          },
         };
         try {
           localStorage.setItem('rakshak_police_feed', JSON.stringify(updatedList));

@@ -5,6 +5,12 @@ import { pool, closePool } from './db';
 export const ensureMigrations = async (): Promise<void> => {
   const client = await pool.connect();
   try {
+    const seedPath = path.resolve(__dirname, '../../db/seeds/001_hospitals_bengaluru.sql');
+    if (fs.existsSync(seedPath)) {
+      const seedSql = fs.readFileSync(seedPath, 'utf8');
+      await client.query(seedSql);
+    }
+
     const migrationsDir = path.resolve(__dirname, '../../db/migrations');
     if (!fs.existsSync(migrationsDir)) return;
     const files = fs
@@ -32,7 +38,19 @@ const runMigrations = async (): Promise<void> => {
   try {
     console.log('[Migration Runner] Connecting to database...');
 
-    // 1. Run schema migrations in order
+    // 1. Seed hospitals first so foreign keys in users table are valid
+    const seedPath = path.resolve(
+      __dirname,
+      '../../db/seeds/001_hospitals_bengaluru.sql',
+    );
+    if (fs.existsSync(seedPath)) {
+      console.log(`[Migration Runner] Seeding hospitals from: ${seedPath}`);
+      const seedSql = fs.readFileSync(seedPath, 'utf8');
+      await client.query(seedSql);
+      console.log('[Migration Runner] Hospitals populated successfully.');
+    }
+
+    // 2. Run schema migrations in order
     const migrationsDir = path.resolve(__dirname, '../../db/migrations');
     const files = fs
       .readdirSync(migrationsDir)
@@ -47,16 +65,8 @@ const runMigrations = async (): Promise<void> => {
       console.log(`[Migration Runner] Migration ${file} applied successfully.`);
     }
 
-    // 2. Run seed if requested
     if (isSeed) {
-      const seedPath = path.resolve(
-        __dirname,
-        '../../db/seeds/001_hospitals_bengaluru.sql',
-      );
-      console.log(`[Migration Runner] Executing seed: ${seedPath}`);
-      const seedSql = fs.readFileSync(seedPath, 'utf8');
-      await client.query(seedSql);
-      console.log('[Migration Runner] Seed data populated successfully.');
+      console.log('[Migration Runner] All migrations and seed verified.');
     }
   } catch (error) {
     console.error('[Migration Runner Error] Migration failed:', error);

@@ -47,6 +47,7 @@ export interface IncidentPayload {
     timestamp?: string;
   } | null;
   escalated?: boolean;
+  search_radius?: string;
   case_locked?: boolean;
   rejections?: RejectionRecord[];
   ambulance_plate?: string | null;

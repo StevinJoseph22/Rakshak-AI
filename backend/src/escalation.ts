@@ -260,11 +260,64 @@ export async function performEscalation(
     return { success: true, stage, newHospitalsCount: 0 };
   }
 
-  // Facilities found! Update incident status to 'escalated'
+  // Facilities found! Update incident status to 'escalated' and persist search_radius in victim_metadata
+  const radiusDescription = stage === 1 ? '20km' : 'State Registry';
   await query(
-    `UPDATE incidents SET status = 'escalated', updated_at = CURRENT_TIMESTAMP WHERE id = $1 AND status IN ('broadcasting', 'escalated');`,
-    [incidentId]
+    `UPDATE incidents 
+     SET status = 'escalated', 
+         victim_metadata = jsonb_set(COALESCE(victim_metadata, '{}'::jsonb), '{search_radius}', to_jsonb($2::text)),
+         updated_at = CURRENT_TIMESTAMP 
+     WHERE id = $1 AND status IN ('broadcasting', 'escalated');`,
+    [incidentId, radiusDescription]
   );
+
+  // Fetch ALL trauma centers within the escalated radius to provide complete list to frontend
+  let allMatchedHospitals: Hospital[] = [];
+  try {
+    const allQuerySql = stage === 1
+      ? `
+        SELECT 
+          id, name, phone, address, has_trauma_center, has_icu_capacity, is_verified,
+          ST_Y(location::geometry) AS latitude, ST_X(location::geometry) AS longitude,
+          ROUND((ST_Distance(location, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography) / 1000)::numeric, 2) AS distance_km
+        FROM hospitals
+        WHERE has_trauma_center = true
+          AND ST_DWithin(location, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography, 20000)
+          AND id != ALL($3::uuid[])
+        ORDER BY distance_km ASC;
+      `
+      : `
+        SELECT 
+          id, name, phone, address, has_trauma_center, has_icu_capacity, is_verified,
+          ST_Y(location::geometry) AS latitude, ST_X(location::geometry) AS longitude,
+          ROUND((ST_Distance(location, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography) / 1000)::numeric, 2) AS distance_km
+        FROM hospitals
+        WHERE has_trauma_center = true
+          AND id != ALL($3::uuid[])
+        ORDER BY distance_km ASC;
+      `;
+
+    const allRes = await query<Hospital>(allQuerySql, [
+      incident.longitude,
+      incident.latitude,
+      rejectedIds.size > 0 ? Array.from(rejectedIds) : ['00000000-0000-0000-0000-000000000000'],
+    ]);
+
+    allMatchedHospitals = allRes.rows.map((h) => {
+      const straightKm = Number(h.distance_km);
+      const roadKm = Math.round(straightKm * 1.6 * 10) / 10;
+      return {
+        ...h,
+        latitude: Number(h.latitude),
+        longitude: Number(h.longitude),
+        distance_km: straightKm,
+        road_distance_km: roadKm,
+      };
+    });
+  } catch (err) {
+    console.warn('[Auto-Escalation] Could not fetch allMatchedHospitals, using merged set:', err);
+    allMatchedHospitals = matchedHospitals;
+  }
 
   // Update Redis matched hospitals cache with newly added hospitals
   const updatedMatchedIds = [
@@ -281,9 +334,8 @@ export async function performEscalation(
     console.warn('[Redis] Failed to update matched hospitals during escalation:', err);
   }
 
-  // Broadcast escalation via Socket.io
-  const radiusDescription = stage === 1 ? '20km' : 'State Registry';
-  broadcastIncidentEscalated(incident, matchedHospitals, radiusDescription);
+  // Broadcast escalation via Socket.io globally with full hospital network
+  broadcastIncidentEscalated(incident, matchedHospitals, radiusDescription, allMatchedHospitals);
 
   // If this was Stage 1, schedule Stage 2 auto-escalation in case newly matched hospitals also timeout/reject
   if (stage === 1) {

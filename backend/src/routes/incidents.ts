@@ -106,6 +106,21 @@ incidentsRouter.post('/suspected', async (req: Request, res: Response) => {
   const { id, latitude, longitude, victim_metadata, health_card } = parseResult.data;
   const { sanitized, healthCardToStore } = sanitizeVictimMetadata(victim_metadata, health_card);
 
+    // 0. Discard stale store-and-forward payloads (>30 mins) to prevent ancient queued dispatches
+    const delaySec = Number((victim_metadata as Record<string, unknown> | undefined)?.delivery_delay_seconds || 0);
+    const origTs = (victim_metadata as Record<string, unknown> | undefined)?.original_event_timestamp
+      ? new Date(String((victim_metadata as Record<string, unknown>).original_event_timestamp)).getTime()
+      : null;
+    const isAncient = delaySec > 1800 || (origTs !== null && Date.now() - origTs > 1800 * 1000);
+
+    if (isAncient) {
+      console.warn(`[Incidents] Rejected stale store-and-forward incident ${id || 'unknown'} (delay: ${delaySec}s)`);
+      return res.status(400).json({
+        error: 'EXPIRED_STORE_AND_FORWARD',
+        message: 'Incident rejected: Store-and-forward payload expired (>30 minutes).',
+      });
+    }
+
   // Idempotency: check if already exists
   if (id) {
     if (healthCardToStore) {
@@ -256,6 +271,21 @@ incidentsRouter.post('/', async (req: Request, res: Response) => {
 
     const { id, latitude, longitude, victim_metadata, status, health_card } = parseResult.data;
     const { sanitized, healthCardToStore } = sanitizeVictimMetadata(victim_metadata, health_card);
+
+    // Discard stale store-and-forward payloads (>30 mins) to prevent replaying days-old test incidents
+    const delaySec = Number((victim_metadata as Record<string, unknown> | undefined)?.delivery_delay_seconds || 0);
+    const origTs = (victim_metadata as Record<string, unknown> | undefined)?.original_event_timestamp
+      ? new Date(String((victim_metadata as Record<string, unknown>).original_event_timestamp)).getTime()
+      : null;
+    const isAncient = delaySec > 1800 || (origTs !== null && Date.now() - origTs > 1800 * 1000);
+
+    if (isAncient) {
+      console.warn(`[Incidents] Rejected stale store-and-forward incident ${id || 'unknown'} (delay: ${delaySec}s)`);
+      return res.status(400).json({
+        error: 'EXPIRED_STORE_AND_FORWARD',
+        message: 'Incident rejected: Store-and-forward payload expired (>30 minutes).',
+      });
+    }
 
     // Idempotency check on client UUID
     if (id) {
@@ -561,6 +591,7 @@ incidentsRouter.get('/', optionalAuth, async (req: Request, res: Response) => {
         JOIN hospitals h_spec ON h_spec.id = $1
         LEFT JOIN hospitals h_acc ON i.accepted_hospital_id = h_acc.id
         WHERE ST_DWithin(h_spec.location, i.location, CASE WHEN i.status = 'escalated' THEN 20000 ELSE 8000 END)
+          AND (i.status NOT IN ('broadcasting', 'escalated') OR i.created_at >= NOW() - INTERVAL '2 hours')
         ORDER BY i.created_at DESC
         LIMIT $2;
       `;
@@ -619,7 +650,7 @@ incidentsRouter.get('/', optionalAuth, async (req: Request, res: Response) => {
               )
               FROM hospitals h
               WHERE h.has_trauma_center = true
-                AND ST_DWithin(h.location, i.location, 20000)
+                AND ST_DWithin(h.location, i.location, CASE WHEN i.status = 'escalated' THEN 20000 ELSE 8000 END)
             ),
             '[]'::json
           ) AS matched_hospitals,
@@ -641,6 +672,7 @@ incidentsRouter.get('/', optionalAuth, async (req: Request, res: Response) => {
           ) AS rejections
         FROM incidents i
         LEFT JOIN hospitals h_acc ON i.accepted_hospital_id = h_acc.id
+        WHERE (i.status NOT IN ('broadcasting', 'escalated') OR i.created_at >= NOW() - INTERVAL '2 hours')
         ORDER BY i.created_at DESC
         LIMIT $1;
       `;

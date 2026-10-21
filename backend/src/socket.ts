@@ -870,7 +870,8 @@ export function broadcastIncidentEscalated(
     victim_metadata?: Record<string, unknown> | null;
   },
   newlyMatchedHospitals: Hospital[],
-  searchRadius: string
+  searchRadius: string,
+  allMatchedHospitals?: Hospital[]
 ): void {
   if (!io) return;
 
@@ -897,19 +898,19 @@ export function broadcastIncidentEscalated(
     console.error('[Socket.io] Error in broadcastNewIncident during escalation:', err);
   });
 
-  // 3. Broadcast incident_escalated to Police and Mobile
+  // 3. Broadcast incident_escalated globally to Police, Hospitals, and Ambulances
   const payload = {
     incident_id: incident.id,
     status: 'escalated',
     search_radius: searchRadius,
-    matched_hospitals_count: newlyMatchedHospitals.length,
+    matched_hospitals_count: (allMatchedHospitals || newlyMatchedHospitals).length,
     newly_matched_hospitals: newlyMatchedHospitals,
+    all_matched_hospitals: allMatchedHospitals || newlyMatchedHospitals,
   };
 
-  io.to('all_incidents').emit('incident_escalated', payload);
-  io.to(`incident:${incident.id}`).emit('incident_escalated', payload);
+  io.emit('incident_escalated', payload);
   console.log(
-    `[Socket.io] Emitted incident_escalated for ${incident.id} (radius: ${searchRadius})`
+    `[Socket.io] Emitted incident_escalated globally for ${incident.id} (radius: ${searchRadius}, network size: ${payload.matched_hospitals_count})`
   );
 }
 

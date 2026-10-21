@@ -685,13 +685,17 @@ class _AmbulanceDispatchScreenState extends State<AmbulanceDispatchScreen> {
               children: [
                 const Icon(Icons.emergency, color: Color(0xFFFF1744), size: 18),
                 const SizedBox(width: 6),
-                Text(
-                  'MISSION DISPATCH • $_ambulancePlate',
-                  style: const TextStyle(
-                    fontSize: 13.5,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 0.8,
-                    color: Colors.white,
+                Flexible(
+                  child: Text(
+                    'MISSION DISPATCH • $_ambulancePlate',
+                    style: const TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 0.8,
+                      color: Colors.white,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ],
@@ -699,6 +703,8 @@ class _AmbulanceDispatchScreenState extends State<AmbulanceDispatchScreen> {
             Text(
               'Incident ID: ${widget.incident.id.length > 12 ? widget.incident.id.substring(0, 12) : widget.incident.id} • ${_routeLeg == 'to_hospital' ? "Destination Nav" : "Scene Nav"}',
               style: const TextStyle(fontSize: 10, color: Color(0xFF94A3B8), fontFamily: 'monospace'),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ],
         ),
@@ -1021,26 +1027,30 @@ class _AmbulanceDispatchScreenState extends State<AmbulanceDispatchScreen> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Row(
-                                  children: [
-                                    Text(
-                                      '${_roadDistanceKm?.toStringAsFixed(1) ?? "2.8"} km',
-                                      style: const TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w900,
-                                        color: Colors.white,
+                                FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  alignment: Alignment.centerLeft,
+                                  child: Row(
+                                    children: [
+                                      Text(
+                                        '${_roadDistanceKm?.toStringAsFixed(1) ?? "2.8"} km',
+                                        style: const TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w900,
+                                          color: Colors.white,
+                                        ),
                                       ),
-                                    ),
-                                    const Text('  •  ', style: TextStyle(color: Colors.grey)),
-                                    Text(
-                                      '~${_roadDurationMinutes ?? 4} min ETA',
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.bold,
-                                        color: _isGreenCorridorActive ? const Color(0xFF10B981) : const Color(0xFF00E5FF),
+                                      const Text('  •  ', style: TextStyle(color: Colors.grey)),
+                                      Text(
+                                        '~${_roadDurationMinutes ?? 4} min ETA',
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.bold,
+                                          color: _isGreenCorridorActive ? const Color(0xFF10B981) : const Color(0xFF00E5FF),
+                                        ),
                                       ),
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
                                 Text(
                                   _trafficCondition,
@@ -1292,9 +1302,13 @@ class _AmbulanceDispatchScreenState extends State<AmbulanceDispatchScreen> {
                               children: [
                                 Row(
                                   children: [
-                                    Text(
-                                      victimName,
-                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white),
+                                    Flexible(
+                                      child: Text(
+                                        victimName,
+                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white),
+                                        overflow: TextOverflow.ellipsis,
+                                        maxLines: 1,
+                                      ),
                                     ),
                                     const SizedBox(width: 6),
                                     Container(
@@ -1309,9 +1323,13 @@ class _AmbulanceDispatchScreenState extends State<AmbulanceDispatchScreen> {
                                       ),
                                     ),
                                     const SizedBox(width: 5),
-                                    Text(
-                                      vehicleType,
-                                      style: const TextStyle(fontSize: 10, color: Color(0xFF94A3B8)),
+                                    Flexible(
+                                      child: Text(
+                                        vehicleType,
+                                        style: const TextStyle(fontSize: 10, color: Color(0xFF94A3B8)),
+                                        overflow: TextOverflow.ellipsis,
+                                        maxLines: 1,
+                                      ),
                                     ),
                                   ],
                                 ),
@@ -1390,15 +1408,20 @@ class _AmbulanceDispatchScreenState extends State<AmbulanceDispatchScreen> {
                             children: [
                               const Icon(Icons.check_circle, color: Color(0xFF10B981), size: 16),
                               const SizedBox(width: 6),
-                              Text(
-                                'ARRIVED ON SCENE (${(() {
-                                  final dt = (_arrivedAt ?? DateTime.now()).toLocal();
-                                  final hour = dt.hour > 12 ? dt.hour - 12 : (dt.hour == 0 ? 12 : dt.hour);
-                                  final min = dt.minute.toString().padLeft(2, '0');
-                                  final ampm = dt.hour >= 12 ? 'PM' : 'AM';
-                                  return '$hour:$min $ampm';
-                                })()} IST) • CONTACTS & POLICE NOTIFIED',
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 10.5, color: Color(0xFF34D399)),
+                              Flexible(
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: Text(
+                                    'ARRIVED ON SCENE (${(() {
+                                      final dt = (_arrivedAt ?? DateTime.now()).toLocal();
+                                      final hour = dt.hour > 12 ? dt.hour - 12 : (dt.hour == 0 ? 12 : dt.hour);
+                                      final min = dt.minute.toString().padLeft(2, '0');
+                                      final ampm = dt.hour >= 12 ? 'PM' : 'AM';
+                                      return '$hour:$min $ampm';
+                                    })()} IST) • CONTACTS & POLICE NOTIFIED',
+                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 10.5, color: Color(0xFF34D399)),
+                                  ),
+                                ),
                               ),
                             ],
                           ),
@@ -1422,7 +1445,7 @@ class _AmbulanceDispatchScreenState extends State<AmbulanceDispatchScreen> {
                                 );
                               },
                               icon: const Icon(Icons.camera_alt, size: 14, color: Color(0xFF00E5FF)),
-                              label: const Text('Capture Photo', style: TextStyle(fontSize: 10.5, color: Color(0xFF00E5FF), fontWeight: FontWeight.bold)),
+                              label: const FittedBox(fit: BoxFit.scaleDown, child: Text('Capture Photo', style: TextStyle(fontSize: 10.5, color: Color(0xFF00E5FF), fontWeight: FontWeight.bold))),
                               style: OutlinedButton.styleFrom(
                                 side: const BorderSide(color: Color(0xFF00E5FF)),
                                 padding: const EdgeInsets.symmetric(vertical: 8),
@@ -1435,7 +1458,7 @@ class _AmbulanceDispatchScreenState extends State<AmbulanceDispatchScreen> {
                             child: OutlinedButton.icon(
                               onPressed: () => _showAbhaVaultSheet(context),
                               icon: const Icon(Icons.badge, size: 14, color: Color(0xFF38BDF8)),
-                              label: const Text('ABHA Vault', style: TextStyle(fontSize: 10.5, color: Color(0xFF38BDF8), fontWeight: FontWeight.bold)),
+                              label: const FittedBox(fit: BoxFit.scaleDown, child: Text('ABHA Vault', style: TextStyle(fontSize: 10.5, color: Color(0xFF38BDF8), fontWeight: FontWeight.bold))),
                               style: OutlinedButton.styleFrom(
                                 side: const BorderSide(color: Color(0xFF38BDF8)),
                                 padding: const EdgeInsets.symmetric(vertical: 8),
@@ -1448,7 +1471,7 @@ class _AmbulanceDispatchScreenState extends State<AmbulanceDispatchScreen> {
                             child: OutlinedButton.icon(
                               onPressed: () => _showBiomechanicsSheet(context),
                               icon: const Icon(Icons.psychology, size: 14, color: Color(0xFFFF1744)),
-                              label: const Text('Blackbox', style: TextStyle(fontSize: 10.5, color: Color(0xFFFF1744), fontWeight: FontWeight.bold)),
+                              label: const FittedBox(fit: BoxFit.scaleDown, child: Text('Blackbox', style: TextStyle(fontSize: 10.5, color: Color(0xFFFF1744), fontWeight: FontWeight.bold))),
                               style: OutlinedButton.styleFrom(
                                 side: const BorderSide(color: Color(0xFFFF1744)),
                                 padding: const EdgeInsets.symmetric(vertical: 8),
