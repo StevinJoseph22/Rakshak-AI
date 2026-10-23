@@ -276,4 +276,15 @@ export const SEEDED_HOSPITALS: Hospital[] = [
     latitude: 13.0982,
     longitude: 77.3871,
   },
+  {
+    id: 'b1000010-0000-0000-0000-000000000010',
+    name: 'Specialist Hospital, Banaswadi / HRBR Layout',
+    phone: '+91-80-4344-4444',
+    address: '216, 7th Main Rd, HRBR Layout 1st Block, Banaswadi, Bengaluru, Karnataka 560043',
+    has_trauma_center: true,
+    has_icu_capacity: true,
+    is_verified: true,
+    latitude: 13.0180,
+    longitude: 77.6450,
+  },
 ];

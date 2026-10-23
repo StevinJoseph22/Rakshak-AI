@@ -277,6 +277,17 @@ VALUES
         '+91-80-2772-2233',
         'NH-48 Kunigal Bypass, Subhash Nagar, Nelamangala Town, Karnataka 562123',
         true
+    ),
+    -- 26. Banaswadi / HRBR Layout (North-East Level 1 Emergency Trauma Hub)
+    (
+        'b1000010-0000-0000-0000-000000000010',
+        'Specialist Hospital, Banaswadi / HRBR Layout',
+        ST_SetSRID(ST_MakePoint(77.6450, 13.0180), 4326)::geography,
+        true,
+        true,
+        '+91-80-4344-4444',
+        '216, 7th Main Rd, HRBR Layout 1st Block, Banaswadi, Bengaluru, Karnataka 560043',
+        true
     )
 ON CONFLICT (id) DO UPDATE SET
     name = EXCLUDED.name,

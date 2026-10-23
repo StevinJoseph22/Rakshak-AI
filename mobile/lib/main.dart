@@ -20,16 +20,40 @@ import 'services/offline_dispatch_queue.dart';
 import 'screens/detection_lab_screen.dart';
 import 'screens/onboarding_screen.dart';
 import 'screens/settings_screen.dart';
+import 'screens/citizen_settings_screen.dart';
+import 'screens/hospital_radar_screen.dart';
+import 'screens/welcome_splash_screen.dart';
+import 'services/user_profile_service.dart';
+import 'widgets/cloud_watchdog_simulation_dialog.dart';
 
-void main() {
-  runApp(const RakshakApp());
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await UserProfileService.instance.init();
+  final seen = await UserProfileService.instance.hasSeenWelcomeScreen();
+  runApp(RakshakApp(startWithWelcome: !seen));
 }
 
 /// Primary Citizen Life-Guard Application for Riders, Commuters, and Citizens.
-class RakshakApp extends StatelessWidget {
-  const RakshakApp({super.key});
+class RakshakApp extends StatefulWidget {
+  final bool startWithWelcome;
+
+  const RakshakApp({super.key, this.startWithWelcome = false});
 
   static final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
+  @override
+  State<RakshakApp> createState() => _RakshakAppState();
+}
+
+class _RakshakAppState extends State<RakshakApp> {
+  late bool _showWelcome;
+
+  @override
+  void initState() {
+    super.initState();
+    _showWelcome = widget.startWithWelcome;
+    UserProfileService.instance.init();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -57,7 +81,13 @@ class RakshakApp extends StatelessWidget {
           ),
         ),
       ),
-      home: const CrashDetectionScreen(),
+      home: _showWelcome
+          ? WelcomeSplashScreen(
+              onContinue: () {
+                setState(() => _showWelcome = false);
+              },
+            )
+          : const CrashDetectionScreen(),
     );
   }
 }
@@ -188,13 +218,20 @@ class _CrashDetectionScreenState extends State<CrashDetectionScreen> {
   }
 
   Future<void> _simulateDeadManSwitch() async {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        backgroundColor: Colors.purple,
-        content: Text('💥 Phone Destruction Simulated! Heartbeat cut. Cloud Watchdog triggering emergency response in 12s...'),
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => CloudWatchdogSimulationDialog(
+        onDismiss: () {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              backgroundColor: Colors.purple,
+              content: Text('💥 Phone Destruction Simulated! Heartbeat cut. Cloud Watchdog triggering emergency response in 12s...'),
+            ),
+          );
+        },
       ),
     );
-    await TripSentinelClientService.instance.simulateCatastrophicPhoneBreakdown();
   }
 
   Future<void> _simulatePreCrashMicroBurst() async {
@@ -368,39 +405,48 @@ class _CrashDetectionScreenState extends State<CrashDetectionScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              padding: const EdgeInsets.all(6),
+              padding: const EdgeInsets.all(5),
               decoration: BoxDecoration(
                 color: const Color(0xFFDC2626),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: const Icon(Icons.shield, color: Colors.white, size: 20),
+              child: const Icon(Icons.shield, color: Colors.white, size: 18),
             ),
-            const SizedBox(width: 8),
-            const Text('Rakshak-AI Guard'),
+            const SizedBox(width: 6),
+            const Flexible(
+              child: Text(
+                'Rakshak-AI Guard',
+                style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
           ],
         ),
         actions: [
           // Dedicated high-contrast Test Lab toggle chip (meets widget tests)
           Padding(
-            padding: const EdgeInsets.only(right: 6.0),
+            padding: const EdgeInsets.only(right: 4.0),
             child: ActionChip(
               avatar: Icon(
                 _isTestMode ? Icons.shield_outlined : Icons.science_outlined,
-                size: 15,
+                size: 13,
                 color: _isTestMode ? Colors.white : Colors.amber.shade900,
               ),
               label: Text(
                 _isTestMode ? 'Live Guard' : 'Test Lab',
                 style: TextStyle(
-                  fontSize: 11,
+                  fontSize: 10,
                   fontWeight: FontWeight.bold,
                   color: _isTestMode ? Colors.white : Colors.amber.shade900,
                 ),
               ),
               backgroundColor: _isTestMode ? Colors.red.shade700 : Colors.amber.shade100,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              padding: EdgeInsets.zero,
+              labelPadding: const EdgeInsets.symmetric(horizontal: 4),
               onPressed: () {
                 setState(() {
                   _isTestMode = !_isTestMode;
@@ -409,55 +455,64 @@ class _CrashDetectionScreenState extends State<CrashDetectionScreen> {
               },
             ),
           ),
-          // Dedicated Ambulance Pilot App Launcher Button
+          // Dedicated Ambulance Pilot App Launcher Button (Compact to prevent overflow)
           Padding(
-            padding: const EdgeInsets.only(right: 6.0),
+            padding: const EdgeInsets.only(right: 4.0),
             child: OutlinedButton.icon(
               onPressed: _openAmbulanceApp,
-              icon: const Icon(Icons.emergency, color: Color(0xFFDC2626), size: 14),
+              icon: const Icon(Icons.emergency, color: Color(0xFFDC2626), size: 12),
               label: const Text(
                 'Ambulance App',
-                style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Color(0xFFDC2626)),
+                style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: Color(0xFFDC2626)),
               ),
               style: OutlinedButton.styleFrom(
                 side: const BorderSide(color: Color(0xFFDC2626)),
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 0),
+                minimumSize: const Size(0, 28),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
               ),
             ),
           ),
+          // Dedicated Citizen Settings Button (Profile, Vehicle Type, Emergency Contacts, ABHA)
           IconButton(
-            icon: const Icon(Icons.contacts, color: Colors.blueAccent),
-            tooltip: 'Emergency Contacts & Profile',
+            icon: const Icon(Icons.settings_outlined, color: Color(0xFF0F172A), size: 21),
+            tooltip: 'Citizen Settings & Vehicle Configuration',
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
             onPressed: () async {
               await Navigator.of(context).push(
                 MaterialPageRoute(
-                  builder: (context) => const EmergencyContactsScreen(),
+                  builder: (context) => const CitizenSettingsScreen(),
                 ),
               );
               _loadEmergencyContacts();
             },
           ),
+          const SizedBox(width: 4),
         ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(12.0),
         child: Column(
           children: <Widget>[
-            // Rider & Connected Vehicle Card (Production Deployed Look)
+            // Rider & Connected Vehicle Card (Synced with User Profile & Vehicle)
             _buildRiderVehicleCard(),
-            const SizedBox(height: 8),
-
-            // Protection Status Hero Card
-            _buildProtectionHeroCard(),
-            const SizedBox(height: 8),
-
-            // Trip Sentinel Highway Safeguard
-            _buildTripSentinelCard(),
-            const SizedBox(height: 8),
+            const SizedBox(height: 10),
 
             // Segmented Mode Selector
             _buildModeSelector(),
+            const SizedBox(height: 10),
+
+            // Protection Status Hero Card
+            _buildProtectionHeroCard(),
+            const SizedBox(height: 10),
+
+            // Recent Travel & Driving Safety Insights
+            _buildRideSafetyInsightsCard(),
+            const SizedBox(height: 10),
+
+            // Trip Sentinel Highway Safeguard
+            _buildTripSentinelCard(),
             const SizedBox(height: 10),
 
             if (!_isTestMode) ...[
@@ -497,10 +552,14 @@ class _CrashDetectionScreenState extends State<CrashDetectionScreen> {
             if (index == 0) {
               _isTestMode = false;
             } else if (index == 1) {
-              _showSafetyRadarDialog();
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => const HospitalRadarScreen(),
+                ),
+              );
             } else if (index == 2) {
               Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const EmergencyContactsScreen()),
+                MaterialPageRoute(builder: (_) => const SettingsScreen()),
               ).then((_) => _loadEmergencyContacts());
             } else if (index == 3) {
               _isTestMode = true;
@@ -534,65 +593,228 @@ class _CrashDetectionScreenState extends State<CrashDetectionScreen> {
   // ===========================================================================
 
   Widget _buildRiderVehicleCard() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.grey.shade200),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
+    return ValueListenableBuilder<UserProfile>(
+      valueListenable: UserProfileService.instance.profileNotifier,
+      builder: (context, profile, _) {
+        final icon = profile.isTwoWheeler ? Icons.two_wheeler : Icons.directions_car;
+        final iconBg = profile.isTwoWheeler ? const Color(0xFFEFF6FF) : const Color(0xFFFEF3C7);
+        final iconColor = profile.isTwoWheeler ? const Color(0xFF2563EB) : const Color(0xFFD97706);
+
+        return InkWell(
+          onTap: () async {
+            await Navigator.of(context).push(
+              MaterialPageRoute(builder: (context) => const CitizenSettingsScreen()),
+            );
+            _loadEmergencyContacts();
+          },
+          borderRadius: BorderRadius.circular(16),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             decoration: BoxDecoration(
-              color: const Color(0xFFEFF6FF),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: const Icon(Icons.two_wheeler, color: Color(0xFF2563EB), size: 22),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: const [
-                Text(
-                  'Aarav Sharma • Yamaha MT-15',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF0F172A)),
-                ),
-                SizedBox(height: 2),
-                Text(
-                  'KA-05-AB-1234 • Battery Impact <1.2%/hr • 50Hz AI Active',
-                  style: TextStyle(fontSize: 10.5, color: Color(0xFF64748B)),
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.grey.shade200),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.04),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
                 ),
               ],
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF0FDF4),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: const Color(0xFF86EFAC)),
             ),
             child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: const [
-                Icon(Icons.check_circle, size: 10, color: Color(0xFF16A34A)),
-                SizedBox(width: 4),
-                Text(
-                  'PROTECTED',
-                  style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: Color(0xFF166534)),
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: iconBg,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(icon, color: iconColor, size: 24),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              '${profile.userName} • ${profile.vehicleModel}',
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5, color: Color(0xFF0F172A)),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const Icon(Icons.edit_outlined, size: 13, color: Color(0xFF94A3B8)),
+                        ],
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        '${profile.vehiclePlate} • ${profile.vehicleType} • Safe Score ${profile.safetyDrivingScore}/100',
+                        style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF0FDF4),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: const Color(0xFF86EFAC)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: const [
+                      Icon(Icons.check_circle, size: 11, color: Color(0xFF16A34A)),
+                      SizedBox(width: 4),
+                      Text(
+                        'PROTECTED',
+                        style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: Color(0xFF166534)),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildRideSafetyInsightsCard() {
+    return ValueListenableBuilder<UserProfile>(
+      valueListenable: UserProfileService.instance.profileNotifier,
+      builder: (context, profile, _) {
+        return Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.grey.shade200),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.03),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: const [
+                      Icon(Icons.insights, size: 18, color: Color(0xFF0284C7)),
+                      SizedBox(width: 6),
+                      Text(
+                        'Recent Travels & Driving Insights',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF0F172A)),
+                      ),
+                    ],
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF0FDF4),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFF86EFAC)),
+                    ),
+                    child: const Text('SAFE RIDE', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Color(0xFF166534))),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildInsightTile(
+                      label: 'TODAY TRAVEL',
+                      val: '${profile.todayDistanceKm} km',
+                      sub: 'Logged via GPS',
+                      icon: Icons.alt_route,
+                      color: const Color(0xFF0284C7),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _buildInsightTile(
+                      label: 'SAFETY SCORE',
+                      val: '${profile.safetyDrivingScore}/100',
+                      sub: 'Smooth Vector',
+                      icon: Icons.verified_user_outlined,
+                      color: const Color(0xFF16A34A),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _buildInsightTile(
+                      label: 'OVERSPEEDING',
+                      val: '${profile.overSpeedingCount}',
+                      sub: 'Zero Violations',
+                      icon: Icons.speed,
+                      color: const Color(0xFFF59E0B),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildInsightTile({
+    required String label,
+    required String val,
+    required String sub,
+    required IconData icon,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.07),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withOpacity(0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 12, color: color),
+              const SizedBox(width: 4),
+              Flexible(
+                child: Text(
+                  label,
+                  style: TextStyle(fontSize: 8.5, fontWeight: FontWeight.bold, color: color),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            val,
+            style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13, color: Color(0xFF0F172A)),
+          ),
+          Text(
+            sub,
+            style: const TextStyle(fontSize: 9, color: Color(0xFF64748B)),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),
