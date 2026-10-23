@@ -670,9 +670,9 @@ class _AmbulanceDispatchScreenState extends State<AmbulanceDispatchScreen> {
     final ambulanceLocation = LatLng(_ambulanceLat, _ambulanceLng);
 
     return Scaffold(
-      backgroundColor: const Color(0xFF070D1E),
+      backgroundColor: const Color(0xFF0B0F19),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF0A1329),
+        backgroundColor: const Color(0xFF0F172A),
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new, size: 18, color: Colors.white),

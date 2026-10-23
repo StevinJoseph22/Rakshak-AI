@@ -22,13 +22,21 @@ class RakshakAmbulanceApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         brightness: Brightness.dark,
-        scaffoldBackgroundColor: const Color(0xFF070D1F),
-        primaryColor: const Color(0xFF00E5FF),
+        scaffoldBackgroundColor: const Color(0xFF0B0F19),
+        primaryColor: const Color(0xFFDC2626),
         colorScheme: const ColorScheme.dark(
-          primary: Color(0xFF00E5FF),
-          secondary: Color(0xFFFF1744),
-          surface: Color(0xFF0E1A38),
-          background: Color(0xFF070D1F),
+          primary: Color(0xFFDC2626),
+          secondary: Color(0xFFF59E0B),
+          surface: Color(0xFF1E293B),
+          background: Color(0xFF0B0F19),
+        ),
+        cardTheme: const CardThemeData(
+          color: Color(0xFF1E293B),
+          elevation: 2,
+        ),
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Color(0xFF0F172A),
+          elevation: 0,
         ),
         useMaterial3: true,
       ),

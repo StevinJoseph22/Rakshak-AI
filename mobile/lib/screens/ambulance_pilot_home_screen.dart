@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import '../models/incident_model.dart';
+import '../services/ambulance_translations.dart';
 import '../services/api_client.dart';
 import '../services/crash_detector_service.dart';
 import 'ambulance_dispatch_screen.dart';
@@ -10,6 +11,8 @@ import 'ambulance_dispatch_screen.dart';
 /// Advanced Paramedic & Emergency Medical Services (EMS) Pilot Cockpit.
 /// Represents the dedicated, mission-critical mobile application used by
 /// ambulance pilots, emergency medical technicians (EMTs), and trauma crews.
+/// Refactored with clean high-contrast EMS theme, multi-language support (7 major Indian languages),
+/// zero clutter, and automated shift status synchronization.
 class AmbulancePilotHomeScreen extends StatefulWidget {
   final ApiClient? apiClient;
   final String ambulanceId;
@@ -37,16 +40,18 @@ class _AmbulancePilotHomeScreenState extends State<AmbulancePilotHomeScreen> {
   double _currentLat = 12.9716;
   double _currentLng = 77.5946;
 
+  // Selected Language: defaults to English (en), supports hi, kn, ta, te, ml, mr
+  String _currentLang = 'en';
+
   // Ambulance Crew & Unit Configuration
   final String _ambulancePlate = 'KA-01-EA-108';
   final String _leadParamedic = 'Ramesh Kumar (EMT-Paramedic)';
-  final String _supportEmt = 'Dr. Ananya Sen (Emergency Physician)';
   final String _baseDepot = 'Manipal Hospital HAL Rescue Station';
 
-  // Operational Shift Status
-  String _shiftStatus = 'AVAILABLE'; // AVAILABLE, EN_ROUTE, ON_SCENE, TRANSPORTING, STANDBY
-  bool _isCv2xTransmitterActive = true;
-  bool _isAutoGreenCorridorArmed = true;
+  // Operational Shift Status (AUTOMATIC: no manual dropdown needed)
+  // Transitions automatically: AVAILABLE -> EN_ROUTE -> ON_SCENE -> TRANSPORTING -> AVAILABLE
+  String _shiftStatus = 'AVAILABLE';
+  final bool _isCv2xTransmitterActive = true;
 
   // Selected Tool Tab: 0 = Dispatch Radar, 1 = Trauma Hospitals, 2 = Pre-Arrival Toolkit
   int _selectedTab = 0;
@@ -65,6 +70,15 @@ class _AmbulancePilotHomeScreenState extends State<AmbulancePilotHomeScreen> {
   void dispose() {
     _refreshTimer?.cancel();
     super.dispose();
+  }
+
+  String _t(String key) => AmbulanceTranslations.tr(key, langCode: _currentLang);
+
+  String _getCurrentLanguageNative() {
+    for (final l in AmbulanceTranslations.supportedLanguages) {
+      if (l['code'] == _currentLang) return l['native']!;
+    }
+    return 'English';
   }
 
   void _fetchLocationAndIncidents() {
@@ -149,6 +163,11 @@ class _AmbulancePilotHomeScreenState extends State<AmbulancePilotHomeScreen> {
   }
 
   void _launchDispatchMission(NearbyIncident incident) {
+    // Automatically transition shift state to EN_ROUTE
+    setState(() {
+      _shiftStatus = 'EN_ROUTE';
+    });
+
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -158,7 +177,143 @@ class _AmbulancePilotHomeScreenState extends State<AmbulancePilotHomeScreen> {
           apiClient: _apiClient,
         ),
       ),
-    ).then((_) => _fetchIncidents());
+    ).then((_) {
+      // Automatically return to AVAILABLE once mission completes or user pops back
+      setState(() {
+        _shiftStatus = 'AVAILABLE';
+      });
+      _fetchIncidents();
+    });
+  }
+
+  void _showLanguageSelector() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF1E293B),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFDC2626).withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Icon(Icons.translate, color: Color(0xFFDC2626), size: 20),
+                        ),
+                        const SizedBox(width: 10),
+                        Text(
+                          _t('select_language'),
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ],
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      icon: const Icon(Icons.close, color: Colors.white70, size: 20),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Flexible(
+                  child: ListView(
+                    shrinkWrap: true,
+                    children: AmbulanceTranslations.supportedLanguages.map((lang) {
+                      final isSelected = _currentLang == lang['code'];
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: Material(
+                          color: isSelected ? const Color(0xFFDC2626).withOpacity(0.18) : const Color(0xFF0F172A),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            side: BorderSide(
+                              color: isSelected ? const Color(0xFFDC2626) : const Color(0xFF334155),
+                              width: isSelected ? 1.5 : 1,
+                            ),
+                          ),
+                          child: ListTile(
+                            dense: true,
+                            title: Text(
+                              lang['native']!,
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: isSelected ? FontWeight.w900 : FontWeight.w600,
+                                color: isSelected ? Colors.white : const Color(0xFFE2E8F0),
+                              ),
+                            ),
+                            subtitle: Text(
+                              lang['name']!,
+                              style: const TextStyle(fontSize: 11, color: Color(0xFF94A3B8)),
+                            ),
+                            trailing: isSelected
+                                ? const Icon(Icons.check_circle, color: Color(0xFFDC2626), size: 20)
+                                : null,
+                            onTap: () {
+                              setState(() {
+                                _currentLang = lang['code']!;
+                              });
+                              Navigator.pop(ctx);
+                            },
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Color _getShiftStatusColor() {
+    switch (_shiftStatus) {
+      case 'AVAILABLE':
+        return const Color(0xFF10B981); // Emerald
+      case 'EN_ROUTE':
+        return const Color(0xFFF59E0B); // Amber
+      case 'ON_SCENE':
+        return const Color(0xFFEF4444); // Critical Red
+      case 'TRANSPORTING':
+        return const Color(0xFF38BDF8); // Sky Blue
+      default:
+        return const Color(0xFF10B981);
+    }
+  }
+
+  String _getShiftStatusLabel() {
+    switch (_shiftStatus) {
+      case 'AVAILABLE':
+        return _t('status_available');
+      case 'EN_ROUTE':
+        return _t('status_en_route');
+      case 'ON_SCENE':
+        return _t('status_on_scene');
+      case 'TRANSPORTING':
+        return _t('status_transporting');
+      default:
+        return _t('status_available');
+    }
   }
 
   @override
@@ -167,18 +322,18 @@ class _AmbulancePilotHomeScreenState extends State<AmbulancePilotHomeScreen> {
 
     return Theme(
       data: ThemeData.dark().copyWith(
-        scaffoldBackgroundColor: const Color(0xFF070D1F),
-        primaryColor: const Color(0xFF00E5FF),
+        scaffoldBackgroundColor: const Color(0xFF0B0F19),
+        primaryColor: const Color(0xFFDC2626),
         colorScheme: const ColorScheme.dark(
-          primary: Color(0xFF00E5FF),
-          secondary: Color(0xFFFF1744),
-          surface: Color(0xFF0E1A38),
-          background: Color(0xFF070D1F),
+          primary: Color(0xFFDC2626),
+          secondary: Color(0xFFF59E0B),
+          surface: Color(0xFF1E293B),
+          background: Color(0xFF0B0F19),
         ),
-        cardColor: const Color(0xFF0E1A38),
+        cardColor: const Color(0xFF1E293B),
         appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xFF0A1329),
-          elevation: 2,
+          backgroundColor: Color(0xFF0F172A),
+          elevation: 0,
         ),
       ),
       child: Scaffold(
@@ -188,8 +343,15 @@ class _AmbulancePilotHomeScreenState extends State<AmbulancePilotHomeScreen> {
               Container(
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFFF1744),
+                  color: const Color(0xFFDC2626),
                   borderRadius: BorderRadius.circular(8),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFFDC2626).withOpacity(0.4),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
                 ),
                 child: const Icon(Icons.emergency, color: Colors.white, size: 20),
               ),
@@ -217,13 +379,13 @@ class _AmbulancePilotHomeScreenState extends State<AmbulancePilotHomeScreen> {
                           height: 6,
                           decoration: const BoxDecoration(
                             shape: BoxShape.circle,
-                            color: Color(0xFF00E5FF),
+                            color: Color(0xFF10B981),
                           ),
                         ),
                         const SizedBox(width: 4),
                         Expanded(
                           child: Text(
-                            'EMS Tactical Cockpit • ${widget.ambulanceId}',
+                            '${_t('cockpit_sub')} • ${widget.ambulanceId}',
                             style: const TextStyle(fontSize: 10, color: Color(0xFF94A3B8)),
                             overflow: TextOverflow.ellipsis,
                             maxLines: 1,
@@ -237,18 +399,39 @@ class _AmbulancePilotHomeScreenState extends State<AmbulancePilotHomeScreen> {
             ],
           ),
           actions: [
+            // Quick Language Switcher Button (English / हिन्दी / ಕನ್ನಡ / தமிழ் / etc.)
+            Padding(
+              padding: const EdgeInsets.only(right: 6.0),
+              child: OutlinedButton.icon(
+                onPressed: _showLanguageSelector,
+                icon: const Icon(Icons.translate, size: 13, color: Colors.white),
+                label: Text(
+                  _getCurrentLanguageNative(),
+                  style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Colors.white),
+                ),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: Color(0xFF475569)),
+                  backgroundColor: const Color(0xFF1E293B),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  minimumSize: const Size(0, 30),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                ),
+              ),
+            ),
+
+            // Citizen App Switcher
             if (widget.onSwitchToCitizenApp != null)
               Padding(
                 padding: const EdgeInsets.only(right: 8.0),
                 child: OutlinedButton.icon(
                   onPressed: widget.onSwitchToCitizenApp,
-                  icon: const Icon(Icons.person_pin, size: 13, color: Color(0xFF00E5FF)),
-                  label: const Text(
-                    'Citizen App',
-                    style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Color(0xFF00E5FF)),
+                  icon: const Icon(Icons.person_pin, size: 13, color: Color(0xFF38BDF8)),
+                  label: Text(
+                    _t('citizen_app'),
+                    style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Color(0xFF38BDF8)),
                   ),
                   style: OutlinedButton.styleFrom(
-                    side: const BorderSide(color: Color(0xFF00E5FF)),
+                    side: const BorderSide(color: Color(0xFF38BDF8)),
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                     minimumSize: const Size(0, 30),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -259,7 +442,7 @@ class _AmbulancePilotHomeScreenState extends State<AmbulancePilotHomeScreen> {
         ),
         body: Column(
           children: [
-            // Ambulance Unit & Crew Operational HUD
+            // Ambulance Unit & Crew Operational HUD (Automatic Mission Status)
             _buildCrewCockpitHeader(),
 
             // C-V2X V2I Green Corridor Status Ribbon
@@ -290,118 +473,120 @@ class _AmbulancePilotHomeScreenState extends State<AmbulancePilotHomeScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: const BoxDecoration(
-        color: Color(0xFF0E1A38),
+        color: Color(0xFF0F172A),
         border: Border(bottom: BorderSide(color: Color(0xFF1E293B))),
       ),
-      child: Column(
+      child: Row(
         children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFDC2626),
-                  borderRadius: BorderRadius.circular(6),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.red.withOpacity(0.4),
-                      blurRadius: 6,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: const Color(0xFFDC2626),
+              borderRadius: BorderRadius.circular(6),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.red.withOpacity(0.4),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
                 ),
-                child: Text(
-                  _ambulancePlate,
+              ],
+            ),
+            child: Text(
+              _ambulancePlate,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w900,
+                fontSize: 12,
+                letterSpacing: 0.8,
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _leadParamedic,
                   style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w900,
                     fontSize: 12,
-                    letterSpacing: 0.8,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
                   ),
+                  overflow: TextOverflow.ellipsis,
                 ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _leadParamedic,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
+                Text(
+                  'Base: $_baseDepot',
+                  style: const TextStyle(fontSize: 10, color: Color(0xFF94A3B8)),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+
+          // AUTOMATIC STATUS BADGE (No manual dropdown! Clean, auto-synced)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: _getShiftStatusColor().withOpacity(0.14),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: _getShiftStatusColor(), width: 1.2),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 7,
+                  height: 7,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: _getShiftStatusColor(),
+                    boxShadow: [
+                      BoxShadow(
+                        color: _getShiftStatusColor().withOpacity(0.7),
+                        blurRadius: 4,
+                        spreadRadius: 1,
                       ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    Text(
-                      'Base: $_baseDepot',
-                      style: const TextStyle(fontSize: 10, color: Color(0xFF94A3B8)),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
-              ),
-              // Shift Status Selector Dropdown
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: _getShiftStatusColor().withOpacity(0.18),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: _getShiftStatusColor(), width: 1.2),
-                ),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<String>(
-                    value: _shiftStatus,
-                    dropdownColor: const Color(0xFF0F172A),
-                    icon: Icon(Icons.arrow_drop_down, color: _getShiftStatusColor(), size: 16),
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      color: _getShiftStatusColor(),
-                    ),
-                    onChanged: (newVal) {
-                      if (newVal != null) {
-                        setState(() => _shiftStatus = newVal);
-                      }
-                    },
-                    items: const [
-                      DropdownMenuItem(value: 'AVAILABLE', child: Text('● DISPATCH READY')),
-                      DropdownMenuItem(value: 'EN_ROUTE', child: Text('● EN ROUTE')),
-                      DropdownMenuItem(value: 'ON_SCENE', child: Text('● ON SCENE')),
-                      DropdownMenuItem(value: 'TRANSPORTING', child: Text('● IN TRANSIT')),
-                      DropdownMenuItem(value: 'STANDBY', child: Text('○ STANDBY')),
                     ],
                   ),
                 ),
-              ),
-            ],
+                const SizedBox(width: 6),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      _getShiftStatusLabel(),
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 0.5,
+                        color: _getShiftStatusColor(),
+                      ),
+                    ),
+                    Text(
+                      _t('auto_sync'),
+                      style: const TextStyle(
+                        fontSize: 7.5,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF94A3B8),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ],
       ),
     );
   }
 
-  Color _getShiftStatusColor() {
-    switch (_shiftStatus) {
-      case 'AVAILABLE':
-        return const Color(0xFF10B981); // Emerald
-      case 'EN_ROUTE':
-        return const Color(0xFFF59E0B); // Amber
-      case 'ON_SCENE':
-        return const Color(0xFFEF4444); // Critical Red
-      case 'TRANSPORTING':
-        return const Color(0xFF00E5FF); // Cyan
-      default:
-        return const Color(0xFF94A3B8); // Slate
-    }
-  }
-
   Widget _buildCv2xRibbon() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
       decoration: const BoxDecoration(
-        color: Color(0xFF0A1329),
+        color: Color(0xFF0B0F19),
         border: Border(bottom: BorderSide(color: Color(0xFF1E293B))),
       ),
       child: Row(
@@ -409,25 +594,27 @@ class _AmbulancePilotHomeScreenState extends State<AmbulancePilotHomeScreen> {
           Icon(
             _isCv2xTransmitterActive ? Icons.wifi_tethering : Icons.portable_wifi_off,
             size: 15,
-            color: _isCv2xTransmitterActive ? const Color(0xFF00E5FF) : Colors.grey,
+            color: _isCv2xTransmitterActive ? const Color(0xFF10B981) : Colors.grey,
           ),
           const SizedBox(width: 8),
-          const Expanded(
+          Expanded(
             child: Text(
-              'C-V2X OBU: 5.9 GHz DSRC Online • Dynamic Green Corridor Armed',
-              style: TextStyle(fontSize: 10.5, color: Color(0xFF00E5FF), fontWeight: FontWeight.w600),
+              _currentLang == 'en'
+                  ? 'C-V2X OBU: 5.9 GHz DSRC Online • Dynamic Green Corridor Armed'
+                  : 'C-V2X OBU: 5.9 GHz DSRC Online • ${_t('c_v2x_banner')}',
+              style: const TextStyle(fontSize: 10.5, color: Color(0xFF10B981), fontWeight: FontWeight.w600),
             ),
           ),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
             decoration: BoxDecoration(
-              color: const Color(0xFF00E5FF).withOpacity(0.12),
+              color: const Color(0xFF10B981).withOpacity(0.12),
               borderRadius: BorderRadius.circular(4),
-              border: Border.all(color: const Color(0xFF00E5FF), width: 0.8),
+              border: Border.all(color: const Color(0xFF10B981), width: 0.8),
             ),
-            child: const Text(
-              'SAE J2735 / NTCIP 1202',
-              style: TextStyle(fontSize: 8.5, fontWeight: FontWeight.bold, color: Color(0xFF00E5FF)),
+            child: Text(
+              _t('c_v2x_spec'),
+              style: const TextStyle(fontSize: 8.5, fontWeight: FontWeight.bold, color: Color(0xFF10B981)),
             ),
           ),
         ],
@@ -441,11 +628,11 @@ class _AmbulancePilotHomeScreenState extends State<AmbulancePilotHomeScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       child: Row(
         children: [
-          Expanded(child: _buildSegmentButton(0, Icons.radar, 'Dispatch Radar')),
+          Expanded(child: _buildSegmentButton(0, Icons.radar, _t('tab_radar'))),
           const SizedBox(width: 6),
-          Expanded(child: _buildSegmentButton(1, Icons.local_hospital, 'Trauma Bays')),
+          Expanded(child: _buildSegmentButton(1, Icons.local_hospital, _t('tab_trauma'))),
           const SizedBox(width: 6),
-          Expanded(child: _buildSegmentButton(2, Icons.medical_services, 'Paramedic Tools')),
+          Expanded(child: _buildSegmentButton(2, Icons.medical_services, _t('tab_tools'))),
         ],
       ),
     );
@@ -459,23 +646,27 @@ class _AmbulancePilotHomeScreenState extends State<AmbulancePilotHomeScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 8),
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFF00E5FF).withOpacity(0.15) : Colors.transparent,
+          color: isSelected ? const Color(0xFFDC2626).withOpacity(0.15) : Colors.transparent,
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
-            color: isSelected ? const Color(0xFF00E5FF) : const Color(0xFF334155),
+            color: isSelected ? const Color(0xFFDC2626) : const Color(0xFF334155),
           ),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 14, color: isSelected ? const Color(0xFF00E5FF) : const Color(0xFF94A3B8)),
-            const SizedBox(width: 5),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                color: isSelected ? const Color(0xFF00E5FF) : const Color(0xFF94A3B8),
+            Icon(icon, size: 13, color: isSelected ? const Color(0xFFEF4444) : const Color(0xFF94A3B8)),
+            const SizedBox(width: 4),
+            Flexible(
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 10.5,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                  color: isSelected ? Colors.white : const Color(0xFF94A3B8),
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ],
@@ -524,8 +715,8 @@ class _AmbulancePilotHomeScreenState extends State<AmbulancePilotHomeScreen> {
                     point: ambulanceLocation,
                     radius: 8000,
                     useRadiusInMeter: true,
-                    color: const Color(0x1800E5FF),
-                    borderColor: const Color(0x6600E5FF),
+                    color: const Color(0x1810B981),
+                    borderColor: const Color(0x6610B981),
                     borderStrokeWidth: 1.5,
                   ),
                 ],
@@ -541,7 +732,7 @@ class _AmbulancePilotHomeScreenState extends State<AmbulancePilotHomeScreen> {
                     height: 44,
                     child: Container(
                       decoration: BoxDecoration(
-                        color: const Color(0xFF00E5FF),
+                        color: const Color(0xFFDC2626),
                         shape: BoxShape.circle,
                         border: Border.all(color: Colors.white, width: 2.5),
                         boxShadow: const [
@@ -550,7 +741,7 @@ class _AmbulancePilotHomeScreenState extends State<AmbulancePilotHomeScreen> {
                       ),
                       child: const Icon(
                         Icons.directions_car,
-                        color: Colors.black,
+                        color: Colors.white,
                         size: 22,
                       ),
                     ),
@@ -596,7 +787,7 @@ class _AmbulancePilotHomeScreenState extends State<AmbulancePilotHomeScreen> {
                             ),
                             const Icon(
                               Icons.location_on,
-                              color: Color(0xFFFF1744),
+                              color: Color(0xFFDC2626),
                               size: 26,
                             ),
                           ],
@@ -616,9 +807,9 @@ class _AmbulancePilotHomeScreenState extends State<AmbulancePilotHomeScreen> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
-                color: const Color(0xF20B132B),
+                color: const Color(0xF20F172A),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: const Color(0xFF1E293B)),
+                border: Border.all(color: const Color(0xFF334155)),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -628,16 +819,16 @@ class _AmbulancePilotHomeScreenState extends State<AmbulancePilotHomeScreen> {
                     height: 6,
                     decoration: const BoxDecoration(
                       shape: BoxShape.circle,
-                      color: Color(0xFF00E5FF),
+                      color: Color(0xFF10B981),
                     ),
                   ),
                   const SizedBox(width: 6),
                   Text(
-                    'GPS RADAR: ${incidents.length} IN RANGE',
+                    '${_t('gps_radar')}: ${incidents.length} ${_t('in_range')}',
                     style: const TextStyle(
                       fontSize: 10,
                       fontWeight: FontWeight.w800,
-                      color: Color(0xFF00E5FF),
+                      color: Color(0xFF10B981),
                       letterSpacing: 0.5,
                     ),
                   ),
@@ -660,11 +851,11 @@ class _AmbulancePilotHomeScreenState extends State<AmbulancePilotHomeScreen> {
                   child: Container(
                     padding: const EdgeInsets.all(7),
                     decoration: BoxDecoration(
-                      color: const Color(0xF20B132B),
+                      color: const Color(0xF20F172A),
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(color: const Color(0xFF334155)),
                     ),
-                    child: const Icon(Icons.my_location, size: 16, color: Color(0xFF00E5FF)),
+                    child: const Icon(Icons.my_location, size: 16, color: Color(0xFF38BDF8)),
                   ),
                 ),
                 const SizedBox(width: 6),
@@ -675,7 +866,7 @@ class _AmbulancePilotHomeScreenState extends State<AmbulancePilotHomeScreen> {
                   child: Container(
                     padding: const EdgeInsets.all(7),
                     decoration: BoxDecoration(
-                      color: const Color(0xF20B132B),
+                      color: const Color(0xF20F172A),
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(color: const Color(0xFF334155)),
                     ),
@@ -714,13 +905,13 @@ class _AmbulancePilotHomeScreenState extends State<AmbulancePilotHomeScreen> {
                     height: 8,
                     decoration: const BoxDecoration(
                       shape: BoxShape.circle,
-                      color: Color(0xFFFF1744),
+                      color: Color(0xFFDC2626),
                     ),
                   ),
                   const SizedBox(width: 6),
-                  const Text(
-                    'ACTIVE INCIDENTS IN DISPATCH RADIUS',
-                    style: TextStyle(
+                  Text(
+                    _t('active_incidents'),
+                    style: const TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w900,
                       letterSpacing: 0.8,
@@ -730,8 +921,8 @@ class _AmbulancePilotHomeScreenState extends State<AmbulancePilotHomeScreen> {
                 ],
               ),
               Text(
-                'Radius: 25 km',
-                style: TextStyle(fontSize: 11, color: Colors.grey.shade400),
+                '${_t('radius')}: 25 km',
+                style: const TextStyle(fontSize: 11, color: Color(0xFF94A3B8)),
               ),
             ],
           ),
@@ -764,42 +955,38 @@ class _AmbulancePilotHomeScreenState extends State<AmbulancePilotHomeScreen> {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
         side: BorderSide(
-          color: isCritical ? const Color(0xFFFF1744) : const Color(0xFF00E5FF),
+          color: isCritical ? const Color(0xFFDC2626) : const Color(0xFF334155),
           width: 1.5,
         ),
       ),
-      elevation: 4,
+      elevation: 3,
+      color: const Color(0xFF1E293B),
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Top Badge Row (Zero Overflow Architecture)
+            // Top Badge Row: Severity + Distance / ETA (Clean, zero clutter)
             Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
-                    color: isCritical ? const Color(0xFFFF1744) : const Color(0xFFF59E0B),
-                    borderRadius: BorderRadius.circular(5),
+                    color: isCritical ? const Color(0xFFDC2626) : const Color(0xFFF59E0B),
+                    borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
-                    isCritical ? '🚨 CRITICAL SEVERITY' : '⚠️ HIGH PRIORITY',
-                    style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: Colors.white),
+                    isCritical ? _t('critical_severity') : _t('high_priority'),
+                    style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white),
                   ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    '${incident.distanceKm.toStringAsFixed(1)} km away • Est. ${(incident.distanceKm * 1.8).round()} min',
-                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF00E5FF)),
+                    '${incident.distanceKm.toStringAsFixed(1)} km ${_t('away')} • ${_t('est_time')} ${(incident.distanceKm * 1.8).round()} ${_t('min')}',
+                    style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: Color(0xFF38BDF8)),
                     overflow: TextOverflow.ellipsis,
                   ),
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  incident.id.length > 10 ? incident.id.substring(0, 10) : incident.id,
-                  style: const TextStyle(fontSize: 9.5, fontFamily: 'monospace', color: Colors.grey),
                 ),
               ],
             ),
@@ -808,13 +995,13 @@ class _AmbulancePilotHomeScreenState extends State<AmbulancePilotHomeScreen> {
             // Location & Blackspot Banner
             Row(
               children: [
-                const Icon(Icons.location_on, size: 16, color: Color(0xFFFF1744)),
+                const Icon(Icons.location_on, size: 18, color: Color(0xFFDC2626)),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
                     blackspot,
                     style: const TextStyle(
-                      fontSize: 14,
+                      fontSize: 15,
                       fontWeight: FontWeight.w900,
                       color: Colors.white,
                     ),
@@ -824,21 +1011,21 @@ class _AmbulancePilotHomeScreenState extends State<AmbulancePilotHomeScreen> {
             ),
             const SizedBox(height: 4),
             Padding(
-              padding: const EdgeInsets.only(left: 22.0),
+              padding: const EdgeInsets.only(left: 24.0),
               child: Text(
-                'Coordinates: ${incident.latitude.toStringAsFixed(4)}, ${incident.longitude.toStringAsFixed(4)} • $vehicleType',
+                '${_t('coordinates')}: ${incident.latitude.toStringAsFixed(4)}, ${incident.longitude.toStringAsFixed(4)} • $vehicleType',
                 style: const TextStyle(fontSize: 11, color: Color(0xFF94A3B8)),
               ),
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 12),
 
-            // Telemetry & Victim Quick Pill Row
+            // Telemetry & Victim Quick Pill Row (Clean, readable tiles)
             Container(
-              padding: const EdgeInsets.all(10),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               decoration: BoxDecoration(
-                color: const Color(0xFF070D1F),
+                color: const Color(0xFF0F172A),
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: const Color(0xFF1E293B)),
+                border: Border.all(color: const Color(0xFF334155)),
               ),
               child: Row(
                 children: [
@@ -846,41 +1033,48 @@ class _AmbulancePilotHomeScreenState extends State<AmbulancePilotHomeScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('VICTIM (ABHA)', style: TextStyle(fontSize: 9, color: Color(0xFF94A3B8))),
+                        Text(_t('victim'), style: const TextStyle(fontSize: 9, color: Color(0xFF94A3B8))),
                         const SizedBox(height: 2),
                         Text(
                           victimName,
-                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+                          style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: Colors.white),
                         ),
                       ],
                     ),
                   ),
-                  Container(width: 1, height: 26, color: const Color(0xFF334155)),
+                  Container(width: 1, height: 28, color: const Color(0xFF334155)),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('BLOOD GROUP', style: TextStyle(fontSize: 9, color: Color(0xFF94A3B8))),
+                        Text(_t('blood_group'), style: const TextStyle(fontSize: 9, color: Color(0xFF94A3B8))),
                         const SizedBox(height: 2),
-                        Text(
-                          bloodGroup,
-                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFFFF1744)),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFDC2626).withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            bloodGroup,
+                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: Color(0xFFEF4444)),
+                          ),
                         ),
                       ],
                     ),
                   ),
-                  Container(width: 1, height: 26, color: const Color(0xFF334155)),
+                  Container(width: 1, height: 28, color: const Color(0xFF334155)),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('PEAK IMPACT', style: TextStyle(fontSize: 9, color: Color(0xFF94A3B8))),
+                        Text(_t('peak_impact'), style: const TextStyle(fontSize: 9, color: Color(0xFF94A3B8))),
                         const SizedBox(height: 2),
                         Text(
                           netG,
-                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF00E5FF)),
+                          style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: Color(0xFFF59E0B)),
                         ),
                       ],
                     ),
@@ -895,20 +1089,21 @@ class _AmbulancePilotHomeScreenState extends State<AmbulancePilotHomeScreen> {
               width: double.infinity,
               child: ElevatedButton.icon(
                 onPressed: () => _launchDispatchMission(incident),
-                icon: const Icon(Icons.navigation_rounded, color: Colors.black, size: 18),
-                label: const Text(
-                  'CLAIM & ENGAGE C-V2X GREEN CORRIDOR',
-                  style: TextStyle(
+                icon: const Icon(Icons.navigation_rounded, color: Colors.white, size: 18),
+                label: Text(
+                  _t('claim_btn'),
+                  style: const TextStyle(
                     fontWeight: FontWeight.w900,
-                    letterSpacing: 0.8,
+                    letterSpacing: 0.6,
                     fontSize: 12,
-                    color: Colors.black,
+                    color: Colors.white,
                   ),
                 ),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF00E5FF),
+                  backgroundColor: const Color(0xFFDC2626),
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  elevation: 4,
                 ),
               ),
             ),
@@ -930,22 +1125,22 @@ class _AmbulancePilotHomeScreenState extends State<AmbulancePilotHomeScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            children: const [
-              Icon(Icons.science, size: 16, color: Color(0xFFF59E0B)),
-              SizedBox(width: 6),
+            children: [
+              const Icon(Icons.science, size: 16, color: Color(0xFFF59E0B)),
+              const SizedBox(width: 6),
               Flexible(
                 child: Text(
-                  'Paramedic Simulation Injector (Demo Mode)',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFFF59E0B)),
+                  _t('sim_title'),
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFFF59E0B)),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],
           ),
           const SizedBox(height: 4),
-          const Text(
-            'Allows evaluators to simulate claiming and executing real-world emergency missions even when no physical crash is broadcasting.',
-            style: TextStyle(fontSize: 10, color: Color(0xFF94A3B8)),
+          Text(
+            _t('sim_desc'),
+            style: const TextStyle(fontSize: 10, color: Color(0xFF94A3B8)),
           ),
           const SizedBox(height: 10),
           Row(
@@ -960,7 +1155,7 @@ class _AmbulancePilotHomeScreenState extends State<AmbulancePilotHomeScreen> {
                     side: const BorderSide(color: Color(0xFFF59E0B)),
                     padding: const EdgeInsets.symmetric(vertical: 8),
                   ),
-                  child: const Text('Simulate Silk Board Rollover', style: TextStyle(fontSize: 11, color: Color(0xFFF59E0B))),
+                  child: Text(_t('sim_btn_1'), style: const TextStyle(fontSize: 11, color: Color(0xFFF59E0B))),
                 ),
               ),
               const SizedBox(width: 8),
@@ -974,7 +1169,7 @@ class _AmbulancePilotHomeScreenState extends State<AmbulancePilotHomeScreen> {
                     side: const BorderSide(color: Color(0xFF38BDF8)),
                     padding: const EdgeInsets.symmetric(vertical: 8),
                   ),
-                  child: const Text('Simulate Highway Watchdog', style: TextStyle(fontSize: 11, color: Color(0xFF38BDF8))),
+                  child: Text(_t('sim_btn_2'), style: const TextStyle(fontSize: 11, color: Color(0xFF38BDF8))),
                 ),
               ),
             ],
@@ -1022,14 +1217,20 @@ class _AmbulancePilotHomeScreenState extends State<AmbulancePilotHomeScreen> {
     return ListView(
       padding: const EdgeInsets.all(12),
       children: [
-        const Text(
-          'LEVEL-1 TRAUMA HUBS • DIRECT PARAMEDIC HOTLINES',
-          style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 0.8, color: Color(0xFF94A3B8)),
+        Text(
+          _currentLang == 'en'
+              ? 'LEVEL-1 TRAUMA HUBS • DIRECT PARAMEDIC HOTLINES'
+              : 'LEVEL-1 TRAUMA HUBS • ${_t('trauma_title')}',
+          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 0.8, color: Color(0xFF94A3B8)),
         ),
         const SizedBox(height: 10),
         ...hospitals.map((h) => Card(
               margin: const EdgeInsets.only(bottom: 12),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: const BorderSide(color: Color(0xFF334155)),
+              ),
+              color: const Color(0xFF1E293B),
               child: Padding(
                 padding: const EdgeInsets.all(14),
                 child: Column(
@@ -1037,7 +1238,7 @@ class _AmbulancePilotHomeScreenState extends State<AmbulancePilotHomeScreen> {
                   children: [
                     Row(
                       children: [
-                        const Icon(Icons.local_hospital, color: Color(0xFFFF1744), size: 20),
+                        const Icon(Icons.local_hospital, color: Color(0xFFDC2626), size: 20),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
@@ -1048,19 +1249,19 @@ class _AmbulancePilotHomeScreenState extends State<AmbulancePilotHomeScreen> {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF00E5FF).withOpacity(0.15),
+                            color: const Color(0xFF38BDF8).withOpacity(0.15),
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Text(
                             h['distance']!,
-                            style: const TextStyle(color: Color(0xFF00E5FF), fontWeight: FontWeight.bold, fontSize: 11),
+                            style: const TextStyle(color: Color(0xFF38BDF8), fontWeight: FontWeight.bold, fontSize: 11),
                           ),
                         ),
                       ],
                     ),
                     const SizedBox(height: 4),
                     Text(h['type']!, style: const TextStyle(fontSize: 11, color: Color(0xFF94A3B8))),
-                    const Divider(height: 16, color: Color(0xFF1E293B)),
+                    const Divider(height: 16, color: Color(0xFF334155)),
                     Row(
                       children: [
                         const Icon(Icons.check_circle_outline, size: 14, color: Color(0xFF10B981)),
@@ -1079,7 +1280,7 @@ class _AmbulancePilotHomeScreenState extends State<AmbulancePilotHomeScreen> {
                     const SizedBox(height: 4),
                     Row(
                       children: [
-                        const Icon(Icons.bloodtype_outlined, size: 14, color: Color(0xFFFF1744)),
+                        const Icon(Icons.bloodtype_outlined, size: 14, color: Color(0xFFDC2626)),
                         const SizedBox(width: 6),
                         Expanded(child: Text(h['blood_bank']!, style: const TextStyle(fontSize: 11, color: Color(0xFFE2E8F0)), overflow: TextOverflow.ellipsis)),
                       ],
@@ -1092,21 +1293,21 @@ class _AmbulancePilotHomeScreenState extends State<AmbulancePilotHomeScreen> {
                             onPressed: () {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
-                                  backgroundColor: const Color(0xFF00E5FF),
+                                  backgroundColor: const Color(0xFF10B981),
                                   content: Text(
-                                    'Trauma Hotline Initialized: Dialing ${h['hotline']}...',
-                                    style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+                                    '${_t('call_connecting')} ${h['hotline']}...',
+                                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
                                   ),
                                 ),
                               );
                             },
-                            icon: const Icon(Icons.phone, size: 16, color: Color(0xFF00E5FF)),
+                            icon: const Icon(Icons.phone, size: 16, color: Color(0xFF38BDF8)),
                             label: Text(
-                              'Dial Trauma Bay (${h['hotline']})',
-                              style: const TextStyle(fontSize: 11, color: Color(0xFF00E5FF)),
+                              '${_t('dial_trauma')} (${h['hotline']})',
+                              style: const TextStyle(fontSize: 11, color: Color(0xFF38BDF8)),
                             ),
                             style: OutlinedButton.styleFrom(
-                              side: const BorderSide(color: Color(0xFF00E5FF)),
+                              side: const BorderSide(color: Color(0xFF38BDF8)),
                               padding: const EdgeInsets.symmetric(vertical: 8),
                             ),
                           ),
@@ -1137,158 +1338,173 @@ class _AmbulancePilotHomeScreenState extends State<AmbulancePilotHomeScreen> {
           ),
           const SizedBox(height: 10),
 
-        // Tool 1: ABHA Cryptographic Health Passport Decryptor
-        Card(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: const [
-                    Icon(Icons.lock_open_rounded, color: Color(0xFF00E5FF), size: 20),
-                    SizedBox(width: 8),
-                    Text(
-                      'ABHA Medical Vault Decryptor',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                const Text(
-                  'Instantly extract verified victim blood group, critical anaphylaxis drug allergies, and chronic medical history under Ayushman Bharat Digital Mission (ABDM).',
-                  style: TextStyle(fontSize: 11, color: Color(0xFF94A3B8)),
-                ),
-                const SizedBox(height: 10),
-                OutlinedButton.icon(
-                  onPressed: () {
-                    showDialog(
-                      context: context,
-                      builder: (ctx) => AlertDialog(
-                        backgroundColor: const Color(0xFF0E1A38),
-                        title: const Text('ABHA Vault Decrypted', style: TextStyle(color: Colors.white)),
-                        content: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: const [
-                            Text('Patient: Aarav Sharma (34M)', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                            Text('ABHA ID: 91-8842-9912-3401', style: TextStyle(color: Color(0xFF00E5FF), fontSize: 12)),
-                            SizedBox(height: 8),
-                            Text('Blood Group: B+ Positive', style: TextStyle(color: Color(0xFFFF1744), fontWeight: FontWeight.bold)),
-                            Text('Allergies: Penicillin Anaphylaxis, Sulfa Drugs', style: TextStyle(color: Colors.amber, fontWeight: FontWeight.w600)),
-                            Text('Chronic Conditions: Type-1 Diabetes', style: TextStyle(color: Colors.white70)),
-                            SizedBox(height: 8),
-                            Text('Emergency Contact: Priya Sharma (+91 98765 43210)', style: TextStyle(color: Colors.greenAccent)),
+          // Tool 1: ABHA Cryptographic Health Passport Decryptor
+          Card(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: const BorderSide(color: Color(0xFF334155)),
+            ),
+            color: const Color(0xFF1E293B),
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: const [
+                      Icon(Icons.lock_open_rounded, color: Color(0xFF38BDF8), size: 20),
+                      SizedBox(width: 8),
+                      Text(
+                        'ABHA Medical Vault Decryptor',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    _t('abha_desc'),
+                    style: const TextStyle(fontSize: 11, color: Color(0xFF94A3B8)),
+                  ),
+                  const SizedBox(height: 10),
+                  OutlinedButton.icon(
+                    onPressed: () {
+                      showDialog(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          backgroundColor: const Color(0xFF1E293B),
+                          title: const Text('ABHA Vault Decrypted', style: TextStyle(color: Colors.white)),
+                          content: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: const [
+                              Text('Patient: Aarav Sharma (34M)', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                              Text('ABHA ID: 91-8842-9912-3401', style: TextStyle(color: Color(0xFF38BDF8), fontSize: 12)),
+                              SizedBox(height: 8),
+                              Text('Blood Group: B+ Positive', style: TextStyle(color: Color(0xFFDC2626), fontWeight: FontWeight.bold)),
+                              Text('Allergies: Penicillin Anaphylaxis, Sulfa Drugs', style: TextStyle(color: Colors.amber, fontWeight: FontWeight.w600)),
+                              Text('Chronic Conditions: Type-1 Diabetes', style: TextStyle(color: Colors.white70)),
+                              SizedBox(height: 8),
+                              Text('Emergency Contact: Priya Sharma (+91 98765 43210)', style: TextStyle(color: Colors.greenAccent)),
+                            ],
+                          ),
+                          actions: [
+                            TextButton(onPressed: () => Navigator.pop(ctx), child: Text(_t('close'))),
                           ],
                         ),
-                        actions: [
-                          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close')),
-                        ],
-                      ),
-                    );
-                  },
-                  icon: const Icon(Icons.qr_code_scanner, size: 16, color: Color(0xFF00E5FF)),
-                  label: const Text('Decrypt Patient ABHA Record', style: TextStyle(fontSize: 11, color: Color(0xFF00E5FF))),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 10),
-
-        // Tool 2: C-V2X Green Wave Signal Request Message (SRM) Force Trigger
-        Card(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: const [
-                    Icon(Icons.traffic, color: Color(0xFF10B981), size: 20),
-                    SizedBox(width: 8),
-                    Text(
-                      'C-V2X Green Corridor Signal Force',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white),
+                      );
+                    },
+                    icon: const Icon(Icons.qr_code_scanner, size: 16, color: Color(0xFF38BDF8)),
+                    label: Text(_t('abha_btn'), style: const TextStyle(fontSize: 11, color: Color(0xFF38BDF8))),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Color(0xFF38BDF8)),
                     ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                const Text(
-                  'Transmits emergency preemption requests (SRM) to next 3 municipal traffic controllers to lock solid green phases along vehicle vector.',
-                  style: TextStyle(fontSize: 11, color: Color(0xFF94A3B8)),
-                ),
-                const SizedBox(height: 10),
-                ElevatedButton.icon(
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        backgroundColor: Color(0xFF10B981),
-                        content: Text(
-                          '⚡ SRM Signal Preemption Broadcast: 3 Intersections Locked GREEN along Silk Board vector.',
-                          style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                    );
-                  },
-                  icon: const Icon(Icons.flash_on, size: 16, color: Colors.black),
-                  label: const Text(
-                    'FORCE PREEMPT NEXT SIGNALS (GREEN WAVE)',
-                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.black),
                   ),
-                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF10B981)),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
-        ),
-        const SizedBox(height: 10),
+          const SizedBox(height: 10),
 
-        // Tool 3: Paramedic Patient Vitals Telemetry Broadcast
-        Card(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: const [
-                    Icon(Icons.monitor_heart, color: Color(0xFFFF1744), size: 20),
-                    SizedBox(width: 8),
-                    Text(
-                      'Live Pre-Arrival Vitals Streamer',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white),
+          // Tool 2: C-V2X Green Wave Signal Request Message (SRM) Force Trigger
+          Card(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: const BorderSide(color: Color(0xFF334155)),
+            ),
+            color: const Color(0xFF1E293B),
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: const [
+                      Icon(Icons.traffic, color: Color(0xFF10B981), size: 20),
+                      SizedBox(width: 8),
+                      Text(
+                        'C-V2X Green Corridor Signal Force',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    _t('signal_force_desc'),
+                    style: const TextStyle(fontSize: 11, color: Color(0xFF94A3B8)),
+                  ),
+                  const SizedBox(height: 10),
+                  ElevatedButton.icon(
+                    onPressed: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          backgroundColor: Color(0xFF10B981),
+                          content: Text(
+                            '⚡ SRM Signal Preemption Broadcast: 3 Intersections Locked GREEN along Silk Board vector.',
+                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.flash_on, size: 16, color: Colors.white),
+                    label: Text(
+                      _t('signal_force_btn'),
+                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white),
                     ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                const Text(
-                  'Synchronizes real-time patient heart rate, blood pressure, SpO2, and Glasgow Coma Scale directly with receiving trauma surgeons.',
-                  style: TextStyle(fontSize: 11, color: Color(0xFF94A3B8)),
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    _buildVitalBadge('HR: 84 bpm', Icons.favorite, const Color(0xFFFF1744)),
-                    const SizedBox(width: 8),
-                    _buildVitalBadge('BP: 120/80', Icons.speed, const Color(0xFF00E5FF)),
-                    const SizedBox(width: 8),
-                    _buildVitalBadge('SpO2: 98%', Icons.air, const Color(0xFF10B981)),
-                    const SizedBox(width: 8),
-                    _buildVitalBadge('GCS: 14/15', Icons.psychology, const Color(0xFFF59E0B)),
-                  ],
-                ),
-              ],
+                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF10B981)),
+                  ),
+                ],
+              ),
             ),
           ),
-        ),
-      ],
-    ),
-  );
-}
+          const SizedBox(height: 10),
+
+          // Tool 3: Paramedic Patient Vitals Telemetry Broadcast
+          Card(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: const BorderSide(color: Color(0xFF334155)),
+            ),
+            color: const Color(0xFF1E293B),
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: const [
+                      Icon(Icons.monitor_heart, color: Color(0xFFDC2626), size: 20),
+                      SizedBox(width: 8),
+                      Text(
+                        'Live Pre-Arrival Vitals Streamer',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    _t('vitals_desc'),
+                    style: const TextStyle(fontSize: 11, color: Color(0xFF94A3B8)),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      _buildVitalBadge('HR: 84 bpm', Icons.favorite, const Color(0xFFDC2626)),
+                      const SizedBox(width: 8),
+                      _buildVitalBadge('BP: 120/80', Icons.speed, const Color(0xFF38BDF8)),
+                      const SizedBox(width: 8),
+                      _buildVitalBadge('SpO2: 98%', Icons.air, const Color(0xFF10B981)),
+                      const SizedBox(width: 8),
+                      _buildVitalBadge('GCS: 14/15', Icons.psychology, const Color(0xFFF59E0B)),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _buildVitalBadge(String text, IconData icon, Color color) {
     return Expanded(
