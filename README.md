@@ -11,6 +11,9 @@
 [![NTCIP](https://img.shields.io/badge/Traffic%20Standard-NTCIP%201202%20%2F%20ISO%2019091-00599E)](https://www.standards.its.dot.gov/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
+> 📘 **Looking for the in-depth codebase explanation & architectural walkthrough?**  
+> Read our comprehensive [**Codebase Architecture & Implementation Guide (README_CODEBASE_EXPLAINED.md)**](README_CODEBASE_EXPLAINED.md) covering file-by-file explanations, 50Hz kinematic sensor fusion math, PostGIS spatial queries, 30m TTL offline queue, and C-V2X green corridors.
+
 ---
 
 ## 🚨 The Problem: The Golden Hour Breakdown
