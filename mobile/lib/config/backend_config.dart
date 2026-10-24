@@ -28,16 +28,18 @@ const String kDefaultBackendUrl = String.fromEnvironment(
 
 /// Workstation Wi-Fi / Hotspot LAN IP for physical device testing without ADB reverse.
 /// Current active Wi-Fi IP on workstation:
-const String kDemoWorkstationIp = 'http://192.168.1.21:5000';
-const String kDemoWorkstationAltIp = 'http://10.137.61.149:5000';
+const String kDemoWorkstationIp = 'http://172.22.18.71:5000';
+const String kDemoWorkstationAltIp = 'http://192.168.1.21:5000';
 
 /// Ordered list of candidate backend URLs attempted during network failover:
 List<String> getBackendCandidates([String? overrideBaseUrl]) {
   return <String>[
     if (gActiveBackendUrl != null) gActiveBackendUrl!,
-    kDemoWorkstationIp,      // 1. Primary Wi-Fi LAN IP (192.168.1.21:5000)
+    kDemoWorkstationIp,      // 1. Current Wi-Fi LAN IP (172.22.18.71:5000)
     'http://127.0.0.1:5000', // 2. Fast path: 0ms latency when `adb reverse tcp:5000 tcp:5000` is active
-    kDemoWorkstationAltIp,   // 3. Alternate hotspot / college Wi-Fi (10.137.61.149:5000)
+    'http://192.168.56.1:5000', // 3. Host-only / Virtual adapter
+    kDemoWorkstationAltIp,   // 4. Alternate Wi-Fi LAN IP (192.168.1.21:5000)
+    'http://10.137.61.149:5000',
     'http://10.167.12.149:5000',
     'http://10.215.58.149:5000',
     'http://192.168.43.149:5000', // Common Android hotspot range
