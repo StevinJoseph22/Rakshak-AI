@@ -33,7 +33,7 @@ In vehicular trauma accidents, **50% of fatalities occur within the first 60 min
 
 ```
        [ Victim Smartphone (Locked) ]
-                     │  High-G Collision (≥6.5G + Speed Drop to 0)
+                     │  High-G Collision (≥4.8G + Speed Drop to 0)
                      ▼
   ┌──────────────────────────────────────────────────────────────┐
   │  1. SUB-SECOND PRE-ALERT: "impact_suspected" -> Police Room  │
