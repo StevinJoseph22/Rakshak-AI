@@ -119,3 +119,26 @@ export interface EmergencyHealthCard {
   is_linked?: boolean;
 }
 
+
+
+// Trauma Facility Capabilities & Clinical Triage Matching
+export interface HospitalCapabilities {
+  ct_scan: boolean;
+  mri: boolean;
+  neuro_icu: boolean;
+  blood_bank: boolean;
+  ortho_ot: boolean;
+  fast_ultrasound: boolean;
+  ventilators: boolean;
+  general_surgery: boolean;
+}
+
+export interface CapabilityMatchResult {
+  hasMismatch: boolean;
+  severity: 'CRITICAL' | 'WARNING' | 'MATCHED';
+  suspectedInjuryTitle: string;
+  suspectedInjuryDescription: string;
+  missingEquipmentNames: string[];
+  advisoryText: string;
+  recommendedAction: string;
+}

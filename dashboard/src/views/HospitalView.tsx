@@ -16,6 +16,11 @@ import { getStoredUser, clearStoredSession, AuthUser, authFetch } from '../servi
 import { LoginView } from '../components/LoginView';
 import { IncidentCard } from '../components/IncidentCard';
 import { ReconnectingBanner } from '../components/ReconnectingBanner';
+import {
+  HospitalCapabilityManager,
+  DEFAULT_HOSPITAL_CAPABILITIES,
+} from '../components/HospitalCapabilityManager';
+import { HospitalCapabilities } from '../types';
 
 export const HospitalView: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(() => {
@@ -44,6 +49,26 @@ export const HospitalView: React.FC = () => {
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
   const [lastAlertFlash, setLastAlertFlash] = useState<boolean>(false);
   const [filterMode, setFilterMode] = useState<'all' | 'action_required' | 'accepted'>('all');
+  const [isCapabilityManagerExpanded, setIsCapabilityManagerExpanded] = useState<boolean>(true);
+  const [hospitalCapabilities, setHospitalCapabilities] = useState<HospitalCapabilities>(() => {
+    try {
+      const user = getStoredUser();
+      const hId = (user && user.role === 'hospital_staff' && user.hospital_id) || 'default';
+      const saved = localStorage.getItem(`rakshak_hospital_capabilities_${hId}`);
+      return saved ? JSON.parse(saved) : DEFAULT_HOSPITAL_CAPABILITIES;
+    } catch {
+      return DEFAULT_HOSPITAL_CAPABILITIES;
+    }
+  });
+
+  const handleCapabilitiesChange = (updated: HospitalCapabilities) => {
+    setHospitalCapabilities(updated);
+    try {
+      localStorage.setItem(`rakshak_hospital_capabilities_${selectedHospitalId}`, JSON.stringify(updated));
+    } catch {
+      // ignore
+    }
+  };
 
   // Audio Context Ref for instant emergency buzzer/chime without external files
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -956,6 +981,15 @@ export const HospitalView: React.FC = () => {
         </div>
       </div>
 
+      {/* Real-Time Hospital Trauma Bay Capabilities & Readiness Matrix */}
+      <HospitalCapabilityManager
+        hospitalName={currentUser.hospital_name || selectedHospital?.name || 'Assigned Trauma Facility'}
+        capabilities={hospitalCapabilities}
+        onChange={handleCapabilitiesChange}
+        isExpanded={isCapabilityManagerExpanded}
+        onToggleExpand={() => setIsCapabilityManagerExpanded(!isCapabilityManagerExpanded)}
+      />
+
       {/* Clinical KPI Status Deck */}
       <div
         style={{
@@ -1119,6 +1153,7 @@ export const HospitalView: React.FC = () => {
                 incident={incident}
                 viewMode="hospital"
                 currentHospitalId={selectedHospitalId}
+                capabilities={hospitalCapabilities}
                 onAccept={handleAcceptEmergency}
                 onReject={handleRejectEmergency}
                 isAccepting={acceptingIncidentId === incident.id}

@@ -22,11 +22,12 @@ import {
   Layers,
   Stethoscope,
 } from 'lucide-react';
-import { IncidentPayload, Hospital, EmergencyHealthCard, HealthCardField } from '../types';
+import { IncidentPayload, Hospital, EmergencyHealthCard, HealthCardField, HospitalCapabilities, CapabilityMatchResult } from '../types';
 import { getSocket, BACKEND_API_BASE } from '../services/socket';
 import { authFetch } from '../services/auth';
 import { IncidentRouteMap } from './IncidentRouteMap';
 import { formatTimeSafe, formatDateTimeSafe } from '../utils/dateUtils';
+import { evaluateTraumaReadiness } from './HospitalCapabilityManager';
 
 const REJECTION_REASONS = [
   'No ICU capacity',
@@ -59,6 +60,7 @@ interface IncidentCardProps {
   onAccept?: (incidentId: string) => Promise<void> | void;
   onReject?: (incidentId: string, reason: string) => Promise<void> | void;
   isAccepting?: boolean;
+  capabilities?: HospitalCapabilities;
 }
 
 export const IncidentCard: React.FC<IncidentCardProps> = ({
@@ -68,9 +70,24 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
   onAccept,
   onReject,
   isAccepting = false,
+  capabilities,
 }) => {
   const [isLightboxOpen, setIsLightboxOpen] = useState<boolean>(false);
   const [isRejectModalOpen, setIsRejectModalOpen] = useState<boolean>(false);
+  const [isCapabilityAdvisoryModalOpen, setIsCapabilityAdvisoryModalOpen] = useState<boolean>(false);
+
+  const capabilityMatch: CapabilityMatchResult | null =
+    viewMode === 'hospital' && capabilities
+      ? evaluateTraumaReadiness(incident, capabilities)
+      : null;
+
+  const handleAcceptClick = () => {
+    if (capabilityMatch && capabilityMatch.hasMismatch) {
+      setIsCapabilityAdvisoryModalOpen(true);
+    } else if (onAccept) {
+      onAccept(incident.id);
+    }
+  };
   const [selectedRejectReason, setSelectedRejectReason] = useState<string>('No ICU capacity');
   const [isSubmittingReject, setIsSubmittingReject] = useState<boolean>(false);
   const [localImageUrl, setLocalImageUrl] = useState<string | null>(incident.imageUrl || null);
@@ -1008,13 +1025,13 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
 
                 <button
                   type="button"
-                  onClick={() => onAccept && onAccept(incident.id)}
+                  onClick={handleAcceptClick}
                   disabled={isAccepting}
                   style={{
                     display: 'inline-flex',
                     alignItems: 'center',
                     gap: '0.45rem',
-                    background: isAccepting ? '#86efac' : '#16a34a',
+                    background: isAccepting ? '#86efac' : capabilityMatch?.hasMismatch ? '#dc2626' : '#16a34a',
                     color: '#ffffff',
                     border: 'none',
                     borderRadius: '0.375rem',
@@ -1022,11 +1039,15 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
                     fontSize: '0.85rem',
                     fontWeight: 800,
                     cursor: isAccepting ? 'not-allowed' : 'pointer',
-                    boxShadow: '0 2px 6px rgba(22, 163, 74, 0.3)',
+                    boxShadow: capabilityMatch?.hasMismatch ? '0 2px 6px rgba(220, 38, 38, 0.3)' : '0 2px 6px rgba(22, 163, 74, 0.3)',
                   }}
                 >
                   <Check size={16} />
-                  {isAccepting ? 'Accepting Dispatch...' : 'ACCEPT EMERGENCY CASE'}
+                  {isAccepting
+                    ? 'Accepting Dispatch...'
+                    : capabilityMatch?.hasMismatch
+                    ? 'REVIEW & ACCEPT CASE'
+                    : 'ACCEPT EMERGENCY CASE'}
                 </button>
               </div>
             </div>
@@ -1888,6 +1909,206 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
                   borderRadius: '0.375rem',
                 }}
               />
+            </div>
+          </div>
+        </div>
+      )}
+
+
+      {/* Phase 23: Clinical Capability Mismatch Advisory Modal */}
+      {isCapabilityAdvisoryModalOpen && capabilityMatch && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.75)',
+            backdropFilter: 'blur(3px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            padding: '1rem',
+          }}
+        >
+          <div
+            style={{
+              background: '#ffffff',
+              borderRadius: '0.75rem',
+              padding: '1.75rem',
+              width: '100%',
+              maxWidth: '540px',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+              border: '2px solid #ef4444',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                <div
+                  style={{
+                    width: '2.5rem',
+                    height: '2.5rem',
+                    borderRadius: '0.5rem',
+                    background: '#fee2e2',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#dc2626',
+                  }}
+                >
+                  <AlertTriangle size={24} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: '#991b1b' }}>
+                    Clinical Capability Mismatch Alert
+                  </h3>
+                  <div style={{ fontSize: '0.78rem', color: '#64748b' }}>
+                    Incident #{incident.id.slice(0, 8)} • AI Biomechanical Triage
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsCapabilityAdvisoryModalOpen(false)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div
+              style={{
+                background: '#fef2f2',
+                border: '1px solid #fecaca',
+                borderRadius: '0.5rem',
+                padding: '1rem',
+                marginBottom: '1.25rem',
+              }}
+            >
+              <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#991b1b', marginBottom: '0.35rem' }}>
+                🩺 Suspected Injury: {capabilityMatch.suspectedInjuryTitle}
+              </div>
+              <p style={{ margin: '0 0 0.65rem 0', fontSize: '0.825rem', color: '#7f1d1d', lineHeight: 1.45 }}>
+                {capabilityMatch.suspectedInjuryDescription}
+              </p>
+              <div
+                style={{
+                  padding: '0.5rem 0.75rem',
+                  background: '#ffffff',
+                  borderRadius: '0.375rem',
+                  border: '1px solid #fca5a5',
+                  fontSize: '0.8rem',
+                  color: '#991b1b',
+                  fontWeight: 600,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                }}
+              >
+                <strong>Missing at Your Facility:</strong>
+                <span style={{ color: '#dc2626', textDecoration: 'underline' }}>
+                  {capabilityMatch.missingEquipmentNames.join(', ')} (Marked OFFLINE)
+                </span>
+              </div>
+            </div>
+
+            <div
+              style={{
+                fontSize: '0.85rem',
+                color: '#334155',
+                lineHeight: 1.5,
+                marginBottom: '1.5rem',
+                background: '#f8fafc',
+                padding: '0.85rem',
+                borderRadius: '0.5rem',
+                border: '1px solid #e2e8f0',
+              }}
+            >
+              <div style={{ fontWeight: 700, color: '#0f172a', marginBottom: '0.3rem' }}>
+                Golden Hour Clinical Risk Advisory:
+              </div>
+              {capabilityMatch.advisoryText}
+              <div style={{ marginTop: '0.5rem', fontSize: '0.82rem', color: '#475569' }}>
+                <strong>Recommendation:</strong> {capabilityMatch.recommendedAction}
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!onReject) return;
+                  setIsCapabilityAdvisoryModalOpen(false);
+                  await onReject(
+                    incident.id,
+                    `Diverted to Apex Center: Missing ${capabilityMatch.missingEquipmentNames.join(', ')} for ${capabilityMatch.suspectedInjuryTitle}`
+                  );
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '0.5rem',
+                  padding: '0.75rem 1.25rem',
+                  borderRadius: '0.45rem',
+                  border: '1.5px solid #2563eb',
+                  background: '#eff6ff',
+                  color: '#1d4ed8',
+                  fontSize: '0.88rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  boxShadow: '0 2px 4px rgba(37, 99, 235, 0.1)',
+                }}
+              >
+                🔀 Divert to Apex Neuro Trauma Center (NIMHANS / BMCRI)
+              </button>
+
+              <div style={{ display: 'flex', gap: '0.65rem' }}>
+                <button
+                  type="button"
+                  onClick={() => setIsCapabilityAdvisoryModalOpen(false)}
+                  style={{
+                    flex: 1,
+                    padding: '0.65rem 1rem',
+                    borderRadius: '0.45rem',
+                    border: '1px solid #cbd5e1',
+                    background: '#ffffff',
+                    color: '#475569',
+                    fontSize: '0.85rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setIsCapabilityAdvisoryModalOpen(false);
+                    if (onAccept) {
+                      await onAccept(incident.id);
+                    }
+                  }}
+                  disabled={isAccepting}
+                  style={{
+                    flex: 1.5,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '0.45rem',
+                    padding: '0.65rem 1rem',
+                    borderRadius: '0.45rem',
+                    border: 'none',
+                    background: '#dc2626',
+                    color: '#ffffff',
+                    fontSize: '0.85rem',
+                    fontWeight: 700,
+                    cursor: isAccepting ? 'not-allowed' : 'pointer',
+                    boxShadow: '0 2px 6px rgba(220, 38, 38, 0.3)',
+                  }}
+                >
+                  ⚠️ Accept (Stabilize & Transfer Protocol)
+                </button>
+              </div>
             </div>
           </div>
         </div>
