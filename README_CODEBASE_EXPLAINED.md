@@ -72,7 +72,7 @@ Every vehicular accident progresses through an immutable state machine designed 
 
 ```mermaid
 stateDiagram-v2
-    [*] --> detected: High-G Collision Spike (>=6.5g)
+    [*] --> detected: High-G Collision Spike (>=4.8g)
     detected --> suspected: Sub-second Pre-Alert Microburst
     
     note right of suspected
