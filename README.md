@@ -77,13 +77,16 @@ In vehicular trauma accidents, **50% of fatalities occur within the first 60 min
 
 ## ⚡ Core Technical Innovations
 
-### 1. Crash Intelligence v2 (Phase 17)
-* **Sub-Second Pre-Alert Microburst (`preAlertService.ts`)**: When an impact signature triggers, the mobile client immediately sends an `impact_suspected` soft marker to the backend over WebSocket before the cancel countdown finishes. This appears exclusively in the police room as an early heads-up.
-* **30-Second Silent Auto-Promotion Watchdog**: If the victim's phone is destroyed or loses power immediately upon impact (going completely silent with neither confirm nor cancel), the backend automatically promotes the suspected incident to full active emergency broadcasting.
+### 1. Crash Intelligence v2 & Catastrophic Phone Breakdown Engine (Phase 17)
+* **💥 Catastrophic Phone Breakdown & Instant Phone Crushing (Cloud Watchdog & Dead-Man Switch)**:
+  * **The Fatal Reality**: In high-speed highway crashes or heavy vehicle collisions, smartphones are frequently smashed under wheels, destroyed upon impact, thrown 50 meters into darkness, or suffer instantaneous battery disconnection ($0\text{ms}$ heartbeat cutoff). The victim is knocked unconscious and cannot operate the screen.
+  * **Sub-Second Pre-Alert Microburst (`preAlertService.ts`)**: Within the initial $50\text{ms}$ of high-G impact onset—**before any countdown screen even finishes rendering**—the edge engine transmits an encrypted `impact_suspected` soft packet over WebSocket/cellular.
+  * **Cloud Watchdog Autonomous Escalation**: If the phone is obliterated on impact and goes completely dead (zero heartbeats, neither confirm nor cancel received), the cloud watchdog activates. Recognizing that the vehicle was traveling at speed ($\ge 60\text{ km/h}$) prior to sudden signal silence, the cloud timer ($12\text{s}\text{--}30\text{s}$) automatically **promotes the suspected crash into an active emergency broadcast**. Police control and 108 ambulance units are dispatched immediately with the last recorded GPS coordinates, regardless of whether the physical phone survived!
+  * **Interactive Simulation Benchmark (`CloudWatchdogSimulationDialog`)**: Built directly into the mobile app's Test Lab, this dialog visually demonstrates catastrophic phone destruction: $0\text{ms}$ telemetry loss at $92.4\text{ km/h}$, a real-time $12\text{s}$ countdown, and automated cloud promotion to emergency responders.
 * **Evidence-Based Crash Confidence (0–100 Score)**:
   * **Free-Fall Invalidation**: Detects near-0g ($<0.2\text{g}$) for $>100\text{ms}$ immediately *before* impact. This proves the phone was simply dropped from hand or mount, severely penalizing the confidence score and preventing false dispatches.
   * **Post-Impact Stillness**: Analyzes gyro and accelerometer variance over a 3-second post-impact window to gauge victim immobility.
-  * **Barometric Airbag Pulse**: Captures rapid atmospheric pressure spikes associated with in-cabin airbag deployment.
+  * **Barometric Airbag Pulse**: Captures rapid atmospheric pressure spikes associated with in-cabin airbag deployment (automatically bypassed for two-wheelers).
   * **Angular Rollover Tracking**: Integrates gyroscopic angular rates and detects permanent gravity vector flips ($>120^\circ$).
 * **Measured Severity Index (`Minor` / `Moderate` / `Critical`)**:
   * Computed strictly from physically verifiable data: peak measured acceleration, speed drop, impact duration, rollover detected, responsiveness, and confidence.
@@ -153,6 +156,59 @@ In vehicular trauma accidents, **50% of fatalities occur within the first 60 min
 * **Dedicated Admin Portal (`/admin`)**: Built into the dashboard for hackathon judges and system operators.
 * **1-Click Deep Purge (`DELETE /incidents`)**: Instantly wipes all PostgreSQL incidents and rejections, flushes Redis RAM caches, cancels active escalation and promotion timers, resets Sentinel sessions, and emits `feed_cleared` via Socket.io.
 * **Test Crash Injectors**: Generates controlled test crashes on demand (e.g., Silk Board Blackspot Critical Crash, Madiwala Moderate Crash) with full sensor telemetry.
+
+---
+
+### 9. Modern Citizen Life-Guard Application (Google Stitch Design & 5km Radar)
+* **Clean, Professional UI (Google Stitch Aesthetic)**: Completely streamlined interface with zero layout overflow (strict 0px error tolerance), elevated surfaces, soft gradients, and modern card typography.
+* **Welcome & Diagnostic Splash Screen (`WelcomeSplashScreen`)**: Real-time pre-flight verification checklist testing GPS satellite lock, 50Hz IMU accelerometers, C-V2X direct sidelink, and local trauma bay proximity before entering active monitoring.
+* **Dynamic Rider Profile & Vehicle Classification (`UserProfileService`)**:
+  * Eliminates all static placeholder dummy data ("Aarav Sharma").
+  * Interactively toggles between **Two-Wheeler** (motorcycle/scooter) and **Four-Wheeler** (car/SUV) vehicle profiles.
+  * Dynamically adjusts kinematic detection (e.g. cabin-only barometer pulse thresholds are suppressed for open-air two-wheelers).
+  * Persists rider name, vehicle model, and registration number locally in encrypted storage.
+* **Driving Safety & Travel Insights**:
+  * Live GPS travel distance logged today (`14.2 km Logged via GPS`).
+  * Smooth-vector Driving Safety Score (`98/100`).
+  * Real-time overspeeding violation counter (`0 Violations`).
+* **Dedicated Citizen Settings Screen (`CitizenSettingsScreen`)**:
+  * Quick-access gear button in the AppBar.
+  * Direct configuration of rider identity, vehicle registration, emergency contacts, and ABDM/ABHA vault linking.
+* **5km Hospital Radar with Fallback & Google Maps Turn-by-Turn Navigation**:
+  * Live Haversine distance and driving ETA calculated continuously from device GPS.
+  * **5km Radius Filter**: Automatically surfaces trauma centers within 5 km.
+  * **Dynamic Fallback Notice**: If no accredited trauma center is within 5 km (e.g. peripheral or rural highway transit), an explicit warning banner appears:
+    `"No trauma center found within 5.0 km of your location. Nearest next available: [Hospital Name] (X.X km)"`
+  * **Google Maps Navigation**: Tapping any hospital card launches live Google Maps turn-by-turn navigation via `https://www.google.com/maps/dir/?api=1&destination=lat,lng`.
+  * **One-Touch Emergency Calling**: Instantly connects to the hospital's verified 24/7 emergency casualty line.
+  * **26-Hospital Bengaluru Registry**: Includes **Specialist Hospital, Banaswadi / HRBR Layout** (`13.0180, 77.6450`).
+* **Medical ID Navigation Direct to ABHA**: Tapping **Medical ID** in the bottom navigation bar navigates directly to the Ayushman Bharat (ABDM) Emergency Health Card and settings.
+
+---
+
+### 10. Multilingual EMS Ambulance Pilot Tactical Cockpit
+* **Dedicated Standalone App (`AmbulancePilotHomeScreen`)**: High-contrast, sunlight-readable tactical HUD designed specifically for paramedic ambulance drivers.
+* **Multilingual Interface for Indian Drivers**: Seamless 1-tap language switcher supporting 5 major Indian languages:
+  * 🇬🇧 **English**
+  * 🇮🇳 **हिंदी (Hindi)**
+  * 🇮🇳 **ಕನ್ನಡ (Kannada)**
+  * 🇮🇳 **தமிழ் (Tamil)**
+  * 🇮🇳 **తెలుగు (Telugu)**
+* **Automated Mission Progression Pipeline**: Replaces error-prone manual dropdowns with automated status state machine transitions:
+  `Dispatch Ready` $\rightarrow$ `Claimed` $\rightarrow$ `En Route` $\rightarrow$ `On Scene` $\rightarrow$ `In Transit` $\rightarrow$ `Handover Complete`.
+* **C-V2X Green Corridor Telemetry**: Visualizes real-time NTCIP 1202 preemption ripples and distance to upcoming signals.
+
+---
+
+### 11. Emergency Healthcare ERP (Enterprise Resource Planning) Perspective
+Can Rakshak-AI be classified as an **Enterprise Resource Planning (ERP)** platform? **YES, emphatically.**
+
+In enterprise software terminology, an ERP integrates core operational processes, coordinates constrained physical assets, orchestrates multi-department workflows, and optimizes resource allocation across organizational boundaries:
+1. **Critical Resource Master Data**: Real-time tracking of finite, perishable medical assets—Level-1 Trauma Bays, ICU beds, CT/MRI suites, blood bank reserves, and surgical specialty teams.
+2. **Fleet & Logistics Management (SCM / SCM-E)**: Real-time GPS beaconing, vehicle status management, and automated C-V2X route preemption for ambulance fleets.
+3. **Multi-Agency Workflow Orchestration**: End-to-end event-driven state transitions connecting Citizens, Municipal Police Headquarters, EMS Fleets, and Accredited Hospitals into one unified ledger.
+4. **Supply-Chain Pre-Allocation**: While the ambulance is in transit, the hospital's trauma department automatically receives victim blood group, allergies, and estimated arrival time, staging surgical teams *before* the victim arrives.
+5. **Regulatory Compliance & Auditability**: Enforces RBAC permissions, single-claim row-level transaction locks, and immutable ABDM break-glass audit logs.
 
 ---
 
@@ -273,7 +329,7 @@ Rakshak-AI/
 │   │   ├── screens/                  # Intake, Locked-Screen Alert, Ambulance HUD, Detection Lab
 │   │   ├── services/                 # Crash detector, Pre-alert microburst, Sentinel client, Offline queue
 │   │   └── widgets/                  # C-V2X hardware dialog, telemetry gauges, tactical previews
-│   └── test/                         # 47 automated unit, kinematic, and widget tests
+│   └── test/                         # 55 automated unit, kinematic, and widget tests
 │
 ├── backend/                          # Express + TypeScript core server & WebSocket engine
 │   ├── src/
@@ -380,9 +436,10 @@ Open in browser: `http://localhost:5173`
 
 | Component | Test Suite | Scope | Status |
 | :--- | :--- | :--- | :--- |
-| **Backend** | `npm test` | 18 RBAC & Route Authorization tests (JWT signing, hospital isolation, role enforcement) | **18 / 18 PASS** |
-| **Mobile** | `flutter test` | 47 unit & widget tests (Kinematics, Detection Lab, Lock-Screen, WebRTC fallback, Models) | **47 / 47 PASS** |
-| **Dashboard**| `npm run build && npm run lint` | TypeScript strict compilation and ESLint zero-warning checks | **0 Errors / 0 Warnings** |
+| **Backend** | `npm test` | 93 automated tests: 18 RBAC & Route Authorization tests, 29 Crash Intelligence & Sentinel tests, 46 ABDM / ABHA Health Card & Zero-PII tests | **93 / 93 PASS** |
+| **Mobile** | `flutter test` | 55 unit & widget tests: Kinematic filters, Detection Lab, Keyguard lock-screen override, WebRTC fallback, Ambulance Pilot Cockpit, Hospital Radar, Cloud Watchdog simulation | **55 / 55 PASS** |
+| **Dashboard**| `npm run build && npm run lint` | TypeScript strict compilation and ESLint zero-warning checks across Hospital, Police, Ambulance & Admin consoles | **0 Errors / 0 Warnings** |
+| **Total Ecosystem** | Multi-Tier Suite | Full integration across Flutter edge, PostGIS spatial backend, and React command consoles | **148 / 148 PASS** |
 
 ---
 

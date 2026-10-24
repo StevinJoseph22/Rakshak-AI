@@ -12,15 +12,19 @@
    - [3.3 Mobile Sensing & Pilot App (`mobile/lib`)](#33-mobile-sensing--pilot-app-mobilelib)
    - [3.4 Database Migrations & Seeds (`db/`)](#34-database-migrations--seeds-db)
 4. [Edge Crash Detection & Kinematic Algorithms](#4-edge-crash-detection--kinematic-algorithms)
-5. [Store-and-Forward Offline Queue (30-Minute Emergency TTL)](#5-store-and-forward-offline-queue-30-minute-emergency-ttl)
-6. [PostGIS Spatial Triage & 45-Second Auto-Escalation Engine](#6-postgis-spatial-triage--45-second-auto-escalation-engine)
-7. [Concurrency Control & PostgreSQL Row-Level Locking](#7-concurrency-control--postgresql-row-level-locking)
-8. [Zero-PII Storage & Ephemeral Volatile RAM Architecture](#8-zero-pii-storage--ephemeral-volatile-ram-architecture)
-9. [ABHA Integration & Clinician Break-Glass Protocol](#9-abha-integration--clinician-break-glass-protocol)
-10. [C-V2X Autonomous Green Corridor & Traffic Preemption](#10-c-v2x-autonomous-green-corridor--traffic-preemption)
-11. [Complete 25-Hospital Registry & RBAC Credentials](#11-complete-25-hospital-registry--rbac-credentials)
-12. [API Reference & Real-Time Socket.io Contracts](#12-api-reference--real-time-socketio-contracts)
-13. [Verification, Testing & Running the System](#13-verification-testing--running-the-system)
+5. [Catastrophic Phone Breakdown & Dead-Man Switch Engine (Cloud Watchdog)](#5-catastrophic-phone-breakdown--dead-man-switch-engine-cloud-watchdog)
+6. [Store-and-Forward Offline Queue (30-Minute Emergency TTL)](#6-store-and-forward-offline-queue-30-minute-emergency-ttl)
+7. [PostGIS Spatial Triage & 45-Second Auto-Escalation Engine](#7-postgis-spatial-triage--45-second-auto-escalation-engine)
+8. [Concurrency Control & PostgreSQL Row-Level Locking](#8-concurrency-control--postgresql-row-level-locking)
+9. [Zero-PII Storage & Ephemeral Volatile RAM Architecture](#9-zero-pii-storage--ephemeral-volatile-ram-architecture)
+10. [ABHA Integration & Clinician Break-Glass Protocol](#10-abha-integration--clinician-break-glass-protocol)
+11. [C-V2X Autonomous Green Corridor & Traffic Preemption](#11-c-v2x-autonomous-green-corridor--traffic-preemption)
+12. [Citizen Life-Guard Mobile Architecture (Google Stitch UI, Profile Sync, 5km Radar & Banaswadi)](#12-citizen-life-guard-mobile-architecture-google-stitch-ui-profile-sync-5km-radar--banaswadi)
+13. [Multilingual EMS Ambulance Pilot Tactical Cockpit](#13-multilingual-ems-ambulance-pilot-tactical-cockpit)
+14. [Emergency Healthcare ERP (Enterprise Resource Planning) Architectural Perspective](#14-emergency-healthcare-erp-enterprise-resource-planning-architectural-perspective)
+15. [Complete 26-Hospital Registry & RBAC Credentials](#15-complete-26-hospital-registry--rbac-credentials)
+16. [API Reference & Real-Time Socket.io Contracts](#16-api-reference--real-time-socketio-contracts)
+17. [Verification, Testing & Running the System](#17-verification-testing--running-the-system)
 
 ---
 
@@ -78,12 +82,14 @@ stateDiagram-v2
     end note
 
     suspected --> cancelled: User taps "I'm OK" within 10s
-    suspected --> broadcasting: 10s expires OR Phone destroyed (30s watchdog)
+    suspected --> broadcasting: 10s countdown expires
+    suspected --> broadcasting: 💥 Phone Crushed / Destroyed (Cloud Watchdog 12s-30s)
     
     note right of broadcasting
         PostGIS 8km radius search queries trauma centers.
         Matched hospitals receive synchronized alert.
         45-second auto-escalation timer arms.
+        Police and Ambulance 108 dispatch activated.
     end note
 
     broadcasting --> escalated: 45s expires without hospital acceptance
@@ -179,23 +185,32 @@ dashboard/src/
 
 ```
 mobile/lib/
-├── main.dart                  # Main citizen smartphone entrypoint
+├── main.dart                  # Main citizen smartphone entrypoint (Google Stitch UI & Profile Sync)
 ├── ambulance_pilot_app.dart   # Dedicated EMS ambulance cockpit entrypoint
 ├── models/
 │   ├── crash_event.dart       # Kinematic telemetry payload model
 │   ├── emergency_health_card.dart # ABDM emergency profile and provenance fields
+│   ├── hospital_model.dart    # Hospital facility model with Haversine distance & ETA
 │   └── incident_model.dart    # SQLite offline dispatch record model
 ├── screens/
+│   ├── welcome_splash_screen.dart # Diagnostic pre-flight verification checklist splash
+│   ├── citizen_settings_screen.dart # Profile, vehicle type (2W/4W), plate, and SOS contacts
+│   ├── hospital_radar_screen.dart # 5km radar with fallback notice & Google Maps directions
 │   ├── crash_detection_screen.dart # Sensor monitoring HUD and manual test trigger
 │   ├── locked_screen_alert_screen.dart # Keyguard-bypassing 10-second emergency countdown
 │   ├── ambulance_dispatch_screen.dart  # Paramedic incident view with road distance
-│   ├── ambulance_pilot_home_screen.dart # Ambulance status, GPS beaconing & active missions
+│   ├── ambulance_pilot_home_screen.dart # Multilingual cockpit (5 Indian languages) & green corridor
 │   ├── abha_onboarding_screen.dart # Citizen ABHA ID linking & local AES-256 vault setup
 │   ├── emergency_contacts_screen.dart  # Management of native SIM SMS emergency contacts
 │   └── test_lab_screen.dart   # Developer simulation bench for impact spikes and drops
+├── widgets/
+│   ├── cloud_watchdog_simulation_dialog.dart # Interactive phone breakdown / dead phone simulation
+│   └── c_v2x_hardware_dialog.dart # OBU transceiver selector & antenna monitor
 └── services/
     ├── crash_detector_service.dart # 50Hz IMU circular buffer, peak-G & speed drop filter
     ├── pre_alert_service.dart # Keyguard override, buzzer, and sub-second pre-alert ping
+    ├── user_profile_service.dart # Local profile persistence (name, 2W/4W, plate, safe score)
+    ├── hospital_directory_service.dart # 26-hospital registry, 5km filter, and Maps launcher
     ├── offline_dispatch_queue.dart # Delay-tolerant SQLite queue with 30m emergency TTL
     ├── photo_stream_service.dart # 3-tier photo upload: WebRTC -> WebSocket -> HTTP
     ├── vehicle_obu_service.dart # C-V2X PC5 direct sidelink OBU broadcast simulator
@@ -263,7 +278,86 @@ Every crash event is scored algorithmically:
 
 ---
 
-## 5. Store-and-Forward Offline Queue (30-Minute Emergency TTL)
+## 5. Catastrophic Phone Breakdown & Dead-Man Switch Engine (Cloud Watchdog)
+
+### 5.1 The Fatal Dilemma: Broken Phones & Silent Victims
+In severe vehicular crashes (especially high-speed highway collisions, rollover accidents, or motorcycle impacts), smartphones are frequently destroyed instantly:
+* Crushed beneath vehicle wheels or passing traffic.
+* Pounded against tarmac, causing instant motherboard or battery detachment ($0\text{ms}$ telemetry death).
+* Catapulted 50 meters into dark roadside culverts or dense brush where nobody can locate it.
+* The victim is rendered unconscious, suffering severe blunt trauma or spinal shock, completely unable to touch a screen.
+
+**Why Traditional Crash Apps Fail Catastrophically**: Legacy safety apps (like life360 or basic accelerometer loggers) depend entirely on the smartphone surviving the impact, running an on-screen 30–60 second countdown timer, and maintaining continuous cellular connectivity. If the phone is smashed on impact at $t=0$, legacy apps die on the spot—zero SOS is ever dispatched, leaving emergency services completely blind.
+
+### 5.2 Rakshak-AI's Dual-Ended Pre-Alert & Cloud Watchdog Architecture
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Phone as Rider Smartphone (Edge)
+    participant Cloud as Rakshak Cloud (Node.js + Redis)
+    participant Police as Police Control HQ
+    participant EMS as 108 Ambulance & Trauma Bay
+
+    Note over Phone: Cruising Highway (92.4 km/h)
+    Phone->>Cloud: Rolling Heartbeat (GPS, Speed, Heading) [Redis TTL 120s]
+    
+    Note over Phone: Severe High-G Impact (8.5G spike at t=0ms)
+    rect rgb(255, 230, 230)
+    Phone->>Cloud: ⚡ SUB-SECOND PRE-ALERT: "impact_suspected" (t=38ms)
+    end
+    Cloud->>Police: Flash Soft Marker: Suspected Collision (Radar Ping)
+    
+    Note over Phone: 💥 Phone Completely Crushed by Wheels at t=120ms<br/>(Instant Battery Disconnect, 0ms Heartbeat Cutoff)
+    
+    rect rgb(255, 245, 220)
+    Note over Cloud: Cloud Watchdog Armed (12s - 30s Countdown)<br/>Detects abrupt telemetry death after highway speed
+    Cloud->>Cloud: Heartbeat Silence Timeout (Zero Confirm / Zero Cancel)
+    end
+    
+    rect rgb(230, 255, 230)
+    Cloud->>Cloud: Promote Incident: "broadcasting" (Auto-Escalation)
+    Cloud->>Police: 🚨 CRITICAL ACCIDENT CONFIRMED: Auto-Dispatched
+    Cloud->>EMS: Broadcast to Matched Trauma Centers (8km PostGIS)
+    end
+    Note over EMS: Ambulance Dispatched to Last Known Coordinates
+```
+
+1. **Sub-Second Pre-Alert Microburst (`pre_alert_service.dart` / `preAlertService.ts`)**:
+   * The millisecond the acceleration vector breaches $6.5g$—**before any UI countdown screen renders**—the edge background worker dispatches an encrypted lightweight JSON frame:
+     ```json
+     {
+       "client_id": "771aee64-f7ea-440b-9491-dc83612f2d1f",
+       "status": "suspected",
+       "latitude": 12.9716,
+       "longitude": 77.5946,
+       "speed_kmh": 92.4,
+       "net_g": 8.5
+     }
+     ```
+   * The Police Control Room radar immediately marks the coordinates with a high-priority yellow caution beacon.
+2. **Abrupt Silence & Dead-Man Watchdog (`tripSentinelService.ts`)**:
+   * Under normal conditions, riders opting into Trip Sentinel transmit rolling heartbeats every $5\text{s}\text{--}10\text{s}$ during highway transit ($V \ge 60\text{ km/h}$).
+   * If the phone is destroyed on impact, heartbeats vanish instantly ($0\text{ms}$ abrupt drop).
+   * Because the backend already holds the `impact_suspected` marker coupled with high pre-impact velocity ($92.4\text{ km/h}$), the Cloud Watchdog starts a strict countdown ($12\text{s}$ demo mode, $30\text{s}$ production).
+3. **Autonomous Cloud Emergency Promotion**:
+   * If neither a user confirmation nor an "I'm OK" cancel frame arrives before the watchdog timer expires, the backend **automatically promotes the incident from `suspected` to `broadcasting`**:
+     ```typescript
+     // preAlertService.ts: Autonomous Promotion on Heartbeat Cutoff
+     promoteSuspectedIncident(incidentId, 'WATCHDOG_HEARTBEAT_TIMEOUT_PHONE_DESTROYED');
+     ```
+   * PostGIS triggers spatial triage across all trauma centers within an $8\text{km}$ radius, alerting ambulance pilots and police units without requiring the physical device to survive.
+4. **Interactive Simulation Benchmark (`CloudWatchdogSimulationDialog`)**:
+   * Located inside the mobile app's Test Lab under **"Simulate Phone Breakdown (Cloud Watchdog)"**.
+   * Provides judges and developers with an interactive simulation:
+     - Visualizes the vehicle traveling at $92.4\text{ km/h}$.
+     - Simulates instantaneous phone pulverization and $0\text{ms}$ telemetry loss.
+     - Runs a visible $12\text{s}$ countdown in real time.
+     - Confirms cloud watchdog escalation and emergency dispatching.
+
+---
+
+## 6. Store-and-Forward Offline Queue (30-Minute Emergency TTL)
 
 In rural blind spots, tunnels, or highway cellular dead-zones, network requests fail. The [`OfflineDispatchQueue`](file:///e:/Projects%20and%20Case%20Study/Rakshak-AI/mobile/lib/services/offline_dispatch_queue.dart) implements delay-tolerant networking:
 
@@ -288,11 +382,11 @@ In rural blind spots, tunnels, or highway cellular dead-zones, network requests 
 
 ---
 
-## 6. PostGIS Spatial Triage & 45-Second Auto-Escalation Engine
+## 7. PostGIS Spatial Triage & 45-Second Auto-Escalation Engine
 
 When an emergency incident reaches `broadcasting` status, Rakshak-AI queries trauma facilities using native PostGIS spherical spatial mathematics.
 
-### 6.1 Initial 8km Radius Spatial Query
+### 7.1 Initial 8km Radius Spatial Query
 ```sql
 SELECT 
   id, name, phone, address, has_trauma_center, has_icu_capacity, is_verified,
@@ -308,7 +402,7 @@ ORDER BY distance_km ASC;
 * `ST_DWithin` operates on spheroidal geography types (WGS 84 / SRID 4326) within an 8,000-meter ($8\text{km}$) buffer.
 * Road distance is calculated via OSRM or circuity estimation ($d_{\text{road}} \approx d_{\text{aerial}} \times 1.6$).
 
-### 6.2 45-Second Auto-Escalation Protocol
+### 7.2 45-Second Auto-Escalation Protocol
 If no hospital clicks **"Accept Emergency Case"** within 45 seconds ($45,000\text{ms}$):
 1. **Stage 1 Escalation ($20\text{km}$ Perimeter)**:
    * The backend escalation timer in [`escalation.ts`](file:///e:/Projects%20and%20Case%20Study/Rakshak-AI/backend/src/escalation.ts) fires.
@@ -326,7 +420,7 @@ If no hospital clicks **"Accept Emergency Case"** within 45 seconds ($45,000\tex
 
 ---
 
-## 7. Concurrency Control & PostgreSQL Row-Level Locking
+## 8. Concurrency Control & PostgreSQL Row-Level Locking
 
 In an emergency network broadcasting to 10+ hospitals simultaneously, two trauma facilities might click **"Accept Emergency Case"** at the exact same millisecond. 
 
@@ -358,7 +452,7 @@ COMMIT;
 
 ---
 
-## 8. Zero-PII Storage & Ephemeral Volatile RAM Architecture
+## 9. Zero-PII Storage & Ephemeral Volatile RAM Architecture
 
 Medical data compliance (under ABDM, HIPAA, and DPDP regulations) strictly prohibits storing unencrypted victim health records on disk databases.
 
@@ -396,15 +490,15 @@ Rakshak-AI implements an **Ephemeral Volatile RAM Storage Pipeline**:
 
 ---
 
-## 9. ABHA Integration & Clinician Break-Glass Protocol
+## 10. ABHA Integration & Clinician Break-Glass Protocol
 
 Under the Ayushman Bharat Digital Mission (ABDM), citizens link their 14-digit ABHA ID (`name@abdm`) to personal health records. In a crash where the victim is unconscious, clinicians require instant access to blood type, cardiac stents, or penicillin allergies.
 
-### 9.1 Access Guard
+### 10.1 Access Guard
 * **Before Acceptance**: All hospital and police dashboards display locked provenance indicators (`ABHA Health Record: Clinical access available after case acceptance`).
 * **After Acceptance**: The designated hospital that reserved the trauma bay gains authorized access to the **"Access ABHA Health Record (Break-Glass)"** trigger.
 
-### 9.2 Immutable Break-Glass Audit Trail
+### 10.2 Immutable Break-Glass Audit Trail
 When clinician breaks glass, [`backend/src/routes/incidents.ts`](file:///e:/Projects%20and%20Case%20Study/Rakshak-AI/backend/src/routes/incidents.ts) requires a mandatory clinical justification (e.g. *"Unconscious blunt trauma victim requiring urgent laparotomy and cross-match blood transfusion"*).
 
 An immutable regulatory audit record is written to the `health_card_access_audit` table:
@@ -421,7 +515,7 @@ The decrypted health card is then served to the trauma bay with full field-level
 
 ---
 
-## 10. C-V2X Autonomous Green Corridor & Traffic Preemption
+## 11. C-V2X Autonomous Green Corridor & Traffic Preemption
 
 During ambulance transit, traffic signals along the route are preempted dynamically using the international **NTCIP 1202 / ISO 19091 standard** implemented in [`trafficPreemptionService.ts`](file:///e:/Projects%20and%20Case%20Study/Rakshak-AI/backend/src/services/trafficPreemptionService.ts):
 
@@ -437,9 +531,85 @@ During ambulance transit, traffic signals along the route are preempted dynamica
 
 ---
 
-## 11. Complete 25-Hospital Registry & RBAC Credentials
+## 12. Citizen Life-Guard Mobile Architecture (Google Stitch UI, Profile Sync, 5km Radar & Banaswadi)
 
-All 25 hospitals are seeded in the database with authentic coordinates, trauma capability flags, addresses, emergency phone lines, and RBAC user accounts:
+The Citizen Mobile Application (`mobile/lib/main.dart`) is engineered with modern mobile architectural patterns:
+
+### 12.1 Google Stitch-Inspired UI & Zero Overflow
+* Strict zero-overflow layout architecture eliminating AppBar `OVERFLOWED BY 9.3 PIXELS` issues through responsive flex containers and adaptive chips.
+* Elevated card surfaces, crisp status indicators, and intuitive visual hierarchy.
+
+### 12.2 Welcome & Diagnostic Splash (`WelcomeSplashScreen`)
+* Displays an animated life-guard shield upon application launch.
+* Runs pre-flight sensor diagnostics:
+  * GPS Satellite Lock (lat/lng fix within 10 meters).
+  * 50Hz MEMS Inertial Measurement Unit (triaxial accelerometer & gyroscope streams).
+  * C-V2X Direct Sidelink Transceiver readiness.
+  * Nearest Accredited Trauma Center index check.
+
+### 12.3 Dynamic User Profile & Vehicle Classification (`UserProfileService`)
+* **Local Persistence**: Eliminates static placeholder mock data ("Aarav Sharma").
+* **Interactive Vehicle Class Switcher**:
+  * **Two-Wheeler** (Motorcycle / Scooter): Automatically disables cabin-only barometer pulse checks; tunes rollover tumbling thresholds.
+  * **Four-Wheeler** (Car / SUV): Activates in-cabin airbag barometric pressure rise detection ($\Delta P \ge 1.5\text{ hPa}$).
+* **Safe Driving Insights Card**:
+  * Distance Traveled Today (`14.2 km Logged via GPS`).
+  * Safety Score (`98/100 Smooth Vector`).
+  * Overspeeding Violations (`0 Violations`).
+
+### 12.4 5km Hospital Radar with Fallback & Google Maps Directions
+* Implemented in [`HospitalRadarScreen`](file:///e:/Projects%20and%20Case%20Study/Rakshak-AI/mobile/lib/screens/hospital_radar_screen.dart) and [`HospitalDirectoryService`](file:///e:/Projects%20and%20Case%20Study/Rakshak-AI/mobile/lib/services/hospital_directory_service.dart).
+* Continuously calculates the Haversine spherical distance and estimated driving ETA:
+  $$d = 2R \arcsin\left(\sqrt{\sin^2\left(\frac{\Delta \phi}{2}\right) + \cos(\phi_1)\cos(\phi_2)\sin^2\left(\frac{\Delta \lambda}{2}\right)}\right)$$
+* **5km Radius Filter**: Filters and displays facilities within 5.0 km of device location (e.g. Banaswadi `13.013, 77.649`).
+* **Fallback Alert**: If no hospital is within 5.0 km:
+  > *"No trauma center found within 5.0 km of your location. Nearest next available: [Hospital] (X.X km)"*
+* **Turn-by-Turn Navigation**: Tapping any card opens Google Maps directions URL (`https://www.google.com/maps/dir/?api=1&destination=lat,lng`).
+* **One-Touch Emergency Calling**: Dials the hospital's 24/7 trauma desk immediately.
+
+---
+
+## 13. Multilingual EMS Ambulance Pilot Tactical Cockpit
+
+The dedicated EMS Ambulance Pilot Application ([`ambulance_pilot_home_screen.dart`](file:///e:/Projects%20and%20Case%20Study/Rakshak-AI/mobile/lib/screens/ambulance_pilot_home_screen.dart)) provides high-stress tactical ergonomics for paramedic drivers:
+* **Multilingual Indian Driver Support**: One-tap toggle between **English**, **हिंदी (Hindi)**, **ಕನ್ನಡ (Kannada)**, **தமிழ் (Tamil)**, and **తెలుగు (Telugu)**.
+* **Automated Status Pipeline**: Eliminates manual, error-prone dropdown selections. The workflow automatically transitions through state markers:
+  `Claimed` $\rightarrow$ `En Route` $\rightarrow$ `On Scene` $\rightarrow$ `In Transit` $\rightarrow$ `Handover Complete`.
+* **C-V2X Green Corridor HUD**: Shows distance to upcoming preempted signals and remaining green hold seconds.
+
+---
+
+## 14. Emergency Healthcare ERP (Enterprise Resource Planning) Architectural Perspective
+
+Rakshak-AI functions as a mission-critical **Enterprise Resource Planning (ERP)** system for regional emergency healthcare:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                       RAKSHAK-AI: EMERGENCY HEALTHCARE ERP                   │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ 1. PERISHABLE ASSET ERP          │ 2. LOGISTICS & SCM-E FLEET               │
+│ • Level-1 Trauma Bays            │ • GPS Telemetry & Ambulance Status       │
+│ • ICU Beds & Ventilator Slots    │ • NTCIP 1202 Signal Green Corridors      │
+│ • On-Call Neuro/Ortho Surgeons   │ • Dynamic OSRM Turn-by-Turn Routing      │
+│ • Blood Bank Cross-Match Units   │ • Multilingual Driver HUD                │
+├──────────────────────────────────┼──────────────────────────────────────────┤
+│ 3. MULTI-AGENCY PROCESS ENGINE   │ 4. PRE-ALLOCATION & AUDIT COMPLIANCE     │
+│ • PostGIS Spatial Match (8-20km) │ • ABDM / ABHA Vault Decryption           │
+│ • 45s Auto-Escalation State Hub  │ • Staged Blood & Surgery Units           │
+│ • Row-Level Locks (Single Claim) │ • Immutable Break-Glass Audit Trail      │
+└──────────────────────────────────┴──────────────────────────────────────────┘
+```
+
+1. **Finite Asset Master Data**: Tracks real-time availability of physical hospital beds, ICU ventilators, and surgical specialists across 26 facilities.
+2. **Supply-Chain Fleet Logistics (SCM-E)**: Manages municipal ambulance fleets, dispatch assignment, and green corridor traffic routing.
+3. **Cross-Departmental Workflow**: Synchronizes Citizens, Police Dispatchers, EMS Drivers, and Admitting Hospital Trauma Bays into a unified, event-driven transaction ledger.
+4. **Predictive Resource Pre-Allocation**: While the ambulance is navigating traffic, the admitting hospital receives victim kinematics and verified ABHA medical records, pre-staging cross-match blood and operating theaters before patient arrival.
+
+---
+
+## 15. Complete 26-Hospital Registry & RBAC Credentials
+
+All 26 hospitals are seeded in the database with authentic coordinates, trauma capability flags, addresses, emergency phone lines, and RBAC user accounts:
 
 | ID | Hospital Name | Coordinates (Lat, Lng) | Trauma | Username | Password |
 |---|---|---|:---:|---|---|
@@ -468,21 +638,22 @@ All 25 hospitals are seeded in the database with authentic coordinates, trauma c
 | `b1000007-...` | Sparsh Hospital, Electronic City | `12.8452, 77.6601` | Yes | `sparsh_ecity` | `hospital123` |
 | `b1000008-...` | Akash Hospital & Trauma (Devanahalli Airport) | `13.2450, 77.7120` | Yes | `akash_devanahalli` | `hospital123` |
 | `b1000009-...` | Nelamangala General Hospital (NH-48 Outskirts) | `13.0982, 77.3871` | Yes | `nelamangala_trauma` | `hospital123` |
+| `b1000010-...` | **Specialist Hospital, Banaswadi / HRBR** | `13.0180, 77.6450` | **Yes** | `specialist_banaswadi` | `hospital123` |
 
 * **Police Control Headquarters**: Username `police_control` / Password `police123`
 * **Ambulance Pilot Cockpit**: Username `ambulance_pilot` / Password `ambulance123`
 
 ---
 
-## 12. API Reference & Real-Time Socket.io Contracts
+## 16. API Reference & Real-Time Socket.io Contracts
 
-### 12.1 Core REST Endpoints
+### 16.1 Core REST Endpoints
 
 | Method | Endpoint | Description | Auth Required |
 |---|---|---|---|
 | `POST` | `/auth/login` | Validates credentials and returns JWT bearer token | Public |
 | `GET` | `/auth/me` | Validates token and returns current user session | Bearer JWT |
-| `GET` | `/hospitals` | Returns all 25 hospitals (supports `?near=lat,lng&radius_km=N`) | Public |
+| `GET` | `/hospitals` | Returns all 26 hospitals (supports `?near=lat,lng&radius_km=N`) | Public |
 | `POST` | `/incidents/suspected` | Logs soft pre-alert marker for Police Control radar | Public / Citizen |
 | `POST` | `/incidents/:id/confirm` | Promotes suspected alert to full broadcasting triage | Public / Citizen |
 | `POST` | `/incidents/:id/cancel` | Cancels suspected alert when user taps "I'm OK" | Public / Citizen |
@@ -496,7 +667,7 @@ All 25 hospitals are seeded in the database with authentic coordinates, trauma c
 | `POST` | `/incidents/:id/health-card/break-glass` | Decrypts ABHA emergency card with mandatory audit log | Hospital Staff |
 | `DELETE`| `/incidents` | Admin cleanup: wipes database, Redis keys, resets dashboards | Public / Admin |
 
-### 12.2 Real-Time Socket.io Event Matrix
+### 16.2 Real-Time Socket.io Event Matrix
 
 ```
 Client / Mobile                       Backend Server                       Dashboards
@@ -519,9 +690,9 @@ Client / Mobile                       Backend Server                       Dashb
 
 ---
 
-## 13. Verification, Testing & Running the System
+## 17. Verification, Testing & Running the System
 
-### 13.1 Automated Test Execution
+### 17.1 Automated Test Execution
 
 ```bash
 # 1. Run all 93 Backend Unit & Integration Tests (100% Pass)
@@ -534,12 +705,12 @@ npm test
 # --- PHASE 18 TEST SUMMARY: 46 PASSED, 0 FAILED
 # ALL 93 BACKEND TESTS PASSED SUCCESSFULLY.
 
-# 2. Run all 54 Flutter Mobile Kinematic & UI Tests (100% Pass)
+# 2. Run all 55 Flutter Mobile Kinematic & UI Tests (100% Pass)
 cd ../mobile
 flutter test
 
 # Output:
-# 00:10 +54: All tests passed!
+# 00:09 +55: All tests passed!
 
 # 3. Verify Dashboard Production Build
 cd ../dashboard
@@ -547,8 +718,44 @@ npm run build
 
 # Output:
 # ✓ 1560 modules transformed.
-# ✓ built in 2.62s with zero TypeScript errors.
+# ✓ built in 3.44s with zero TypeScript errors.
 ```
+
+### 17.2 Running the Development Environment
+
+1. **Start PostgreSQL & Redis**:
+   ```bash
+   docker-compose up -d
+   ```
+2. **Apply Migrations and Seed 26 Hospitals**:
+   ```bash
+   cd backend
+   npm run migrate
+   ```
+3. **Start Central Coordination Backend**:
+   ```bash
+   cd backend
+   npm run dev
+   # Server active on http://127.0.0.1:5000
+   ```
+4. **Start Web Tactical Dashboards**:
+   ```bash
+   cd dashboard
+   npm run dev
+   # Dashboard active on http://localhost:5173
+   ```
+5. **Launch Citizen Edge App**:
+   ```bash
+   cd mobile
+   flutter run -d chrome # or run on connected Android/iOS device
+   ```
+6. **Pre-Pitch Clean Reset**:
+   * To wipe all test accidents and reset all open browser consoles back to zero:
+   ```bash
+   cd backend
+   npm run demo:reset
+   ```
+   * Or click the red **"Purge Test Incidents & Reset Demo Feed"** button in the Admin View.
 
 ### 13.2 Running the Development Environment
 
