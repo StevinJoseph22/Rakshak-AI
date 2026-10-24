@@ -39,7 +39,7 @@ Rakshak-AI is structured into three distributed operational tiers:
 flowchart TD
     subgraph EdgeTier ["Edge Sensing Tier (Mobile App)"]
         Sensors["50Hz Accelerometer & Gyroscope"] --> RingBuffer["100-Sample Ring Buffer"]
-        RingBuffer --> CrashDetector["Crash Detector Engine<br/>(Peak-G >= 6.5g + Speed Drop)"]
+        RingBuffer --> CrashDetector["Crash Detector Engine<br/>(Peak-G >= 4.8g + Speed Drop)"]
         CrashDetector --> PreAlert["Pre-Alert Microburst<br/>(impact_suspected)"]
         CrashDetector --> KeyguardOverride["Keyguard Locked Screen Override<br/>(10s Countdown)"]
         KeyguardOverride --> OfflineQueue["Store-and-Forward Queue<br/>(SQLite / 30m TTL)"]
