@@ -36,7 +36,7 @@ export interface IncidentBroadcastPayload {
 export function initSocketIO(httpServer: HttpServer): SocketIOServer {
   io = new SocketIOServer(httpServer, {
     cors: {
-      origin: '*', // Allow connections from Vite dashboard (5173), mobile, etc.
+      origin: true, // Allow connections from Vite dashboard (5173), mobile, LAN IPs, etc.
       methods: ['GET', 'POST', 'PATCH'],
       credentials: true,
     },
