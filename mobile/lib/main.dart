@@ -25,9 +25,11 @@ import 'screens/hospital_radar_screen.dart';
 import 'screens/welcome_splash_screen.dart';
 import 'services/user_profile_service.dart';
 import 'widgets/cloud_watchdog_simulation_dialog.dart';
+import 'config/backend_config.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await initBackendConfig();
   await UserProfileService.instance.init();
   final seen = await UserProfileService.instance.hasSeenWelcomeScreen();
   runApp(RakshakApp(startWithWelcome: !seen));

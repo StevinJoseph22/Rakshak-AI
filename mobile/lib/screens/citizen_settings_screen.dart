@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/emergency_contact_model.dart';
 import '../services/emergency_contact_service.dart';
 import '../services/user_profile_service.dart';
+import '../config/backend_config.dart';
 import 'emergency_contacts_screen.dart';
 import 'settings_screen.dart';
 
@@ -17,6 +18,7 @@ class _CitizenSettingsScreenState extends State<CitizenSettingsScreen> {
   late TextEditingController _phoneController;
   late TextEditingController _modelController;
   late TextEditingController _plateController;
+  late TextEditingController _serverUrlController;
   late String _vehicleType;
   late String _bloodGroup;
 
@@ -42,6 +44,7 @@ class _CitizenSettingsScreenState extends State<CitizenSettingsScreen> {
     _phoneController = TextEditingController(text: p.phone);
     _modelController = TextEditingController(text: p.vehicleModel);
     _plateController = TextEditingController(text: p.vehiclePlate);
+    _serverUrlController = TextEditingController(text: gCustomConfiguredUrl ?? '');
     _vehicleType = p.vehicleType;
     _bloodGroup = _bloodGroups.contains(p.bloodGroup) ? p.bloodGroup : 'B+ Positive';
     _loadContacts();
@@ -63,7 +66,54 @@ class _CitizenSettingsScreenState extends State<CitizenSettingsScreen> {
     _phoneController.dispose();
     _modelController.dispose();
     _plateController.dispose();
+    _serverUrlController.dispose();
     super.dispose();
+  }
+
+  Future<void> _testAndSaveServerUrl() async {
+    final input = _serverUrlController.text.trim();
+    if (input.isEmpty) {
+      await setCustomBackendUrl(null);
+      if (mounted) {
+        setState(() {});
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Cleared custom server URL. Using default auto-discovery.')),
+        );
+      }
+      return;
+    }
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+
+    final isHealthy = await testBackendHealth(input);
+    if (mounted) Navigator.pop(context);
+
+    if (isHealthy) {
+      await setCustomBackendUrl(input);
+      gActiveBackendUrl = input.replaceAll(RegExp(r'/+$'), '');
+      if (mounted) {
+        setState(() {});
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: const Color(0xFF10B981),
+            content: Text('✓ Connected to $input successfully! Ready on any internet.'),
+          ),
+        );
+      }
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: const Color(0xFFDC2626),
+            content: Text('Failed to reach $input/health. Verify your tunnel or server is running.'),
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _saveAndExit() async {
@@ -312,6 +362,74 @@ class _CitizenSettingsScreenState extends State<CitizenSettingsScreen> {
                       padding: const EdgeInsets.symmetric(vertical: 10),
                     ),
                   ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+
+            // Section 5: Cloud & Server Connectivity (Any Internet Access)
+            _buildSectionHeader('CLOUD & SERVER CONNECTIVITY (ANY INTERNET ACCESS)', Icons.cloud_sync),
+            const SizedBox(height: 10),
+            _buildCard(
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.hub_outlined, color: Color(0xFF38BDF8), size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Active Server: ${gActiveBackendUrl ?? (gCustomConfiguredUrl ?? kDemoWorkstationIp)}',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.white),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'To connect your phone over cellular 4G/5G (Jio, Airtel) or external Wi-Fi, enter your public tunnel URL (Cloudflare Tunnel, Ngrok, or public cloud URL):',
+                  style: TextStyle(fontSize: 11, color: Color(0xFF94A3B8)),
+                ),
+                const SizedBox(height: 12),
+                _buildTextField(
+                  label: 'Public Tunnel / Cloud URL',
+                  controller: _serverUrlController,
+                  icon: Icons.link,
+                  hint: 'e.g. https://xxxx.trycloudflare.com or http://172.22.18.71:5000',
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _testAndSaveServerUrl,
+                        icon: const Icon(Icons.speed, size: 16, color: Color(0xFF38BDF8)),
+                        label: const Text(
+                          'TEST & APPLY',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Color(0xFF38BDF8)),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: Color(0xFF38BDF8)),
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    TextButton(
+                      onPressed: () async {
+                        await setCustomBackendUrl(null);
+                        setState(() {
+                          _serverUrlController.clear();
+                        });
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Reset to auto-discovered LAN failover candidates')),
+                          );
+                        }
+                      },
+                      child: const Text('Reset', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12)),
+                    ),
+                  ],
                 ),
               ],
             ),

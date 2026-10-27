@@ -16,9 +16,54 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Globally tracked active backend URL confirmed by HTTP response or /health check
 String? gActiveBackendUrl;
+
+/// Custom user-configured Cloud / Tunnel / Public backend URL
+const String kPrefCustomBackendUrl = 'rakshak_custom_backend_url';
+String? gCustomConfiguredUrl;
+
+/// Initialize backend config from persistent storage
+Future<void> initBackendConfig() async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getString(kPrefCustomBackendUrl);
+    if (saved != null && saved.trim().isNotEmpty) {
+      gCustomConfiguredUrl = saved.trim().replaceAll(RegExp(r'/+$'), '');
+      debugPrint('[BackendConfig] Loaded custom backend URL: $gCustomConfiguredUrl');
+    }
+  } catch (e) {
+    debugPrint('[BackendConfig] Failed to load custom backend URL: $e');
+  }
+}
+
+/// Persist and apply a custom public tunnel or cloud backend URL
+Future<void> setCustomBackendUrl(String? url) async {
+  final prefs = await SharedPreferences.getInstance();
+  if (url == null || url.trim().isEmpty) {
+    gCustomConfiguredUrl = null;
+    await prefs.remove(kPrefCustomBackendUrl);
+  } else {
+    final formatted = url.trim().replaceAll(RegExp(r'/+$'), '');
+    gCustomConfiguredUrl = formatted;
+    await prefs.setString(kPrefCustomBackendUrl, formatted);
+  }
+  gActiveBackendUrl = null; // force re-verification
+}
+
+/// Test whether a candidate backend URL responds to health checks
+Future<bool> testBackendHealth(String url, {Duration timeout = const Duration(seconds: 3)}) async {
+  try {
+    final cleanUrl = url.trim().replaceAll(RegExp(r'/+$'), '');
+    final uri = Uri.parse('$cleanUrl/health');
+    final res = await http.get(uri).timeout(timeout);
+    return res.statusCode == 200;
+  } catch (_) {
+    return false;
+  }
+}
 
 /// Default backend URL read from compile-time `--dart-define=BACKEND_URL=...`
 const String kDefaultBackendUrl = String.fromEnvironment(
@@ -35,17 +80,18 @@ const String kDemoWorkstationAltIp = 'http://192.168.1.21:5000';
 List<String> getBackendCandidates([String? overrideBaseUrl]) {
   return <String>[
     if (gActiveBackendUrl != null) gActiveBackendUrl!,
-    kDemoWorkstationIp,      // 1. Current Wi-Fi LAN IP (172.22.18.71:5000)
-    'http://127.0.0.1:5000', // 2. Fast path: 0ms latency when `adb reverse tcp:5000 tcp:5000` is active
-    'http://192.168.56.1:5000', // 3. Host-only / Virtual adapter
-    kDemoWorkstationAltIp,   // 4. Alternate Wi-Fi LAN IP (192.168.1.21:5000)
+    if (gCustomConfiguredUrl != null && gCustomConfiguredUrl!.isNotEmpty) gCustomConfiguredUrl!,
+    if (overrideBaseUrl != null && overrideBaseUrl != kDefaultBackendUrl) overrideBaseUrl,
+    if (kDefaultBackendUrl != 'http://10.0.2.2:5000') kDefaultBackendUrl,
+    kDemoWorkstationIp,      // Current Wi-Fi LAN IP (172.22.18.71:5000)
+    'http://127.0.0.1:5000', // Fast path when adb reverse is active
+    'http://192.168.56.1:5000',
+    kDemoWorkstationAltIp,
     'http://10.137.61.149:5000',
     'http://10.167.12.149:5000',
     'http://10.215.58.149:5000',
     'http://192.168.43.149:5000', // Common Android hotspot range
     'http://192.168.1.149:5000',
-    if (kDefaultBackendUrl != 'http://10.0.2.2:5000') kDefaultBackendUrl,
-    if (overrideBaseUrl != null && overrideBaseUrl != kDefaultBackendUrl) overrideBaseUrl,
     'http://10.0.2.2:5000',  // Android Emulator host loopback
   ].toSet().toList();
 }
