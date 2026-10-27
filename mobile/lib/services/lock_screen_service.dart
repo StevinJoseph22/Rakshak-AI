@@ -55,4 +55,67 @@ class LockScreenService {
       return false;
     }
   }
+
+  /// Starts the indestructible 24/7 foreground crash guard service.
+  Future<bool> startBackgroundCrashGuard() async {
+    try {
+      final bool? result = await _channel.invokeMethod<bool>('startBackgroundCrashGuard');
+      return result ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Stops the background crash guard service.
+  Future<bool> stopBackgroundCrashGuard() async {
+    try {
+      final bool? result = await _channel.invokeMethod<bool>('stopBackgroundCrashGuard');
+      return result ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Checks if the 24/7 background service is actively running.
+  Future<bool> isBackgroundCrashGuardRunning() async {
+    try {
+      final bool? result = await _channel.invokeMethod<bool>('isBackgroundCrashGuardRunning');
+      return result ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Requests OEM battery optimization exemption (Samsung, Xiaomi, Vivo, Oppo).
+  Future<bool> requestBatteryOptimizationExemption() async {
+    try {
+      final bool? result = await _channel.invokeMethod<bool>('requestBatteryOptimizationExemption');
+      return result ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Checks if battery optimization has been exempted.
+  Future<bool> isIgnoringBatteryOptimizations() async {
+    try {
+      final bool? result = await _channel.invokeMethod<bool>('isIgnoringBatteryOptimizations');
+      return result ?? true;
+    } catch (_) {
+      return true;
+    }
+  }
+
+  /// Checks if MainActivity was launched due to a crash detected while app was swiped away/killed.
+  Future<Map<String, dynamic>?> getPendingCrashEvent() async {
+    try {
+      final dynamic result = await _channel.invokeMethod('getPendingCrashEvent');
+      if (result is Map) {
+        return Map<String, dynamic>.from(result);
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
 }

@@ -21,14 +21,35 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
+    companion object {
+        var pendingCrashDetected: Boolean = false
+        var pendingCrashG: Double = 4.8
+    }
+
     private val CHANNEL = "com.rakshak.mobile/lock_screen"
     private val SMS_CHANNEL = "com.rakshak.mobile/emergency_sms"
     private val EMERGENCY_CHANNEL_ID = "rakshak_emergency_sos"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        checkCrashIntent(intent)
         enableLockScreenFlags()
         createEmergencyNotificationChannel()
+        // Automatically start the 24/7 background sentinel service
+        RakshakCrashGuardService.startService(this)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        checkCrashIntent(intent)
+    }
+
+    private fun checkCrashIntent(intent: Intent?) {
+        if (intent?.getBooleanExtra("crash_detected", false) == true) {
+            pendingCrashDetected = true
+            pendingCrashG = intent.getDoubleExtra("deceleration_g", 4.8)
+        }
     }
 
     private fun enableLockScreenFlags() {
@@ -90,6 +111,56 @@ class MainActivity : FlutterActivity() {
                     val body = call.argument<String>("body") ?: "Broadcasting coordinates to nearest trauma centers"
                     sendFullScreenNotification(title, body)
                     result.success(true)
+                }
+                "startBackgroundCrashGuard" -> {
+                    RakshakCrashGuardService.startService(this)
+                    result.success(true)
+                }
+                "stopBackgroundCrashGuard" -> {
+                    RakshakCrashGuardService.stopService(this)
+                    result.success(true)
+                }
+                "isBackgroundCrashGuardRunning" -> {
+                    result.success(RakshakCrashGuardService.isRunning)
+                }
+                "isIgnoringBatteryOptimizations" -> {
+                    val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+                    val ignoring = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        pm.isIgnoringBatteryOptimizations(packageName)
+                    } else {
+                        true
+                    }
+                    result.success(ignoring)
+                }
+                "requestBatteryOptimizationExemption" -> {
+                    try {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                                data = Uri.parse("package:$packageName")
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            }
+                            startActivity(intent)
+                        }
+                        result.success(true)
+                    } catch (e: Exception) {
+                        val fallback = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                            data = Uri.parse("package:$packageName")
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        startActivity(fallback)
+                        result.success(true)
+                    }
+                }
+                "getPendingCrashEvent" -> {
+                    if (pendingCrashDetected) {
+                        result.success(mapOf(
+                            "crash_detected" to true,
+                            "deceleration_g" to pendingCrashG
+                        ))
+                        pendingCrashDetected = false
+                    } else {
+                        result.success(null)
+                    }
                 }
                 else -> result.notImplemented()
             }

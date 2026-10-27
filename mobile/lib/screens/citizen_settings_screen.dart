@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/emergency_contact_model.dart';
 import '../services/emergency_contact_service.dart';
 import '../services/user_profile_service.dart';
+import '../services/lock_screen_service.dart';
 import '../config/backend_config.dart';
 import 'emergency_contacts_screen.dart';
 import 'settings_screen.dart';
@@ -23,6 +24,8 @@ class _CitizenSettingsScreenState extends State<CitizenSettingsScreen> {
 
   List<EmergencyContact> _contacts = [];
   bool _isLoadingContacts = true;
+  bool _isBgRunning = true;
+  bool _isBatteryExempted = false;
 
   final List<String> _bloodGroups = [
     'A+ Positive',
@@ -46,6 +49,12 @@ class _CitizenSettingsScreenState extends State<CitizenSettingsScreen> {
     _vehicleType = p.vehicleType;
     _bloodGroup = _bloodGroups.contains(p.bloodGroup) ? p.bloodGroup : 'B+ Positive';
     _loadContacts();
+    LockScreenService.instance.isBackgroundCrashGuardRunning().then((v) {
+      if (mounted) setState(() => _isBgRunning = v);
+    });
+    LockScreenService.instance.isIgnoringBatteryOptimizations().then((v) {
+      if (mounted) setState(() => _isBatteryExempted = v);
+    });
   }
 
   Future<void> _loadContacts() async {
@@ -438,6 +447,70 @@ class _CitizenSettingsScreenState extends State<CitizenSettingsScreen> {
                         child: Text(
                           'Multi-Tier Failsafe: Real-time Cloud + 2G SMS + Local Store & Forward',
                           style: TextStyle(fontSize: 10.5, color: Color(0xFFCBD5E1), fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0F172A),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.5)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.bolt, size: 16, color: Color(0xFF34D399)),
+                          const SizedBox(width: 6),
+                          const Text(
+                            '24/7 Swiped-Away Persistence Guard',
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11.5, color: Colors.white),
+                          ),
+                          const Spacer(),
+                          Text(
+                            _isBgRunning ? 'ACTIVE' : 'STANDBY',
+                            style: TextStyle(
+                              color: _isBgRunning ? const Color(0xFF34D399) : const Color(0xFF94A3B8),
+                              fontWeight: FontWeight.bold,
+                              fontSize: 10,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        'Maintains a native Android Foreground Service with AlarmManager watchdog. Stays armed even when you swipe the app away from recent apps (< 1% battery/day).',
+                        style: TextStyle(fontSize: 10.5, color: Color(0xFF94A3B8), height: 1.35),
+                      ),
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: () async {
+                            await LockScreenService.instance.requestBatteryOptimizationExemption();
+                            final exempted = await LockScreenService.instance.isIgnoringBatteryOptimizations();
+                            if (mounted) setState(() => _isBatteryExempted = exempted);
+                          },
+                          icon: Icon(
+                            _isBatteryExempted ? Icons.check_circle : Icons.battery_charging_full,
+                            size: 14,
+                            color: const Color(0xFF38BDF8),
+                          ),
+                          label: Text(
+                            _isBatteryExempted
+                                ? '✓ BATTERY EXEMPTION GRANTED (UNRESTRICTED)'
+                                : 'ALLOW UNRESTRICTED BATTERY (PREVENTS OEM KILL)',
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 10.5, color: Color(0xFF38BDF8)),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            side: const BorderSide(color: Color(0xFF38BDF8)),
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                          ),
                         ),
                       ),
                     ],

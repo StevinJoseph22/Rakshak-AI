@@ -138,6 +138,25 @@ class _CrashDetectionScreenState extends State<CrashDetectionScreen> {
     _initCrashListener();
     if (_isMonitoring) {
       CrashDetectorService.instance.start();
+      LockScreenService.instance.startBackgroundCrashGuard();
+    }
+    _checkPendingBackgroundCrash();
+  }
+
+  Future<void> _checkPendingBackgroundCrash() async {
+    final pending = await LockScreenService.instance.getPendingCrashEvent();
+    if (pending != null && mounted) {
+      final peakG = (pending['deceleration_g'] as num?)?.toDouble() ?? 4.8;
+      debugPrint('[MainActivity] 🚨 Recovered pending background crash event (peak: ${peakG}G). Dispatching...');
+      final crashEvent = CrashEvent(
+        source: 'native_background_guard',
+        decelerationG: peakG,
+        speedDropKmh: 45.0,
+        rolloverSuspected: false,
+        confidenceScore: 92,
+        timestamp: DateTime.now(),
+      );
+      CrashEventService.instance.publishCrashEvent(crashEvent);
     }
   }
 
@@ -305,8 +324,10 @@ class _CrashDetectionScreenState extends State<CrashDetectionScreen> {
       _isMonitoring = !_isMonitoring;
       if (_isMonitoring) {
         CrashDetectorService.instance.start();
+        LockScreenService.instance.startBackgroundCrashGuard();
       } else {
         CrashDetectorService.instance.stop();
+        LockScreenService.instance.stopBackgroundCrashGuard();
       }
     });
   }
