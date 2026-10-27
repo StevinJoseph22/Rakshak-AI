@@ -5,3 +5,6 @@ dist/
 !.env.example
 npm-debug.log*
 *.log
+certs/*.pem
+certs/*.key
+certs/*.crt

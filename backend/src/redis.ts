@@ -1,4 +1,5 @@
 import Redis from 'ioredis';
+import { encryptIncidentPhoto, decryptIncidentPhoto } from './services/photoCryptoService';
 
 const redisHost = process.env.REDIS_HOST || '127.0.0.1';
 const redisPort = parseInt(process.env.REDIS_PORT || '6379', 10);
@@ -183,4 +184,62 @@ export function registerHealthCardPurgeVerification(
     timer.unref();
   }
   healthCardPurgeTimers.set(incidentId, timer);
+}
+
+/**
+ * Stores an incident photo in Redis RAM, strictly encrypted with AES-256-GCM.
+ * Random 96-bit IV, per-incident key derived via HKDF from master secret.
+ */
+export async function storeEncryptedIncidentPhoto(
+  incidentId: string,
+  plainDataUrl: string,
+  ttlSeconds = 900
+): Promise<void> {
+  const encryptedPayload = encryptIncidentPhoto(incidentId, plainDataUrl);
+  const key = `incident_image:${incidentId}`;
+  const expiresAt = Date.now() + ttlSeconds * 1000;
+  ephemeralRamFallback.set(key, { data: encryptedPayload, expiresAt });
+
+  if (redis.status === 'ready') {
+    try {
+      await redis.setex(key, ttlSeconds, encryptedPayload);
+    } catch (err) {
+      console.warn('[Redis] Fallback to volatile RAM for encrypted photo storage:', (err as Error).message);
+    }
+  }
+
+  registerPurgeVerification(incidentId, ttlSeconds);
+}
+
+/**
+ * Retrieves an incident photo from Redis RAM, decrypting the AES-256-GCM envelope
+ * only when relaying to an authorized recipient.
+ */
+export async function getDecryptedIncidentPhoto(incidentId: string): Promise<string | null> {
+  const key = `incident_image:${incidentId}`;
+  let rawPayload: string | null = null;
+
+  if (redis.status === 'ready') {
+    try {
+      rawPayload = await redis.get(key);
+    } catch (_) {
+      // Redis unavailable, fallback to memory
+    }
+  }
+
+  if (!rawPayload) {
+    const cached = ephemeralRamFallback.get(key);
+    if (cached && cached.expiresAt > Date.now()) {
+      rawPayload = cached.data;
+    }
+  }
+
+  if (!rawPayload) return null;
+
+  try {
+    return decryptIncidentPhoto(incidentId, rawPayload);
+  } catch (err) {
+    console.error(`[Photo Decryption Error] Failed to decrypt photo for incident ${incidentId}:`, err);
+    return null;
+  }
 }

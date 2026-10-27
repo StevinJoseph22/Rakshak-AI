@@ -14,7 +14,7 @@
     "tunnel:cf": "npx untun tunnel --port 5000",
     "lint": "eslint src/**/*.ts",
     "lint:fix": "eslint src/**/*.ts --fix",
-    "test": "tsx src/tests/rbac.test.ts && tsx src/tests/phase17_intelligence.test.ts && tsx src/tests/phase18_health_card.test.ts && tsx src/tests/phase25_integrity.test.ts",
+    "test": "tsx src/tests/rbac.test.ts && tsx src/tests/phase17_intelligence.test.ts && tsx src/tests/phase18_health_card.test.ts && tsx src/tests/phase25_integrity.test.ts && tsx src/tests/phase26_security.test.ts",
     "format": "prettier --write \"src/**/*.{ts,js,json}\""
   },
   "keywords": [
@@ -45,11 +45,13 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^20.14.9",
     "@types/pg": "^8.11.6",
+    "@types/selfsigned": "^2.0.4",
     "@typescript-eslint/eslint-plugin": "^7.14.1",
     "@typescript-eslint/parser": "^7.14.1",
     "eslint": "^8.57.0",
     "eslint-config-prettier": "^9.1.0",
     "prettier": "^3.3.2",
+    "selfsigned": "^5.5.0",
     "socket.io-client": "^4.8.4",
     "tsx": "^4.15.7",
     "typescript": "^5.5.2"

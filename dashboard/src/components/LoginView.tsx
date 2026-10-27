@@ -16,13 +16,16 @@ interface LoginViewProps {
   onLoginSuccess: (user: AuthUser) => void;
 }
 
-const DEMO_PRESETS = [
-  { label: 'Manipal Hospital HAL', username: 'manipal_hal', password: 'hospital123', role: 'hospital_staff' },
-  { label: 'St. John\'s Medical College', username: 'st_johns', password: 'hospital123', role: 'hospital_staff' },
-  { label: 'Apollo Bannerghatta', username: 'apollo_bg', password: 'hospital123', role: 'hospital_staff' },
-  { label: 'Fortis Cunningham Rd', username: 'fortis_cunningham', password: 'hospital123', role: 'hospital_staff' },
-  { label: 'Police Control Room', username: 'police_control', password: 'police123', role: 'police' },
-];
+// Default demo credentials are strictly stripped in production release builds (Phase 26 Hardening)
+const DEMO_PRESETS = import.meta.env.PROD
+  ? []
+  : [
+      { label: 'Manipal Hospital HAL', username: 'manipal_hal', password: 'hospital123', role: 'hospital_staff' },
+      { label: 'St. John\'s Medical College', username: 'st_johns', password: 'hospital123', role: 'hospital_staff' },
+      { label: 'Apollo Bannerghatta', username: 'apollo_bg', password: 'hospital123', role: 'hospital_staff' },
+      { label: 'Fortis Cunningham Rd', username: 'fortis_cunningham', password: 'hospital123', role: 'hospital_staff' },
+      { label: 'Police Control Room', username: 'police_control', password: 'police123', role: 'police' },
+    ];
 
 export const LoginView: React.FC<LoginViewProps> = ({ requiredRole, onLoginSuccess }) => {
   const [username, setUsername] = useState<string>('');
@@ -246,52 +249,54 @@ export const LoginView: React.FC<LoginViewProps> = ({ requiredRole, onLoginSucce
             </button>
           </form>
 
-          {/* Quick Demo Credentials Panel */}
-          <div
-            style={{
-              marginTop: '1.75rem',
-              paddingTop: '1.25rem',
-              borderTop: '1px solid #f1f5f9',
-            }}
-          >
+          {/* Quick Demo Credentials Panel (Omitted in release builds) */}
+          {DEMO_PRESETS.length > 0 && (
             <div
               style={{
-                fontSize: '0.725rem',
-                fontWeight: 700,
-                color: '#64748b',
-                textTransform: 'uppercase',
-                letterSpacing: '0.05em',
-                marginBottom: '0.6rem',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.35rem',
+                marginTop: '1.75rem',
+                paddingTop: '1.25rem',
+                borderTop: '1px solid #f1f5f9',
               }}
             >
-              <CheckCircle2 size={13} color="#10b981" />
-              Quick Demo Fill ({isHospital ? 'Hospital Accounts' : 'Police Account'}):
+              <div
+                style={{
+                  fontSize: '0.725rem',
+                  fontWeight: 700,
+                  color: '#64748b',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                  marginBottom: '0.6rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.35rem',
+                }}
+              >
+                <CheckCircle2 size={13} color="#10b981" />
+                Quick Demo Fill ({isHospital ? 'Hospital Accounts' : 'Police Account'}):
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                {DEMO_PRESETS.filter((p) => p.role === requiredRole).map((preset) => (
+                  <button
+                    key={preset.username}
+                    type="button"
+                    onClick={() => applyPreset(preset)}
+                    style={{
+                      background: '#f8fafc',
+                      border: '1px solid #cbd5e1',
+                      padding: '0.35rem 0.6rem',
+                      borderRadius: '0.375rem',
+                      fontSize: '0.75rem',
+                      color: '#334155',
+                      cursor: 'pointer',
+                      fontWeight: 600,
+                    }}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
             </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
-              {DEMO_PRESETS.filter((p) => p.role === requiredRole).map((preset) => (
-                <button
-                  key={preset.username}
-                  type="button"
-                  onClick={() => applyPreset(preset)}
-                  style={{
-                    background: '#f8fafc',
-                    border: '1px solid #cbd5e1',
-                    padding: '0.35rem 0.6rem',
-                    borderRadius: '0.375rem',
-                    fontSize: '0.75rem',
-                    color: '#334155',
-                    cursor: 'pointer',
-                    fontWeight: 600,
-                  }}
-                >
-                  {preset.label}
-                </button>
-              ))}
-            </div>
-          </div>
+          )}
         </div>
       </div>
     </div>

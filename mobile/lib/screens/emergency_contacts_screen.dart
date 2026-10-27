@@ -53,6 +53,7 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
     final phoneCtrl = TextEditingController(text: existing?.phone ?? '');
     String relationship = existing?.relationship ?? 'Family';
     bool isPrimary = existing?.isPrimary ?? (_contacts.isEmpty);
+    bool consentGiven = true;
 
     const relationshipOptions = [
       'Family',
@@ -133,6 +134,26 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
                     value: isPrimary,
                     onChanged: (val) => setDlgState(() => isPrimary = val ?? false),
                   ),
+                  const SizedBox(height: 6),
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFFCBD5E1)),
+                    ),
+                    child: CheckboxListTile(
+                      contentPadding: EdgeInsets.zero,
+                      dense: true,
+                      title: const Text(
+                        'Explicit Emergency Consent: I authorize storing this contact and sending emergency SOS notifications with crash coordinates during incidents (DPDP Act Sec 7(f)).',
+                        style: TextStyle(fontSize: 10.5, color: Color(0xFF334155), height: 1.3),
+                      ),
+                      value: consentGiven,
+                      onChanged: (val) => setDlgState(() => consentGiven = val ?? false),
+                      controlAffinity: ListTileControlAffinity.leading,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -143,8 +164,10 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
               child: const Text('Cancel'),
             ),
             ElevatedButton(
-              onPressed: () async {
-                if (formKey.currentState?.validate() ?? false) {
+              onPressed: !consentGiven
+                  ? null
+                  : () async {
+                      if (formKey.currentState?.validate() ?? false) {
                   final newContact = EmergencyContact(
                     id: existing?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
                     name: nameCtrl.text.trim(),

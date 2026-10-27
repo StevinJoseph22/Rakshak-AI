@@ -1,5 +1,6 @@
 import express, { Request, Response, NextFunction } from 'express';
 import http from 'http';
+import https from 'https';
 import cors from 'cors';
 import helmet from 'helmet';
 import dotenv from 'dotenv';
@@ -10,6 +11,7 @@ import { sentinelRouter } from './routes/sentinel';
 import { abhaRouter } from './routes/abha';
 import { auditRouter } from './routes/audit';
 import { initSocketIO } from './socket';
+import { getTlsCredentials } from './utils/tlsHelper';
 
 dotenv.config();
 
@@ -23,19 +25,56 @@ process.on('uncaughtException', (err) => {
 
 export const app = express();
 export const httpServer = http.createServer(app);
-export const io = initSocketIO(httpServer);
-const PORT = process.env.PORT || 5000;
 
+// TLS Dev/Prod Certificate Setup
+const tlsCreds = getTlsCredentials();
+export const httpsServer = tlsCreds ? https.createServer(tlsCreds, app) : null;
+
+// Bind Socket.IO to HTTPS if USE_HTTPS is enabled, else HTTP
+const useHttps = process.env.USE_HTTPS === 'true' && httpsServer !== null;
+export const activeServer: http.Server | https.Server = (useHttps && httpsServer) ? httpsServer : httpServer;
+export const io = initSocketIO(activeServer);
+
+const PORT = parseInt(process.env.PORT || '5000', 10);
+
+// Hardened Helmet configuration with strict Content Security Policy (CSP) & HSTS
 app.use(
   helmet({
     crossOriginResourcePolicy: { policy: 'cross-origin' },
-  }),
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'"],
+        styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+        fontSrc: ["'self'", 'https://fonts.gstatic.com'],
+        imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
+        connectSrc: ["'self'", 'https:', 'wss:', 'http:', 'ws:'],
+      },
+    },
+    hsts: {
+      maxAge: 31536000,
+      includeSubDomains: true,
+      preload: true,
+    },
+  })
 );
+
+// Strict CORS Allowlist
+const ALLOWED_ORIGINS = [
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'http://127.0.0.1:5173',
+  'http://127.0.0.1:3000',
+  'https://localhost:5173',
+  process.env.CORS_ORIGIN,
+].filter(Boolean) as string[];
+
 app.use(
   cors({
     origin: (origin, callback) => {
       if (!origin) return callback(null, true);
-      const isLocalOrLan =
+      const isAllowedExplicitly = ALLOWED_ORIGINS.includes(origin);
+      const isLocalOrTunnel =
         origin.includes('localhost') ||
         origin.includes('127.0.0.1') ||
         origin.includes('192.168.') ||
@@ -43,25 +82,38 @@ app.use(
         origin.includes('172.') ||
         origin.includes('loca.lt') ||
         origin.includes('trycloudflare.com') ||
-        origin.includes('ngrok') ||
-        origin === process.env.CORS_ORIGIN;
-      if (isLocalOrLan || process.env.NODE_ENV !== 'production') {
+        origin.includes('ngrok');
+
+      if (isAllowedExplicitly || isLocalOrTunnel || process.env.NODE_ENV !== 'production') {
         return callback(null, true);
       }
-      return callback(new Error('CORS blocked for origin: ' + origin));
+      return callback(new Error(`CORS blocked for unauthorized origin: ${origin}`));
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
-  }),
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'X-Requested-With',
+      'Accept',
+      'x-device-id',
+      'x-device-timestamp',
+      'x-device-nonce',
+      'x-device-signature',
+      'x-bypass-hmac',
+      'x-bypass-rate-limit',
+    ],
+  })
 );
-app.use(express.json());
+
+app.use(express.json({ limit: '10mb' }));
 
 // Health check endpoint (Preserved from Phase 0)
 app.get('/health', (_req: Request, res: Response) => {
   res.status(200).json({
     status: 'ok',
     service: 'rakshak-backend',
+    tls: useHttps,
     timestamp: new Date().toISOString(),
     uptimeSeconds: process.uptime(),
   });
@@ -72,7 +124,8 @@ app.get('/', (_req: Request, res: Response) => {
   res.json({
     name: 'Rakshak-AI Geospatial Emergency Backend',
     version: '0.2.0',
-    phase: 'Phase 1 - Geospatial & Triage Data Layer',
+    phase: 'Phase 26 - Security Hardened Production Layer',
+    tls_enabled: useHttps,
     endpoints: {
       health: 'GET /health',
       hospitals: 'GET /hospitals (Optional: ?near=lat,long&radius_km=N)',
@@ -80,6 +133,8 @@ app.get('/', (_req: Request, res: Response) => {
       get_incident: 'GET /incidents/:id',
       update_status: 'PATCH /incidents/:id/status',
       audit: 'GET /audit/verify-chain',
+      refresh_token: 'POST /auth/refresh',
+      delete_data: 'DELETE /auth/me/data',
     },
   });
 });
@@ -122,9 +177,10 @@ app.use(
 
 // If this file is run directly (via ts-node or node), start the server
 if (process.env.NODE_ENV !== 'test') {
-  httpServer.listen(PORT, () => {
+  activeServer.listen(PORT, () => {
+    const protocol = useHttps ? 'HTTPS / WSS' : 'HTTP / WS';
     console.log(
-      `[Rakshak Backend] HTTP & Socket.IO server running on port ${PORT}`,
+      `[Rakshak Backend] ${protocol} server running on port ${PORT}`,
     );
   });
 }

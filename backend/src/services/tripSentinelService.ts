@@ -51,6 +51,7 @@ export class TripSentinelService {
   private sessions: Map<string, TripSession> = new Map();
   private watchdogTimer: NodeJS.Timeout | null = null;
   private readonly LOST_CONTACT_TIMEOUT_MS = DEFAULT_SENTINEL_LOST_CONTACT_MS;
+  private readonly ESCALATION_TIMEOUT_MS = DEFAULT_SENTINEL_ESCALATION_MS;
   /**
    * Minimum speed threshold: Dead-man switch operates strictly above 60 km/h (highway transit speeds).
    * In slow urban/city traffic (<60 km/h), telemetry silence is attributed to normal stoppage,

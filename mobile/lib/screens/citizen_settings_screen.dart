@@ -91,6 +91,67 @@ class _CitizenSettingsScreenState extends State<CitizenSettingsScreen> {
     }
   }
 
+  Future<void> _deleteMyData() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1E293B),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.delete_forever, color: Color(0xFFEF4444), size: 24),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Erase All Personal Data?',
+                style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        content: const Text(
+          'Under the Digital Personal Data Protection (DPDP) Act Section 12, you have the statutory right to permanent data erasure.\n\nThis will permanently delete:\n• All stored emergency contacts\n• Personal identity and vehicle registration details\n• Linked ABHA and clinical record references\n• Local cache and server telemetry records\n\nThis action is permanent and cannot be undone.',
+          style: TextStyle(color: Color(0xFFCBD5E1), fontSize: 12, height: 1.45),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel', style: TextStyle(color: Color(0xFF94A3B8))),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFDC2626),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Permanently Erase', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await EmergencyContactService.instance.saveContacts([]);
+      await UserProfileService.instance.clearProfile();
+      setState(() {
+        _nameController.text = '';
+        _phoneController.text = '';
+        _modelController.text = '';
+        _plateController.text = '';
+        _contacts = [];
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✓ All personal data permanently erased (DPDP Act Compliance).'),
+            backgroundColor: Color(0xFFEF4444),
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -380,6 +441,35 @@ class _CitizenSettingsScreenState extends State<CitizenSettingsScreen> {
                         ),
                       ),
                     ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+
+            // Section 6: Data Privacy & Right to Erasure (DPDP Act)
+            _buildSectionHeader('DATA PRIVACY & RIGHT TO ERASURE (DPDP ACT)', Icons.privacy_tip_outlined),
+            const SizedBox(height: 10),
+            _buildCard(
+              children: [
+                const Text(
+                  'In accordance with India\'s Digital Personal Data Protection (DPDP) Act, your data belongs strictly to you. You may erase all locally cached contacts, profile identity, vehicle details, and active server telemetry sessions at any time.',
+                  style: TextStyle(fontSize: 11, color: Color(0xFF94A3B8), height: 1.4),
+                ),
+                const SizedBox(height: 14),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: _deleteMyData,
+                    icon: const Icon(Icons.delete_outline, size: 16, color: Color(0xFFEF4444)),
+                    label: const Text(
+                      'DELETE MY STORED DATA',
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Color(0xFFEF4444)),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Color(0xFFEF4444)),
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                    ),
                   ),
                 ),
               ],

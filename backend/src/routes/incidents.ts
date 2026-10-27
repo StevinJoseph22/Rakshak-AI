@@ -25,7 +25,15 @@ import {
   storeEphemeralHealthCard,
   getEphemeralHealthCard,
   hasEphemeralHealthCard,
+  storeEncryptedIncidentPhoto,
+  getDecryptedIncidentPhoto,
 } from '../redis';
+import { decryptIncidentPhoto } from '../services/photoCryptoService';
+import {
+  rateLimitIncidents,
+  verifyIncidentSignature,
+  validateImageUpload,
+} from '../middleware/abusePrevention';
 import {
   scheduleAutoEscalation,
   cancelAutoEscalation,
@@ -90,7 +98,11 @@ export function sanitizeVictimMetadata(
 }
 
 // POST /incidents/suspected - Fast-path for soft pre-alert to police only
-incidentsRouter.post('/suspected', async (req: Request, res: Response) => {
+incidentsRouter.post(
+  '/suspected',
+  rateLimitIncidents,
+  verifyIncidentSignature,
+  async (req: Request, res: Response) => {
   req.body.status = 'suspected';
   const parseResult = createIncidentSchema.safeParse(req.body);
   if (!parseResult.success) {
@@ -256,7 +268,11 @@ incidentsRouter.post('/:id/cancel', async (req: Request, res: Response) => {
 });
 
 // POST /incidents - Create incident & match trauma hospitals within 8km (or idempotent confirm)
-incidentsRouter.post('/', async (req: Request, res: Response) => {
+incidentsRouter.post(
+  '/',
+  rateLimitIncidents,
+  verifyIncidentSignature,
+  async (req: Request, res: Response) => {
   try {
     const parseResult = createIncidentSchema.safeParse(req.body);
     if (!parseResult.success) {
@@ -774,7 +790,11 @@ incidentsRouter.get('/', optionalAuth, async (req: Request, res: Response) => {
         updated_at: row.updated_at,
         distance_km: straightKm,
         road_distance_km: roadKm,
-        imageUrl: cachedImages[idx] || null,
+        imageUrl: cachedImages[idx]
+          ? (cachedImages[idx]!.startsWith('enc:v1:')
+              ? decryptIncidentPhoto(row.id as string, cachedImages[idx]!)
+              : cachedImages[idx])
+          : null,
         hospital_id: hospitalId || (matchedHospitals[0]?.id ?? undefined),
         hospital_name: matchedHospitals[0]?.name ?? undefined,
         matched_hospitals_count: matchedHospitals.length,
@@ -1026,7 +1046,11 @@ incidentsRouter.get('/nearby', async (req: Request, res: Response) => {
         updated_at: row.updated_at,
         distance_km: straightKm,
         road_distance_km: roadKm,
-        imageUrl: cachedImages[idx] || null,
+        imageUrl: cachedImages[idx]
+          ? (cachedImages[idx]!.startsWith('enc:v1:')
+              ? decryptIncidentPhoto(row.id as string, cachedImages[idx]!)
+              : cachedImages[idx])
+          : null,
       };
     });
 
@@ -1374,7 +1398,7 @@ incidentsRouter.get('/:id', async (req: Request, res: Response) => {
 
     try {
       const [img, amb] = await Promise.all([
-        redis.get(`incident_image:${id}`),
+        getDecryptedIncidentPhoto(id),
         redis.get(`ambulance_loc:${id}`),
       ]);
       imageUrl = img;
@@ -1404,11 +1428,11 @@ incidentsRouter.get('/:id', async (req: Request, res: Response) => {
   }
 });
 
-// GET /incidents/:id/image - Directly retrieve ephemeral in-memory photo from Redis RAM
+// GET /incidents/:id/image - Directly retrieve ephemeral in-memory photo from Redis RAM (decrypted on relay)
 incidentsRouter.get('/:id/image', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const imageUrl = await redis.get(`incident_image:${id}`);
+    const imageUrl = await getDecryptedIncidentPhoto(id);
     if (!imageUrl) {
       return res.status(404).json({ error: 'Image not found or expired', imageUrl: null });
     }
@@ -1420,7 +1444,7 @@ incidentsRouter.get('/:id/image', async (req: Request, res: Response) => {
 });
 
 // POST /incidents/:id/image - Upload ephemeral in-memory photo stream (HTTP fallback for WebSockets)
-incidentsRouter.post('/:id/image', async (req: Request, res: Response) => {
+incidentsRouter.post('/:id/image', validateImageUpload, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const { image } = req.body;
@@ -1454,12 +1478,12 @@ incidentsRouter.post('/:id/image', async (req: Request, res: Response) => {
       // Non-fatal incident auto-healing check failure
     }
 
-    // Store in volatile Redis RAM with 15-minute TTL (900 seconds)
-    await redis.setex(`incident_image:${effectiveIncidentId}`, 900, dataUrl);
+    // Store encrypted with AES-256-GCM in volatile Redis RAM with 15-minute TTL (900 seconds)
+    await storeEncryptedIncidentPhoto(effectiveIncidentId, dataUrl, 900);
     if (effectiveIncidentId !== id) {
-      await redis.setex(`incident_image:${id}`, 900, dataUrl);
+      await storeEncryptedIncidentPhoto(id, dataUrl, 900);
     }
-    console.log(`[Zero-Storage Engine] Stored photo stream via HTTP POST in Redis RAM (TTL 900s): incident_image:${effectiveIncidentId}`);
+    console.log(`[Photo Encryption] Stored encrypted photo stream via HTTP POST in Redis RAM (TTL 900s): ${effectiveIncidentId}`);
 
     // Broadcast image_update via Socket.IO
     const io = getIO();

@@ -83,8 +83,8 @@ export interface CreateIncidentResponse {
   matched_hospitals: Hospital[];
 }
 
-// Phase 13: Role-Based Access Control & Authentication Types
-export type UserRole = 'hospital_staff' | 'police' | 'ambulance';
+// Phase 13 & 26: Role-Based Access Control & Authentication Types
+export type UserRole = 'hospital_staff' | 'police' | 'ambulance' | 'admin';
 
 export interface User {
   id: string;
@@ -99,7 +99,7 @@ export interface AuthUser {
   id: string;
   username: string;
   role: UserRole;
-  hospital_id: string | null;
+  hospital_id?: string | null;
   hospital_name?: string | null;
 }
 

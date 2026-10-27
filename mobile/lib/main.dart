@@ -971,10 +971,56 @@ class _CrashDetectionScreenState extends State<CrashDetectionScreen> {
             style: TextStyle(fontSize: 10.5, color: Colors.black54),
           ),
           value: TripSentinelClientService.instance.isConsentEnabled,
-          onChanged: (val) {
-            setState(() {
-              TripSentinelClientService.instance.setMonitoringConsent(val);
-            });
+          onChanged: (val) async {
+            if (val) {
+              final consented = await showDialog<bool>(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  backgroundColor: const Color(0xFF1E293B),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  title: const Row(
+                    children: [
+                      Icon(Icons.security, color: Color(0xFF38BDF8), size: 22),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Trip Sentinel Consent',
+                          style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ],
+                  ),
+                  content: const Text(
+                    'In compliance with DPDP Act Section 7(f), Trip Sentinel streams anonymized GPS heartbeat telemetry to the secure watchdog server ONLY when travelling at highway speeds (>60 km/h).\n\nTelemetry resides strictly in volatile RAM and is permanently purged once you reach your destination. If communication drops abruptly during high speed, responders are alerted to check for silent roadside accidents.\n\nDo you grant explicit consent for journey telemetry monitoring?',
+                    style: TextStyle(color: Color(0xFFCBD5E1), fontSize: 12.5, height: 1.45),
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx, false),
+                      child: const Text('Decline', style: TextStyle(color: Color(0xFF94A3B8))),
+                    ),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF0284C7),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                      onPressed: () => Navigator.pop(ctx, true),
+                      child: const Text('I Consent & Enable', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                    ),
+                  ],
+                ),
+              );
+
+              if (consented == true) {
+                setState(() {
+                  TripSentinelClientService.instance.setMonitoringConsent(true);
+                });
+              }
+            } else {
+              setState(() {
+                TripSentinelClientService.instance.setMonitoringConsent(false);
+              });
+            }
           },
         ),
       ),

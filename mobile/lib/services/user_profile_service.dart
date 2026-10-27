@@ -139,4 +139,25 @@ class UserProfileService {
       debugPrint('[UserProfileService] Save error: $e');
     }
   }
+
+  Future<void> clearProfile() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_storageKey);
+      _profile = const UserProfile(
+        userName: '',
+        phone: '',
+        vehicleModel: '',
+        vehiclePlate: '',
+        bloodGroup: '',
+        todayDistanceKm: 0,
+        safetyDrivingScore: 100,
+        overSpeedingCount: 0,
+        suddenBrakingCount: 0,
+      );
+      profileNotifier.value = _profile;
+    } catch (e) {
+      debugPrint('[UserProfileService] Clear profile error: $e');
+    }
+  }
 }

@@ -1,9 +1,15 @@
 import { Server as SocketIOServer, Socket } from 'socket.io';
 import { Server as HttpServer } from 'http';
+import { Server as HttpsServer } from 'https';
 import { Hospital, BlackspotInfo } from './types';
-import { redis, registerPurgeVerification } from './redis';
+import {
+  redis,
+  storeEncryptedIncidentPhoto,
+  getDecryptedIncidentPhoto,
+} from './redis';
 import { query } from './db';
 import { verifyToken } from './utils/jwt';
+import { maskPhoneNumber, maskName } from './utils/privacy';
 import { NtcipTrafficControllerService } from './services/ntcipService';
 import {
   scheduleSilentPromotion,
@@ -33,7 +39,7 @@ export interface IncidentBroadcastPayload {
   accepted_hospital_name?: string;
 }
 
-export function initSocketIO(httpServer: HttpServer): SocketIOServer {
+export function initSocketIO(httpServer: HttpServer | HttpsServer): SocketIOServer {
   io = new SocketIOServer(httpServer, {
     cors: {
       origin: true, // Allow connections from Vite dashboard (5173), mobile, LAN IPs, etc.
@@ -143,14 +149,74 @@ export function initSocketIO(httpServer: HttpServer): SocketIOServer {
       socket.emit('joined_police', { room: 'all_incidents', status: 'ok' });
     });
 
-    // Phase 7: Mobile client joins its per-incident status room (and all_incidents for city broadcasts)
-    socket.on('join_incident', (incidentId: string) => {
-      if (incidentId) {
-        socket.join(`incident:${incidentId}`);
-        socket.join('all_incidents');
-        console.log(`[Socket.io] Socket ${socket.id} joined room: incident:${incidentId} and all_incidents`);
-        socket.emit('joined_incident', { incidentId, status: 'ok' });
+    // Phase 7 & 26: Scoped join_incident with server-side authorization
+    socket.on('join_incident', async (incidentId: string) => {
+      if (!incidentId) return;
+
+      const user = socket.data.user;
+
+      // Hospital staff authorization check: staff may only join rooms if matched or accepted
+      if (user && user.role === 'hospital_staff') {
+        const hospitalId = user.hospital_id;
+        if (!hospitalId) {
+          socket.emit('error', {
+            code: 'FORBIDDEN',
+            message: 'Hospital staff must have an assigned hospital ID.',
+          });
+          return;
+        }
+
+        try {
+          const checkRes = await query<{ accepted_hospital_id: string | null }>(
+            `SELECT accepted_hospital_id FROM incidents WHERE id = $1;`,
+            [incidentId]
+          );
+
+          if (checkRes.rowCount === 0) {
+            socket.emit('error', { code: 'NOT_FOUND', message: 'Incident not found.' });
+            return;
+          }
+
+          const isAcceptedByThisHosp = checkRes.rows[0].accepted_hospital_id === hospitalId;
+          if (!isAcceptedByThisHosp) {
+            let matchedHospitals: string[] = [];
+            try {
+              const cached = await redis.get(`incident_hospitals:${incidentId}`);
+              if (cached) matchedHospitals = JSON.parse(cached);
+            } catch (_) {
+              // ignore
+            }
+
+            if (!matchedHospitals.includes(hospitalId)) {
+              const matchDb = await query<{ id: string }>(
+                `SELECT h.id FROM hospitals h JOIN incidents i ON ST_DWithin(h.location, i.location, 8000) WHERE i.id = $1 AND h.id = $2;`,
+                [incidentId, hospitalId]
+              );
+              if (matchDb.rowCount === 0) {
+                console.warn(
+                  `[Socket.io RBAC] Hospital staff '${user.username}' (${hospitalId}) denied join_incident for unassigned incident ${incidentId}`
+                );
+                socket.emit('error', {
+                  code: 'FORBIDDEN',
+                  message: 'Hospital staff may only join incident rooms where their facility is matched or assigned.',
+                });
+                return;
+              }
+            }
+          }
+        } catch (authErr) {
+          console.error('[Socket.io RBAC] Error verifying hospital incident room authorization:', authErr);
+          socket.emit('error', { code: 'INTERNAL_ERROR', message: 'Authorization check failed' });
+          return;
+        }
       }
+
+      socket.join(`incident:${incidentId}`);
+      if (user && user.role === 'police') {
+        socket.join('all_incidents');
+      }
+      console.log(`[Socket.io] Socket ${socket.id} joined room: incident:${incidentId}`);
+      socket.emit('joined_incident', { incidentId, status: 'ok' });
     });
 
     // Phase 8: Live Ambulance GPS Telemetry Beacon
@@ -469,17 +535,13 @@ export function initSocketIO(httpServer: HttpServer): SocketIOServer {
             console.warn('[Socket.io] Error during incident ID validation/healing:', healErr);
           }
 
-          // 1. Strict Zero-Storage Guarantee: Store exclusively in volatile Redis RAM with 15-minute TTL (900 seconds)
-          // ZERO persistent file writes occur.
-          const redisKey = `incident_image:${effectiveIncidentId}`;
-          await redis.setex(redisKey, 900, dataUrl);
+          // 1. Strict Zero-Storage & Photo Encryption Guarantee: Store in volatile Redis RAM encrypted with AES-256-GCM
+          // ZERO plaintext photo writes to Redis or disk occur.
+          await storeEncryptedIncidentPhoto(effectiveIncidentId, dataUrl, 900);
           if (effectiveIncidentId !== incidentId) {
-            await redis.setex(`incident_image:${incidentId}`, 900, dataUrl);
+            await storeEncryptedIncidentPhoto(incidentId, dataUrl, 900);
           }
-          console.log(`[Zero-Storage Engine] Stored photo stream in Redis RAM (TTL 900s): ${redisKey}`);
-
-          // 2. Register background purge-confirmation verification job
-          registerPurgeVerification(effectiveIncidentId, 900);
+          console.log(`[Photo Encryption] Stored AES-256-GCM encrypted photo in Redis RAM (TTL 900s) for incident: ${effectiveIncidentId}`);
 
           // 3. Resolve matched hospital IDs to strictly enforce Phase 5 room isolation
           let hospitalIds: string[] = [];
@@ -713,10 +775,10 @@ export async function broadcastNewIncident(
     return;
   }
 
-  // Retrieve cached in-memory image from Redis RAM if already uploaded
+  // Retrieve and decrypt in-memory photo from Redis RAM only when relaying
   let activeImageUrl: string | null = null;
   try {
-    activeImageUrl = await redis.get(`incident_image:${incident.id}`);
+    activeImageUrl = await getDecryptedIncidentPhoto(incident.id);
   } catch {
     // Non-fatal cache read error
   }
@@ -1004,7 +1066,7 @@ export async function broadcastAmbulanceArrived(payload: AmbulanceArrivalPayload
   }
 
   console.log(
-    `[Socket.io] Broadcasted ambulance_arrived for ${payload.incident_id} (Unit: ${payload.ambulance_id}, Plate: ${payload.ambulance_plate}, Driver: ${payload.driver_name} ${payload.driver_phone})`
+    `[Socket.io] Broadcasted ambulance_arrived for ${payload.incident_id} (Unit: ${payload.ambulance_id}, Plate: ${payload.ambulance_plate}, Driver: ${maskName(payload.driver_name)} ${maskPhoneNumber(payload.driver_phone)})`
   );
 }
 
