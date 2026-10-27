@@ -106,7 +106,18 @@ class CrashEventService {
 
   Stream<CrashEvent> get onCrashDetected => _crashController.stream;
 
+  DateTime? _lastTriggerTime;
+
   void triggerCrash(CrashEvent event) {
+    if (!_isTestEnvironment && _lastTriggerTime != null) {
+      final elapsed = DateTime.now().difference(_lastTriggerTime!).inSeconds;
+      if (elapsed < 10) {
+        debugPrint('[CrashEventService] 🛡️ Suppressed duplicate crash event within 10s debounce window ($elapsed s ago).');
+        return;
+      }
+    }
+    _lastTriggerTime = DateTime.now();
+
     if (!_crashController.isClosed) {
       _crashController.add(event);
     }
@@ -114,6 +125,7 @@ class CrashEventService {
 
   /// Alias for triggerCrash matching Phase 3 detector convention
   void publish(CrashEvent event) => triggerCrash(event);
+  void publishCrashEvent(CrashEvent event) => triggerCrash(event);
 
   void dispose() {
     _crashController.close();

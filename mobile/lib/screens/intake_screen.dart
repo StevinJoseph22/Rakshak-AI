@@ -82,7 +82,7 @@ class _IntakeScreenState extends State<IntakeScreen> {
         });
 
         // Phase 6: Stream raw volatile image bytes over WebSocket binary frame
-        final incidentId = widget.incidentId ?? await CrashEventService.instance.resolveCurrentIncidentId();
+        final incidentId = widget.incidentId ?? CrashEventService.instance.lastDispatchedIncidentId ?? await CrashEventService.instance.resolveCurrentIncidentId();
         if (incidentId != null) {
           PhotoStreamService.instance
               .streamIncidentPhoto(

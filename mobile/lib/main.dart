@@ -332,7 +332,17 @@ class _CrashDetectionScreenState extends State<CrashDetectionScreen> {
     });
   }
 
+  bool _isTriggeringSimulatedCrash = false;
+
   void _triggerSimulatedCrash() {
+    if (_isTriggeringSimulatedCrash) {
+      debugPrint('[Harness] Suppressed rapid repeated tap on TRIGGER IMPACT SIGNATURE.');
+      return;
+    }
+    _isTriggeringSimulatedCrash = true;
+    Timer(const Duration(seconds: 5), () {
+      if (mounted) setState(() => _isTriggeringSimulatedCrash = false);
+    });
     EmergencySmsService.instance.resetAlertHistory();
     CrashEventService.instance.beginNewIncidentDispatch();
 

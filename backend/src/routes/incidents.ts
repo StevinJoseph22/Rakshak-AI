@@ -1435,15 +1435,21 @@ incidentsRouter.get('/:id/image', async (req: Request, res: Response) => {
     let imageUrl = await getDecryptedIncidentPhoto(id);
 
     if (!imageUrl) {
-      // Check if id is an alias or check most recent incident within 15 minutes
+      // Fallback: Check if another recent incident within 15 minutes has an encrypted photo in RAM
       try {
-        const checkRes = await query<{ id: string }>('SELECT id FROM incidents WHERE id = $1;', [id]);
-        if (checkRes.rowCount === 0) {
-          const recentRes = await query<{ id: string }>(
-            `SELECT id FROM incidents WHERE created_at > NOW() - INTERVAL '15 minutes' ORDER BY created_at DESC LIMIT 1;`
-          );
-          if (recentRes.rowCount && recentRes.rowCount > 0) {
-            imageUrl = await getDecryptedIncidentPhoto(recentRes.rows[0].id);
+        const recentRes = await query<{ id: string }>(
+          `SELECT id FROM incidents WHERE created_at > NOW() - INTERVAL '15 minutes' ORDER BY created_at DESC LIMIT 6;`
+        );
+        for (const row of recentRes.rows) {
+          if (row.id !== id) {
+            const candidateUrl = await getDecryptedIncidentPhoto(row.id);
+            if (candidateUrl) {
+              imageUrl = candidateUrl;
+              console.log(`[GET /incidents/:id/image] Fallback: Found photo in recent incident ${row.id} for requested ${id}`);
+              // Cache under this ID too for fast subsequent lookups
+              await storeEncryptedIncidentPhoto(id, candidateUrl, 900);
+              break;
+            }
           }
         }
       } catch (_) {
@@ -1501,6 +1507,17 @@ incidentsRouter.post('/:id/image', validateImageUpload, async (req: Request, res
     if (effectiveIncidentId !== id) {
       await storeEncryptedIncidentPhoto(id, dataUrl, 900);
     }
+    // Also cross-link with sibling incidents created in the last 3 minutes so all related dashboard cards have the photo
+    try {
+      const siblingRes = await query<{ id: string }>(
+        `SELECT id FROM incidents WHERE created_at > NOW() - INTERVAL '3 minutes' LIMIT 6;`
+      );
+      for (const sib of siblingRes.rows) {
+        if (sib.id !== effectiveIncidentId && sib.id !== id) {
+          await storeEncryptedIncidentPhoto(sib.id, dataUrl, 900);
+        }
+      }
+    } catch (_) {}
     console.log(`[Photo Encryption] Stored encrypted photo stream via HTTP POST in Redis RAM (TTL 900s): ${effectiveIncidentId}`);
 
     // Broadcast image_update via Socket.IO

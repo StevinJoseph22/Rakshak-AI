@@ -158,11 +158,16 @@ class _LockedScreenAlertScreenState extends State<LockedScreenAlertScreen>
       },
     };
 
-    final clientIncidentId = PreCrashMicroBurstService.instance.currentSuspectedIncidentId;
+    // Deterministically assign a client-generated UUID for strict idempotency if not already suspected
+    final clientIncidentId = PreCrashMicroBurstService.instance.currentSuspectedIncidentId ??
+        PreCrashMicroBurstService.generateClientUuid();
+
+    // Immediately register active incident ID synchronously so subsequent screens and photo stream have it
+    CrashEventService.instance.lastDispatchedIncidentId = clientIncidentId;
 
     final cardJson = (_healthCard ?? EmergencyHealthCard.empty()).toJson();
 
-    // Auto-broadcast alert to backend (idempotently promotes suspected incident to broadcasting)
+    // Auto-broadcast alert to backend (idempotently promotes suspected incident or creates with client UUID)
     _apiClient.reportIncident(
       id: clientIncidentId,
       status: 'broadcasting',
@@ -172,18 +177,16 @@ class _LockedScreenAlertScreenState extends State<LockedScreenAlertScreen>
       healthCard: cardJson,
     ).then((result) {
       if (result.isSuccess) {
-        final incidentId = result.data?.incident.id;
+        final incidentId = result.data?.incident.id ?? clientIncidentId;
         CrashEventService.instance.lastDispatchedIncidentId = incidentId;
-        if (incidentId != null) {
-          IncidentTrackingService.instance.trackIncident(incidentId);
-        }
-        debugPrint('Successfully broadcast incident $incidentId to backend');
+        IncidentTrackingService.instance.trackIncident(incidentId);
+        debugPrint('Successfully broadcast incident ' + incidentId.toString() + ' to backend');
       } else {
-        CrashEventService.instance.lastDispatchedIncidentId = null;
-        debugPrint('Incident broadcast queued / offline fallback: ${result.errorMessage}');
-        final fallbackId = clientIncidentId ?? PreCrashMicroBurstService.generateClientUuid();
+        // Maintain clientIncidentId so photo streaming tags the exact queued store-and-forward incident
+        CrashEventService.instance.lastDispatchedIncidentId = clientIncidentId;
+        debugPrint('Incident broadcast queued / offline fallback: ' + result.errorMessage.toString());
         OfflineDispatchQueue.instance.enqueue(
-          id: fallbackId,
+          id: clientIncidentId,
           latitude: lat,
           longitude: lng,
           victimMetadata: metadata,
@@ -206,6 +209,7 @@ class _LockedScreenAlertScreenState extends State<LockedScreenAlertScreen>
       MaterialPageRoute(
         builder: (context) => IntakeScreen(
           crashEvent: widget.crashEvent,
+          incidentId: CrashEventService.instance.lastDispatchedIncidentId,
         ),
       ),
     );

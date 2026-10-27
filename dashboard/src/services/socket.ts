@@ -10,8 +10,8 @@ const BACKEND_URL =
 let socketInstance: Socket | null = null;
 
 export const getSocket = (): Socket => {
+  const token = getStoredToken();
   if (!socketInstance) {
-    const token = getStoredToken();
     socketInstance = io(BACKEND_URL, {
       auth: { token },
       transports: ['websocket', 'polling'],
@@ -21,6 +21,11 @@ export const getSocket = (): Socket => {
       reconnectionDelayMax: 5000,
       timeout: 10000,
     });
+  } else {
+    socketInstance.auth = { token };
+    if (!socketInstance.connected) {
+      socketInstance.connect();
+    }
   }
   return socketInstance;
 };

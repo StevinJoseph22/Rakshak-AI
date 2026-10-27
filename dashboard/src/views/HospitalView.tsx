@@ -177,51 +177,60 @@ export const HospitalView: React.FC = () => {
     };
   }, []);
 
-  // Fetch incidents within 8km of the selected hospital on mount or hospital change
+  // Fetch incidents within 8km of the selected hospital on mount, change, and 4s background sync
   useEffect(() => {
     let isMounted = true;
-    authFetch(`${BACKEND_API_BASE}/incidents?hospital_id=${selectedHospitalId}&limit=20`)
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP error ${res.status}`);
-        return res.json();
-      })
-      .then((data) => {
-        if (!isMounted) return;
-        if (data.incidents && Array.isArray(data.incidents)) {
-          setIncidentsByHospital((prev) => {
-            const currentList = prev[selectedHospitalId] || [];
-            const mergedMap = new Map<string, IncidentPayload>();
-            data.incidents.forEach((inc: IncidentPayload) => {
-              mergedMap.set(inc.id, inc);
+    const fetchIncidents = () => {
+      authFetch(`${BACKEND_API_BASE}/incidents?hospital_id=${selectedHospitalId}&limit=20`)
+        .then((res) => {
+          if (!res.ok) throw new Error(`HTTP error ${res.status}`);
+          return res.json();
+        })
+        .then((data) => {
+          if (!isMounted) return;
+          if (data.incidents && Array.isArray(data.incidents)) {
+            setIncidentsByHospital((prev) => {
+              const currentList = prev[selectedHospitalId] || [];
+              const mergedMap = new Map<string, IncidentPayload>();
+              data.incidents.forEach((inc: IncidentPayload) => {
+                mergedMap.set(inc.id, inc);
+              });
+              currentList.forEach((inc: IncidentPayload) => {
+                const existing = mergedMap.get(inc.id);
+                mergedMap.set(inc.id, existing ? { ...existing, ...inc } : inc);
+              });
+              const merged = Array.from(mergedMap.values()).sort(
+                (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+              );
+              const updated = {
+                ...prev,
+                [selectedHospitalId]: merged,
+              };
+              try {
+                localStorage.setItem('rakshak_hospital_feed', JSON.stringify(updated));
+              } catch {
+                // ignore
+              }
+              return updated;
             });
-            currentList.forEach((inc: IncidentPayload) => {
-              const existing = mergedMap.get(inc.id);
-              mergedMap.set(inc.id, existing ? { ...existing, ...inc } : inc);
-            });
-            const merged = Array.from(mergedMap.values()).sort(
-              (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-            );
-            const updated = {
-              ...prev,
-              [selectedHospitalId]: merged,
-            };
-            try {
-              localStorage.setItem('rakshak_hospital_feed', JSON.stringify(updated));
-            } catch {
-              // ignore
-            }
-            return updated;
-          });
-        }
-      })
-      .catch((err) => {
-        console.warn('[HospitalView] Failed to fetch incidents for hospital:', err);
-      });
+          }
+        })
+        .catch(() => {});
+    };
+
+    fetchIncidents();
+    const interval = setInterval(fetchIncidents, 4000);
+    const onFocus = () => fetchIncidents();
+    window.addEventListener('focus', onFocus);
 
     return () => {
       isMounted = false;
+      clearInterval(interval);
+      window.removeEventListener('focus', onFocus);
     };
   }, [selectedHospitalId]);
+
+
 
   const selectedHospital =
     hospitals.find((h) => h.id === selectedHospitalId) || hospitals[0];
