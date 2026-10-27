@@ -1042,3 +1042,16 @@ export async function broadcastAmbulanceLocation(telemetry: {
 }
 
 
+
+
+export function broadcastHospitalCapabilitiesUpdated(payload: {
+  hospital_id: string;
+  capabilities: Record<string, boolean>;
+  updated_by: string;
+  updated_at: string;
+}): void {
+  if (!io) return;
+  io.emit('hospital:capabilities_updated', payload);
+  io.to(payload.hospital_id).emit('hospital:capabilities_updated', payload);
+  console.log(`[Socket.io] Emitted hospital:capabilities_updated for ${payload.hospital_id}`);
+}

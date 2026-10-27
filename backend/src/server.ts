@@ -8,6 +8,7 @@ import { incidentsRouter } from './routes/incidents';
 import { authRouter } from './routes/auth';
 import { sentinelRouter } from './routes/sentinel';
 import { abhaRouter } from './routes/abha';
+import { auditRouter } from './routes/audit';
 import { initSocketIO } from './socket';
 
 dotenv.config();
@@ -78,6 +79,7 @@ app.get('/', (_req: Request, res: Response) => {
       create_incident: 'POST /incidents',
       get_incident: 'GET /incidents/:id',
       update_status: 'PATCH /incidents/:id/status',
+      audit: 'GET /audit/verify-chain',
     },
   });
 });
@@ -88,6 +90,8 @@ app.use('/hospitals', hospitalsRouter);
 app.use('/incidents', incidentsRouter);
 app.use('/sentinel', sentinelRouter);
 app.use('/abha', abhaRouter);
+app.use('/audit', auditRouter);
+app.use('/api/audit', auditRouter);
 
 // 404 Handler for undefined routes
 app.use((req: Request, res: Response) => {
@@ -98,23 +102,29 @@ app.use((req: Request, res: Response) => {
 });
 
 // Global Error Handler
-app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
-  console.error('[Unhandled Server Error]', err);
-  res.status(500).json({
-    error: 'Internal server error',
-    message:
-      process.env.NODE_ENV === 'production'
-        ? 'An unexpected error occurred.'
-        : err.message,
-  });
-});
-
-import { ensureMigrations } from './migrate';
-
-if (process.env.NODE_ENV !== 'test') {
-  ensureMigrations().finally(() => {
-    httpServer.listen(PORT, () => {
-      console.log(`[Rakshak Backend] Server & Socket.io listening on http://localhost:${PORT}`);
+app.use(
+  (
+    err: Error,
+    _req: Request,
+    res: Response,
+    _next: NextFunction,
+  ) => {
+    console.error('[Unhandled Global Error]', err.stack || err.message);
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message:
+        process.env.NODE_ENV === 'production'
+          ? 'An unexpected error occurred'
+          : err.message,
     });
+  },
+);
+
+// If this file is run directly (via ts-node or node), start the server
+if (process.env.NODE_ENV !== 'test') {
+  httpServer.listen(PORT, () => {
+    console.log(
+      `[Rakshak Backend] HTTP & Socket.IO server running on port ${PORT}`,
+    );
   });
 }

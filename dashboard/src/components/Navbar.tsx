@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
-import { ShieldAlert, Hospital, Activity, Radio, Wifi, WifiOff, Settings } from 'lucide-react';
+import { ShieldAlert, Hospital, Activity, Radio, Wifi, WifiOff, Settings, Info } from 'lucide-react';
+import { AboutSystemModal } from './AboutSystemModal';
 import { ConnectionStatus } from '../types';
 import { BACKEND_API_BASE } from '../services/socket';
 
@@ -12,6 +13,7 @@ interface NavbarProps {
 
 export const Navbar: React.FC<NavbarProps> = ({ status, demoMode = false, onToggleDemoMode }) => {
   const [abdmMode, setAbdmMode] = useState<'SANDBOX' | 'MOCK'>('MOCK');
+  const [isAboutModalOpen, setIsAboutModalOpen] = useState<boolean>(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -176,6 +178,27 @@ export const Navbar: React.FC<NavbarProps> = ({ status, demoMode = false, onTogg
         </nav>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <button
+            onClick={() => setIsAboutModalOpen(true)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.4rem',
+              padding: '0.35rem 0.75rem',
+              borderRadius: '0.375rem',
+              border: '1px solid #cbd5e1',
+              background: '#ffffff',
+              color: '#334155',
+              fontSize: '0.75rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+            }}
+            title="View System Status, Implemented vs Simulated capabilities, and Claims Register"
+          >
+            <Info size={14} color="#2563eb" />
+            <span>About System</span>
+          </button>
           {onToggleDemoMode && (
             <button
               onClick={onToggleDemoMode}
@@ -286,6 +309,7 @@ export const Navbar: React.FC<NavbarProps> = ({ status, demoMode = false, onTogg
         </div>
       </div>
     </div>
+    <AboutSystemModal isOpen={isAboutModalOpen} onClose={() => setIsAboutModalOpen(false)} />
   </header>
   );
 };

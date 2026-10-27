@@ -14,7 +14,7 @@
     "tunnel:cf": "npx untun tunnel --port 5000",
     "lint": "eslint src/**/*.ts",
     "lint:fix": "eslint src/**/*.ts --fix",
-    "test": "tsx src/tests/rbac.test.ts && tsx src/tests/phase17_intelligence.test.ts && tsx src/tests/phase18_health_card.test.ts",
+    "test": "tsx src/tests/rbac.test.ts && tsx src/tests/phase17_intelligence.test.ts && tsx src/tests/phase18_health_card.test.ts && tsx src/tests/phase25_integrity.test.ts",
     "format": "prettier --write \"src/**/*.{ts,js,json}\""
   },
   "keywords": [

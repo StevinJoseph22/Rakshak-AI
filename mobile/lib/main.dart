@@ -25,6 +25,8 @@ import 'screens/hospital_radar_screen.dart';
 import 'screens/welcome_splash_screen.dart';
 import 'services/user_profile_service.dart';
 import 'widgets/cloud_watchdog_simulation_dialog.dart';
+import 'widgets/about_system_dialog.dart';
+import 'widgets/test_mode_qr_scanner_dialog.dart';
 import 'config/backend_config.dart';
 
 void main() async {
@@ -492,6 +494,14 @@ class _CrashDetectionScreenState extends State<CrashDetectionScreen> {
               );
               _loadEmergencyContacts();
             },
+          ),
+          // About Rakshak-AI Claims & Capabilities
+          IconButton(
+            icon: const Icon(Icons.info_outline, color: Color(0xFF0F172A), size: 21),
+            tooltip: 'About Rakshak-AI (Claims & Verification)',
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            onPressed: () => AboutSystemDialog.show(context),
           ),
           const SizedBox(width: 4),
         ],
@@ -2100,7 +2110,36 @@ class _CrashDetectionScreenState extends State<CrashDetectionScreen> {
                     style: const TextStyle(fontSize: 12),
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 6),
+                OutlinedButton.icon(
+                  onPressed: () {
+                    TestModeQrScannerDialog.show(
+                      context,
+                      initialUrl: _testModeBackendUrlController.text,
+                      onUrlScanned: (scannedUrl) async {
+                        _testModeBackendUrlController.text = scannedUrl;
+                        await setCustomBackendUrl(scannedUrl.isEmpty ? null : scannedUrl);
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(scannedUrl.isEmpty
+                                  ? 'Reset to automatic zero-config candidate discovery'
+                                  : 'Custom backend override saved via QR: $scannedUrl'),
+                            ),
+                          );
+                        }
+                      },
+                    );
+                  },
+                  icon: const Icon(Icons.qr_code_scanner, size: 14),
+                  label: const Text('SCAN QR', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold)),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.purple.shade900,
+                    side: BorderSide(color: Colors.purple.shade300),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                  ),
+                ),
+                const SizedBox(width: 6),
                 ElevatedButton(
                   onPressed: () async {
                     final text = _testModeBackendUrlController.text.trim();

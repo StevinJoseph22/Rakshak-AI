@@ -10,6 +10,7 @@ import {
   ambulanceArrivedSchema,
 } from '../validations';
 import { Incident, Hospital } from '../types';
+import { recordAuditEvent } from '../services/auditService';
 import {
   broadcastNewIncident,
   broadcastCaseLocked,
@@ -421,19 +422,25 @@ incidentsRouter.post('/', async (req: Request, res: Response) => {
     // 2. PostGIS 8km Radius Matching Query (8000 meters, has_trauma_center = true)
     const matchHospitalsSql = `
       SELECT 
-        id,
-        name,
-        phone,
-        address,
-        has_trauma_center,
-        has_icu_capacity,
-        is_verified,
-        ST_Y(location::geometry) AS latitude,
-        ST_X(location::geometry) AS longitude,
-        ROUND((ST_Distance(location, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography) / 1000)::numeric, 2) AS distance_km
-      FROM hospitals
-      WHERE has_trauma_center = true
-        AND ST_DWithin(location, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography, 8000)
+        h.id,
+        h.name,
+        h.phone,
+        h.address,
+        h.has_trauma_center,
+        h.has_icu_capacity,
+        h.is_verified,
+        ST_Y(h.location::geometry) AS latitude,
+        ST_X(h.location::geometry) AS longitude,
+        ROUND((ST_Distance(h.location, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography) / 1000)::numeric, 2) AS distance_km,
+        COALESCE(hc.ct_scan, true) AS ct_scan,
+        COALESCE(hc.mri, true) AS mri,
+        COALESCE(hc.neuro_icu, true) AS neuro_icu,
+        COALESCE(hc.blood_bank, true) AS blood_bank,
+        COALESCE(hc.ventilators, true) AS ventilators
+      FROM hospitals h
+      LEFT JOIN hospital_capabilities hc ON hc.hospital_id = h.id
+      WHERE h.has_trauma_center = true
+        AND ST_DWithin(h.location, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography, 8000)
       ORDER BY distance_km ASC;
     `;
 
@@ -442,10 +449,21 @@ incidentsRouter.post('/', async (req: Request, res: Response) => {
       latitude,
     ]);
 
-    const matchedHospitals = matchResult.rows.map((h: Hospital) => {
+    const vMeta = (incident.victim_metadata || {}) as Record<string, unknown>;
+    const isRolloverCrash = Boolean(vMeta.rollover_suspected || vMeta.rollover_detected);
+    const peakGCrash = typeof vMeta.peak_g === 'number'
+      ? vMeta.peak_g
+      : typeof vMeta.deceleration_g === 'number'
+      ? vMeta.deceleration_g
+      : 0;
+    const isTwoWheelerCrash = Boolean(vMeta.is_two_wheeler);
+    const isUnresponsiveCrash = Boolean(vMeta.rider_unresponsive);
+    const hasHeadTraumaSuspected = isRolloverCrash || peakGCrash >= 7.0 || isTwoWheelerCrash || isUnresponsiveCrash;
+
+    const matchedHospitals = matchResult.rows.map((h: Hospital & { ct_scan?: boolean }) => {
       const straightKm = Number(h.distance_km);
-      // Indian urban road network circuity factor (~1.6x straight-line distance)
       const roadKm = Math.round(straightKm * 1.6 * 10) / 10;
+      const isCtOffline = h.ct_scan === false;
       return {
         ...h,
         latitude: Number(h.latitude),
@@ -453,8 +471,25 @@ incidentsRouter.post('/', async (req: Request, res: Response) => {
         distance_km: straightKm,
         road_distance_km: roadKm,
         distance_meters: Math.round(straightKm * 1000),
+        ct_scan: h.ct_scan !== false,
+        ct_offline: isCtOffline,
+        capability_advisory: (hasHeadTraumaSuspected && isCtOffline)
+          ? 'CT Scanner offline - ranked lower for suspected head trauma (eligible as fallback)'
+          : null,
       };
     });
+
+    if (hasHeadTraumaSuspected) {
+      // Prioritize hospitals with operational CT scanner at the top,
+      // and sort CT-offline hospitals below them.
+      // NEVER exclude all hospitals; they stay eligible as fallback!
+      matchedHospitals.sort((a, b) => {
+        if (a.ct_offline === b.ct_offline) {
+          return a.distance_km - b.distance_km;
+        }
+        return a.ct_offline ? 1 : -1;
+      });
+    }
 
     // Broadcast in real-time to matched hospital rooms and police all_incidents room
     broadcastNewIncident(incident, matchedHospitals);
@@ -1116,6 +1151,25 @@ incidentsRouter.post('/:id/claim', optionalAuth, async (req: Request, res: Respo
       origin_station: origin,
     });
 
+    try {
+      await recordAuditEvent({
+        action: 'ambulance_claim',
+        entityType: 'incident',
+        entityId: id,
+        actorId: ambulance_id,
+        actorRole: 'ambulance_driver',
+        payload: {
+          ambulance_id,
+          plate,
+          driver_name: driver,
+          driver_phone: phone,
+          origin_station: origin,
+        },
+      });
+    } catch (auditErr) {
+      console.warn('[Audit Log Warning] Claim audit write deferred:', auditErr);
+    }
+
     return res.json({
       message: `Incident successfully claimed by ambulance ${ambulance_id}`,
       incident: claimedIncident,
@@ -1492,7 +1546,8 @@ incidentsRouter.post(
   async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
-      const { reason } = req.body;
+      const { reason, licence_id, license_id } = req.body;
+      const doctorLicence = (licence_id || license_id || req.body.medical_council_id || '').trim();
 
       if (!reason || typeof reason !== 'string' || reason.trim().length < 5) {
         return res.status(400).json({
@@ -1501,13 +1556,22 @@ incidentsRouter.post(
         });
       }
 
+      if (!doctorLicence || doctorLicence.length < 3) {
+        return res.status(400).json({
+          error: 'Bad Request',
+          message: 'Mandatory Medical Practitioner Licence ID required (minimum 3 characters, e.g. KMC-48291).',
+        });
+      }
+
       // Verify incident exists and has been accepted by this user's assigned hospital
       const incRes = await query<{
         id: string;
         status: string;
         accepted_hospital_id: string | null;
+        updated_at: string;
+        created_at: string;
       }>(
-        'SELECT id, status, accepted_hospital_id FROM incidents WHERE id = $1',
+        'SELECT id, status, accepted_hospital_id, updated_at, created_at FROM incidents WHERE id = $1',
         [id]
       );
 
@@ -1533,7 +1597,17 @@ incidentsRouter.post(
         });
       }
 
-      // 3. Write access audit record
+      // 3. Time-box check: Max 30 minutes from case acceptance
+      const acceptanceTime = new Date(incident.updated_at || incident.created_at).getTime();
+      const thirtyMinutesMs = 30 * 60 * 1000;
+      if (Date.now() - acceptanceTime > thirtyMinutesMs) {
+        return res.status(403).json({
+          error: 'EXPIRED',
+          message: 'Break-glass emergency access window has expired (30-minute limit from case acceptance).',
+        });
+      }
+
+      // 4. Write access audit records (Legacy Table + Hash-Chained Audit Log)
       try {
         await query(
           `INSERT INTO health_card_access_audit (incident_id, hospital_id, user_id, username, reason)
@@ -1550,7 +1624,24 @@ incidentsRouter.post(
         console.warn('[HealthCard Audit Warning] Audit write deferred:', auditErr);
       }
 
-      // 4. Retrieve ephemeral card from volatile Redis RAM
+      try {
+        await recordAuditEvent({
+          action: 'break_glass',
+          entityType: 'health_card',
+          entityId: id,
+          actorId: req.user!.id,
+          actorRole: req.user!.role,
+          payload: {
+            hospital_id: req.user!.hospital_id,
+            doctor_licence: doctorLicence,
+            reason: reason.trim(),
+          },
+        });
+      } catch (chainErr) {
+        console.warn('[Audit Chain Warning] Hash audit write deferred:', chainErr);
+      }
+
+      // 5. Retrieve ephemeral card from volatile Redis RAM
       const cardJson = await getEphemeralHealthCard(id);
       if (!cardJson) {
         return res.status(404).json({
@@ -1567,7 +1658,13 @@ incidentsRouter.post(
         card,
         mode: getAbdmMode().toUpperCase(),
         accessed_by: req.user!.username,
+        licence_id: doctorLicence,
         accessed_at: new Date().toISOString(),
+        retroactive_sms: {
+          status: 'queued_simulated',
+          carrier_gateway: 'SIMULATED',
+          message: 'Retroactive ABDM consent notification queued for dispatch via simulated cellular gateway.',
+        },
       });
     } catch (err: unknown) {
       console.error('[POST /incidents/:id/health-card/break-glass Error]', err);
@@ -1680,7 +1777,25 @@ async function handleAcceptIncident(
     longitude: Number(updateResult.rows[0].longitude),
   };
 
-  // 3. Cancel auto-escalation timer immediately
+  // 3. Record hash-chained audit log
+  try {
+    await recordAuditEvent({
+      action: 'incident_accept',
+      entityType: 'incident',
+      entityId: incidentId,
+      actorId: hospitalId,
+      actorRole: 'hospital_staff',
+      payload: {
+        hospital_id: hospitalId,
+        hospital_name: hospital.name,
+        accepted_at: new Date().toISOString(),
+      },
+    });
+  } catch (auditErr) {
+    console.warn('[Audit Log Warning] Accept audit write deferred:', auditErr);
+  }
+
+  // Cancel auto-escalation timer immediately
   cancelAutoEscalation(incidentId);
 
   // 4. Retrieve matched hospital IDs to lock case across other facilities
@@ -1873,6 +1988,23 @@ incidentsRouter.post('/:id/reject', authenticateJWT, async (req: Request, res: R
       triggerImmediateEscalation(id).catch((err) => {
         console.error('[Auto-Escalation Error]', err);
       });
+    }
+
+    try {
+      await recordAuditEvent({
+        action: 'incident_reject',
+        entityType: 'incident',
+        entityId: id,
+        actorId: hospital_id,
+        actorRole: 'hospital_staff',
+        payload: {
+          hospital_id,
+          reason,
+          all_matched_rejected: allRejected,
+        },
+      });
+    } catch (auditErr) {
+      console.warn('[Audit Log Warning] Reject audit write deferred:', auditErr);
     }
 
     return res.json({

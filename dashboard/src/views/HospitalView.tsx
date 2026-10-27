@@ -61,12 +61,58 @@ export const HospitalView: React.FC = () => {
     }
   });
 
-  const handleCapabilitiesChange = (updated: HospitalCapabilities) => {
+  // 1. Fetch server-persisted capabilities on mount / hospital change
+  useEffect(() => {
+    let isMounted = true;
+    const fetchCapabilities = async () => {
+      try {
+        const res = await fetch(`${BACKEND_API_BASE}/hospitals/${selectedHospitalId}/capabilities`);
+        if (res.ok) {
+          const data = await res.json();
+          if (isMounted && data.capabilities) {
+            setHospitalCapabilities(data.capabilities);
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to fetch capabilities from server:', err);
+      }
+    };
+    fetchCapabilities();
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedHospitalId]);
+
+  // 2. Real-time capability synchronization via Socket.IO
+  useEffect(() => {
+    const socket = getSocket();
+    const onCapabilitiesUpdated = (data: { hospital_id: string; capabilities: HospitalCapabilities }) => {
+      if (data.hospital_id === selectedHospitalId) {
+        setHospitalCapabilities(data.capabilities);
+      }
+    };
+    socket.on('hospital:capabilities_updated', onCapabilitiesUpdated);
+    return () => {
+      socket.off('hospital:capabilities_updated', onCapabilitiesUpdated);
+    };
+  }, [selectedHospitalId]);
+
+  // 3. Persist capabilities to backend with audit logging & RBAC authorization
+  const handleCapabilitiesChange = async (updated: HospitalCapabilities) => {
     setHospitalCapabilities(updated);
     try {
       localStorage.setItem(`rakshak_hospital_capabilities_${selectedHospitalId}`, JSON.stringify(updated));
     } catch {
       // ignore
+    }
+    try {
+      await authFetch(`${BACKEND_API_BASE}/hospitals/${selectedHospitalId}/capabilities`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ capabilities: updated }),
+      });
+    } catch (err) {
+      console.warn('Failed to update hospital capabilities on server:', err);
     }
   };
 

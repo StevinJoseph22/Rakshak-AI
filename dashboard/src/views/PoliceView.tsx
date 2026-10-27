@@ -41,6 +41,37 @@ export const PoliceView: React.FC = () => {
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
   const [preemptedSignals, setPreemptedSignals] = useState<Record<string, PreemptedSignalPayload>>({});
   const [isSimulatingCollapse, setIsSimulatingCollapse] = useState<boolean>(false);
+  const [auditChainStatus, setAuditChainStatus] = useState<{
+    valid: boolean;
+    checkedRecords: number;
+    lastVerified?: string;
+  }>({ valid: true, checkedRecords: 0 });
+
+  useEffect(() => {
+    let isMounted = true;
+    const checkAuditChain = async () => {
+      try {
+        const res = await fetch(`${BACKEND_API_BASE}/audit/verify-chain`);
+        const data = await res.json();
+        if (isMounted) {
+          setAuditChainStatus({
+            valid: Boolean(data.valid),
+            checkedRecords: data.checked_records || 0,
+            lastVerified: new Date().toLocaleTimeString(),
+          });
+        }
+      } catch {
+        // network unreachable
+      }
+    };
+    checkAuditChain();
+    const interval = setInterval(checkAuditChain, 15000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, []);
+
 
   // Countdown timer for C-V2X traffic signal preemption hold duration
   useEffect(() => {
@@ -734,6 +765,37 @@ export const PoliceView: React.FC = () => {
               >
                 TACTICAL BROADCAST ACTIVE
               </span>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.4rem',
+                  padding: '0.15rem 0.6rem',
+                  borderRadius: '9999px',
+                  fontSize: '0.7rem',
+                  fontWeight: 800,
+                  background: auditChainStatus.valid ? '#064e3b' : '#7f1d1d',
+                  color: auditChainStatus.valid ? '#6ee7b7' : '#fca5a5',
+                  border: `1px solid ${auditChainStatus.valid ? '#059669' : '#dc2626'}`,
+                  letterSpacing: '0.02em',
+                }}
+                title={`Cryptographic SHA-256 Audit Chain Status (${auditChainStatus.checkedRecords} blocks checked)`}
+              >
+                <span
+                  style={{
+                    width: '6px',
+                    height: '6px',
+                    borderRadius: '50%',
+                    backgroundColor: auditChainStatus.valid ? '#10b981' : '#ef4444',
+                    boxShadow: auditChainStatus.valid ? '0 0 5px #10b981' : '0 0 8px #ef4444',
+                  }}
+                />
+                <span>
+                  {auditChainStatus.valid
+                    ? `Audit Integrity: OK (${auditChainStatus.checkedRecords} blocks)`
+                    : `Audit Integrity: BROKEN (Tamper Detected)`}
+                </span>
+              </div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginTop: '0.25rem', color: '#94a3b8', fontSize: '0.8rem', flexWrap: 'wrap' }}>
               <span>Jurisdiction: Bengaluru Urban & Rural Police Control</span>

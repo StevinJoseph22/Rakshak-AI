@@ -6,6 +6,7 @@ import '../models/incident_model.dart';
 import '../services/ambulance_translations.dart';
 import '../services/api_client.dart';
 import '../services/crash_detector_service.dart';
+import '../widgets/about_system_dialog.dart';
 import 'ambulance_dispatch_screen.dart';
 
 /// Advanced Paramedic & Emergency Medical Services (EMS) Pilot Cockpit.
@@ -451,6 +452,11 @@ class _AmbulancePilotHomeScreenState extends State<AmbulancePilotHomeScreen> {
                   ),
                 ),
               ),
+            IconButton(
+              icon: const Icon(Icons.info_outline, size: 20, color: Colors.white70),
+              tooltip: 'About Rakshak-AI (Claims & Verification)',
+              onPressed: () => AboutSystemDialog.show(context),
+            ),
           ],
         ),
         body: Column(
