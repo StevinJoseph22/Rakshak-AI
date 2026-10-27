@@ -17,7 +17,7 @@ The diagram below illustrates the end-to-end hardware interaction between the vi
  │  • Tri-axial MEMS Gyroscope (rad/s)    │  • Airbag ECU Deployment Trigger   │
  │  • MEMS Barometer (Airbag ΔP pulse)    │  • Vehicle Speed Sensor (VSS)      │
  │  • Multi-GNSS (GPS / NavIC / Galileo)  │  • Siren & Strobe Arming Sense     │
- │  • Baseband SIM Modem (Native SMS)     │  • 12V/24V Automotive Power Supply │
+ │  • Cellular Telephony Modem (Native SMS)     │  • 12V/24V Automotive Power Supply │
  └───────────────────┬────────────────────┴──────────────────┬─────────────────┘
                      │                                       │
      Sub-Second      │ C-V2X PC5 Sidelink (5.9 GHz)          │ BLE Beacon (UUID: 0xFD6F)
@@ -177,7 +177,7 @@ The mobile client (`/mobile`) turns standard commodity smartphones into high-pre
 | **Free-Fall Invalidator** | Near-zero gravity detection | $50\text{ Hz}$ | `crash_confidence_config.dart` | If $|g| < 0.2\text{g}$ for $>100\text{ms}$ immediately prior to impact, flags dropped phone and suppresses alert. |
 | **MEMS Barometer** | Piezoresistive diaphragm pressure | $10\text{ Hz}$ | `crash_confidence_config.dart` | Captures in-cabin pressure transient spikes ($\Delta P \ge 12\text{ hPa}$) caused by vehicle airbag deployments. |
 | **Multi-GNSS Receiver** | L1/L5 dual-band GPS, GLONASS, NavIC | $1\text{ Hz} - 5\text{ Hz}$ | `geolocator` | Deceleration correlation: requires vehicle speed drop toward $0\text{ km/h}$ upon impact. |
-| **Cellular Baseband Modem** | Qualcomm Snapdragon / MediaTek RF Transceiver | Direct AT/RIL | `emergency_sms_service.dart` | Direct native P2P SMS using Android `SmsManager` over physical SIM; bypasses cloud gateways. |
+| **Cellular Telephony Modem (SMS)** | Qualcomm Snapdragon / MediaTek RF Transceiver | Android SmsManager | `emergency_sms_service.dart` | Direct native P2P SMS using Android `SmsManager` over physical SIM; bypasses cloud gateways. |
 | **Haptic Feedback Motor** | Linear Resonant Actuator (LRA) | Real-time | `locked_screen_alert_screen.dart` | Graduated high-intensity haptic pulse patterns during responsiveness checks. |
 
 ---
@@ -221,3 +221,24 @@ The mobile client (`/mobile`) turns standard commodity smartphones into high-pre
          ▼
   ATC Controller (NEMA TS2 Type 1 / 2070-1C)
 ```
+
+---
+
+## 💰 7. Hardware Cost Estimates & Bill of Materials (BOM) (Indicative Estimates)
+
+All hardware costs below are **indicative estimates** based on COTS hardware pricing, reference module vendor quotes, and preliminary laboratory prototyping.
+
+### Key Assumptions:
+1. **Procurement Scale**: Prices reflect commercial batch procurement (>1,000 units).
+2. **Exclusions**: Estimates do not include local state GST (18%), customs/import levies, or installation field labor.
+3. **Citizen Layer**: **₹0 incremental cost** (uses citizen's existing smartphone sensors and Android `SmsManager`).
+
+| Subsystem | Hardware Component | Indicative Unit Cost (INR) | Primary Role | Assumptions & Notes |
+| :--- | :--- | :--- | :--- | :--- |
+| **Ambulance OBU** | C-V2X Transceiver (Qualcomm 9150 / Quectel AG15) | ₹14,000 – ₹22,000 | 5.9 GHz PC5 direct V2I broadcast | External dual-polarization roof antenna |
+| **Ambulance Cockpit** | Rugged Android EMS Navigation Display | ₹8,000 – ₹14,000 | Paramedic tactical dispatch display | 12V DC vehicle powered, 700-nit panel |
+| **Ambulance Beacon Sensor** | 12V Siren & Strobe Sense Interface | ₹800 – ₹1,500 | Detects active siren state | Opto-isolated 12V-to-5V TTL trigger |
+| **Total Ambulance Pack** | **Complete In-Vehicle EMS Telematics Pack** | **₹22,800 – ₹37,500** | **Per Ambulance Unit** | Excludes vehicle installation labor |
+| **Traffic Signal RSU** | Pole-Mounted C-V2X Roadside Unit (RSU) | ₹45,000 – ₹75,000 | Receives J2735 SRM preemption requests | IP67 outdoor enclosure, dual omni antennas |
+| **Traffic Controller Card**| NEMA TS2 / 2070 SNMP Preemption Card | ₹15,000 – ₹28,000 | Triggers NTCIP 1202 hold on controller | Interfaces to municipal ATC cabinet |
+| **Total Intersection** | **Complete Green Corridor Junction Hub** | **₹60,000 – ₹1,03,000** | **Per Signalized Intersection** | Assumes existing municipal ATC controller |

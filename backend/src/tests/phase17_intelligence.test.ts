@@ -1,7 +1,7 @@
 import http from 'http';
 import express, { Request, Response } from 'express';
 import { checkIncidentBlackspot, getAllBlackspotZones } from '../services/blackspotService';
-import { TripSentinelService, DEFAULT_SENTINEL_LOST_CONTACT_MS, DEFAULT_SENTINEL_ESCALATION_MS } from '../services/tripSentinelService';
+import { TripSentinelService } from '../services/tripSentinelService';
 
 async function runPhase17Tests() {
   console.log('\n--- STARTING PHASE 17: CRASH INTELLIGENCE v2 BACKEND TEST SUITE ---');
@@ -34,8 +34,7 @@ async function runPhase17Tests() {
   }
 
   const mockDbIncidents = new Map<string, TestIncidentRecord>();
-  const activeSilentTimers = new Map<string, NodeJS.Timeout>();
-
+  
   const app = express();
   app.use(express.json());
 

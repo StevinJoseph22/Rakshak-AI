@@ -899,7 +899,7 @@ export const PoliceView: React.FC = () => {
             }}
           >
             {Object.values(preemptedSignals).some((s) => s.status === 'GRANTED' || s.status === 'ACTIVE' || s.hold_seconds > 0)
-              ? '🟢 Preemption Active'
+              ? '🟢 [SIMULATED] Preemption Active'
               : '🚦 ITMS Standby'}
           </div>
         </div>

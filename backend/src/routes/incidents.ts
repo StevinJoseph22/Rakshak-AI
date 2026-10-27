@@ -1623,7 +1623,7 @@ async function handleAcceptIncident(
       updated_at;
   `;
 
-  let updateResult = await query<Incident>(acceptSql, [hospitalId, incidentId]);
+  const updateResult = await query<Incident>(acceptSql, [hospitalId, incidentId]);
 
   if (updateResult.rowCount === 0) {
     // Check if incident exists

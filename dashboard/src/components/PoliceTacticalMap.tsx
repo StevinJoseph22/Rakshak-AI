@@ -287,7 +287,7 @@ export const PoliceTacticalMap: React.FC<PoliceTacticalMapProps> = ({
       const popupHtml = `
         <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 11px; color: #0f172a; min-width: 210px;">
           <div style="font-weight: 800; font-size: 11.5px; color: ${isPreempted ? '#059669' : '#334155'}; display: flex; align-items: center; gap: 4px;">
-            ${isPreempted ? '🟢 C-V2X PREEMPTED GREEN' : '🚦 MUNICIPAL ITMS TRAFFIC SIGNAL'}
+            ${isPreempted ? '🟢 [SIMULATED] C-V2X PREEMPTED GREEN' : '🚦 MUNICIPAL ITMS TRAFFIC SIGNAL'}
           </div>
           <div style="font-weight: 700; margin-top: 4px; font-size: 11.5px; color: #1e293b;">${signal.name}</div>
           <div style="color: #64748b; font-size: 10px; font-family: monospace; margin-top: 2px;">Controller: ${signal.controllerId}</div>
@@ -296,8 +296,8 @@ export const PoliceTacticalMap: React.FC<PoliceTacticalMapProps> = ({
             isPreempted
               ? `
             <div style="margin-top: 6px; padding: 6px 8px; background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 4px;">
-              <div style="color: #065f46; font-weight: 800; font-size: 10px;">PHASE 2 PRIMARY INBOUND HOLD</div>
-              <div style="color: #047857; font-size: 9.5px; margin-top: 2px;">Hold: <b>${preemption?.hold_seconds ?? 45}s</b> • Queue Clear: <b>${preemption?.queue_clearance_seconds ?? 8}s</b></div>
+              <div style="color: #065f46; font-weight: 800; font-size: 10px;">[SIMULATED] PHASE 2 PRIMARY INBOUND HOLD</div>
+              <div style="color: #047857; font-size: 9.5px; margin-top: 2px;">Hold (Simulated): <b>${preemption?.hold_seconds ?? 45}s</b> • Queue Clear: <b>${preemption?.queue_clearance_seconds ?? 8}s</b></div>
               <div style="color: #047857; font-size: 9.5px;">Ambulance: <b>${preemption?.ambulance_plate || 'KA-01-EA-108'}</b></div>
             </div>
           `
@@ -572,10 +572,10 @@ export const PoliceTacticalMap: React.FC<PoliceTacticalMapProps> = ({
           <Zap size={18} color="#a7f3d0" />
           <div>
             <div style={{ fontSize: '11.5px', fontWeight: 900, letterSpacing: '0.04em', color: '#ecfdf5' }}>
-              C-V2X GREEN CORRIDOR ENGAGED
+              C-V2X GREEN CORRIDOR ENGAGED [SIMULATED]
             </div>
             <div style={{ fontSize: '10px', color: '#d1fae5' }}>
-              NTCIP-1202 Signal Preemption Active • Dual-Ring Phase 2 Hold
+              [SIMULATED] NTCIP-1202 Signal Preemption Active • Dual-Ring Phase 2 Hold
             </div>
           </div>
         </div>
@@ -1073,7 +1073,7 @@ export const PoliceTacticalMap: React.FC<PoliceTacticalMapProps> = ({
                     }}
                   >
                     <Zap size={13} color="#34d399" />
-                    C-V2X ITMS GREEN CORRIDOR
+                    C-V2X ITMS GREEN CORRIDOR [SIMULATED]
                   </div>
                   <span
                     style={{
@@ -1085,12 +1085,12 @@ export const PoliceTacticalMap: React.FC<PoliceTacticalMapProps> = ({
                       borderRadius: '4px',
                     }}
                   >
-                    NTCIP-1202 ACTIVE
+                    [SIMULATED] NTCIP-1202 ACTIVE
                   </span>
                 </div>
 
                 <div style={{ marginTop: '5px', fontSize: '9.5px', color: '#94a3b8' }}>
-                  Automated EVP preemption holds signals green along emergency route.
+                  Automated EVP preemption holds signals green along emergency route (Simulated).
                 </div>
 
                 {/* Signals Along Corridor List */}
@@ -1140,7 +1140,7 @@ export const PoliceTacticalMap: React.FC<PoliceTacticalMapProps> = ({
                             borderRadius: '3px',
                           }}
                         >
-                          {isPreempted ? `HOLD ${preemption?.hold_seconds ?? 45}s 🟢` : 'NORMAL 🚦'}
+                          {isPreempted ? `[SIM] HOLD ${preemption?.hold_seconds ?? 45}s 🟢` : 'NORMAL 🚦'}
                         </span>
                       </div>
                     );

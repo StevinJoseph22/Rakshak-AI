@@ -7,7 +7,7 @@ class HospitalDirectoryService {
   static final HospitalDirectoryService _instance = HospitalDirectoryService._internal();
   static HospitalDirectoryService get instance => _instance;
 
-  /// Complete verified registry of 26 authentic emergency hospitals across Bengaluru
+  /// Sample registry of 25+ emergency hospitals across Bengaluru (sample data, verify before real use)
   final List<HospitalFacility> _allHospitals = [
     // 1. Banaswadi / HRBR Layout (Immediate vicinity of Banaswadi 13.013, 77.649)
     HospitalFacility(

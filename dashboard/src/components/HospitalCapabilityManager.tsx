@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import React from 'react';
 import {
   Activity,
@@ -56,7 +57,7 @@ export const CAPABILITY_CATALOG: CapabilityItem[] = [
     shortDesc: 'Dedicated neurosurgical trauma resuscitation bay',
     icon: <Activity size={16} />,
     category: 'CRITICAL_CARE',
-    vitalFor: 'Traumatic Brain Injury (GCS < 8), Craniotomy',
+    vitalFor: 'Traumatic Brain Injury, Craniotomy (suggested check for clinician judgment)',
   },
   {
     key: 'blood_bank',
@@ -88,7 +89,7 @@ export const CAPABILITY_CATALOG: CapabilityItem[] = [
     shortDesc: 'Mechanical lung-protective invasive ventilators',
     icon: <Zap size={16} />,
     category: 'CRITICAL_CARE',
-    vitalFor: 'Crushed Chest, Flail Chest, Respiratory Arrest, Coma',
+    vitalFor: 'Crushed Chest, Flail Chest, Respiratory Compromise (suggested check for clinician judgment)',
   },
   {
     key: 'general_surgery',
@@ -104,9 +105,13 @@ export function evaluateTraumaReadiness(
   incident: IncidentPayload,
   capabilities: HospitalCapabilities
 ): CapabilityMatchResult {
-  const metadata = (incident.victim_metadata || {}) as Record<string, any>;
+  const metadata = (incident.victim_metadata || {}) as Record<string, unknown>;
   const isRollover = Boolean(metadata.rollover_suspected || metadata.rollover_detected);
-  const peakG = typeof metadata.peak_g === 'number' ? metadata.peak_g : (metadata.deceleration_g || 8.0);
+  const peakG = typeof metadata.peak_g === 'number'
+    ? metadata.peak_g
+    : typeof metadata.deceleration_g === 'number'
+    ? metadata.deceleration_g
+    : 8.0;
   const speedDrop = typeof metadata.speed_drop_kmh === 'number' ? metadata.speed_drop_kmh : 60;
   const isTwoWheeler = Boolean(metadata.is_two_wheeler);
   const isUnresponsive = Boolean(metadata.rider_unresponsive);
@@ -161,16 +166,16 @@ export function evaluateTraumaReadiness(
     };
   }
 
-  // Check 4: Unresponsive / Airway Failure
+  // Check 4: Unresponsive / Airway Assessment
   if (isUnresponsive && !capabilities.ventilators) {
     return {
       hasMismatch: true,
       severity: 'WARNING',
-      suspectedInjuryTitle: 'Victim Unresponsive / Acute Airway Compromise',
-      suspectedInjuryDescription: 'Victim unresponsive during countdown; estimated Glasgow Coma Scale (GCS) < 8.',
+      suspectedInjuryTitle: 'Victim Unresponsive / Suggested Airway Check',
+      suspectedInjuryDescription: 'Victim unresponsive after impact (unvalidated sensor indicator, not a clinical assessment).',
       missingEquipmentNames: ['ICU Ventilators'],
-      advisoryText: 'Patient may require immediate endotracheal intubation and mechanical ventilation.',
-      recommendedAction: 'Verify transport ambulance has mobile transport ventilator before admission.',
+      advisoryText: 'Patient unresponsive after impact. Suggested checks for clinician judgment regarding airway patency and ventilation support.',
+      recommendedAction: 'Verify transport ambulance equipment and alert ED resuscitation team for clinical evaluation.',
     };
   }
 
@@ -350,7 +355,7 @@ export const HospitalCapabilityManager: React.FC<HospitalCapabilityManagerProps>
               }}
             >
               <Wrench size={13} />
-              Simulate CT Scan Down
+              [SIMULATED] Simulate CT Scan Down
             </button>
           )}
 
@@ -489,7 +494,7 @@ export const HospitalCapabilityManager: React.FC<HospitalCapabilityManagerProps>
                 textDecoration: 'underline',
               }}
             >
-              Reset to 100% Operational
+              Reset to Operational
             </button>
           </div>
         </div>

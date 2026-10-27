@@ -249,10 +249,10 @@ async function runPhase18Tests() {
 
   const server = http.createServer(app);
   await new Promise<void>((resolve) => server.listen(0, resolve));
-  const port = (server.address() as any).port;
+  const port = (server.address() as { port: number }).port;
   const baseUrl = `http://127.0.0.1:${port}`;
 
-  async function testReq(path: string, method: string, token?: string, body?: any) {
+  async function testReq(path: string, method: string, token?: string, body?: unknown) {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (token) headers['Authorization'] = `Bearer ${token}`;
 

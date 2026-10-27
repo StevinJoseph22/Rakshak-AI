@@ -419,7 +419,7 @@ class EmergencySmsService {
     }
   }
 
-  /// Generates ultra-dense binary emergency payload fitting inside a single SMS over SS7
+  /// Generates emergency payload text fitting inside a single SMS
   String buildOfflineSignalingPayload({
     required double lat,
     required double lng,

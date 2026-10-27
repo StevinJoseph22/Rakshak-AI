@@ -75,7 +75,7 @@ class _CloudWatchdogSimulationDialogState extends State<CloudWatchdogSimulationD
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Cloud Watchdog Simulated',
+                        'Cloud Watchdog [SIMULATED]',
                         style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white),
                       ),
                       Text(
@@ -115,7 +115,7 @@ class _CloudWatchdogSimulationDialogState extends State<CloudWatchdogSimulationD
                     label: 'Cloud Dead-Man Escalator',
                     value: _isDispatched
                         ? 'ESCALATION COMPLETE (12s EXPIRED)'
-                        : 'WATCHDOG GRACE COUNTDOWN: ${_countdownSeconds}s',
+                        : '[SIMULATED] WATCHDOG GRACE COUNTDOWN: ${_countdownSeconds}s',
                     color: _isDispatched ? const Color(0xFF10B981) : Colors.purpleAccent,
                     icon: _isDispatched ? Icons.check_circle : Icons.timer,
                   ),
@@ -132,8 +132,8 @@ class _CloudWatchdogSimulationDialogState extends State<CloudWatchdogSimulationD
             const SizedBox(height: 14),
             Text(
               _isDispatched
-                  ? '🛡️ Cloud Watchdog successfully confirmed catastrophic phone destruction without cellular transmission. Incident published to Police ITMS & nearest Apex Trauma center.'
-                  : 'Simulating instant physical phone destruction at 92 km/h. Notice the server automatically triggers rescue dispatch even when client phone stops sending heartbeats.',
+                  ? '🛡️ [SIMULATED] Cloud Watchdog demonstrated catastrophic phone destruction without cellular transmission. Incident published to Police ITMS & nearest Apex Trauma center.'
+                  : '[SIMULATED] Simulating physical phone destruction at 92 km/h. Notice the server triggers rescue dispatch even when client phone stops sending heartbeats.',
               style: const TextStyle(fontSize: 11, color: Color(0xFFCBD5E1), height: 1.4),
             ),
             const SizedBox(height: 18),

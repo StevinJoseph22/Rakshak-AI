@@ -74,7 +74,6 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
 }) => {
   const [isLightboxOpen, setIsLightboxOpen] = useState<boolean>(false);
   const [isRejectModalOpen, setIsRejectModalOpen] = useState<boolean>(false);
-  const [isCapabilityAdvisoryModalOpen, setIsCapabilityAdvisoryModalOpen] = useState<boolean>(false);
 
   const capabilityMatch: CapabilityMatchResult | null =
     viewMode === 'hospital' && capabilities
@@ -83,8 +82,20 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
 
   const handleAcceptClick = () => {
     if (capabilityMatch && capabilityMatch.hasMismatch) {
-      setIsCapabilityAdvisoryModalOpen(true);
-    } else if (onAccept) {
+      console.info('[IncidentCard] Physician chose: ACCEPT EMERGENCY CASE (accepted despite capability advisory)', {
+        incidentId: incident.id,
+        mismatch: capabilityMatch,
+        choice: 'ACCEPT_DESPITE_MISMATCH',
+        timestamp: new Date().toISOString(),
+      });
+    } else {
+      console.info('[IncidentCard] Physician chose: ACCEPT EMERGENCY CASE', {
+        incidentId: incident.id,
+        choice: 'ACCEPT_STANDARD',
+        timestamp: new Date().toISOString(),
+      });
+    }
+    if (onAccept) {
       onAccept(incident.id);
     }
   };
@@ -309,11 +320,12 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
   const severityLevel: 'Critical' | 'Moderate' | 'Minor' = (rawSeverity?.level as 'Critical' | 'Moderate' | 'Minor') || (riderUnresponsive ? 'Critical' : 'Moderate');
   const contributingFactors: string[] = rawSeverity?.contributing_factors || [
     isSaturated ? 'Peak acceleration saturated sensor limit (>=16g)' : `Peak acceleration: ${measuredPeakG.toFixed(1)}g`,
-    `Delta-V (speed drop): ${speedDropKmh.toFixed(1)} km/h`,
+    `Speed drop: ${speedDropKmh.toFixed(1)} km/h (GPS-based, low sample rate)`,
     `Impact duration: ${impactDurationMs}ms`,
-    rolloverSuspected ? 'Vehicle rollover / angular tumble detected' : 'No vehicle rollover',
-    riderUnresponsive ? 'Rider unresponsive to on-screen/haptic prompts' : 'Rider responsive',
-    `Crash confidence score: ${confidenceScore}%`,
+    rolloverSuspected ? 'Vehicle rollover / angular tumble suspected' : 'No vehicle rollover detected',
+    riderUnresponsive ? 'Unresponsive after impact' : 'Conscious / responsive after impact',
+    `Post-impact stillness observed: ${riderUnresponsive ? 'Yes' : 'No'}`,
+    `Crash confidence score: ${confidenceScore}% (heuristic estimate)`,
   ];
 
   const rawBiomechanics = metadata.biomechanics as CrashBiomechanicsData | undefined;
@@ -750,6 +762,28 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
       {viewMode === 'hospital' ? (
         /* ======================== HOSPITAL EXECUTIVE FRONT ======================== */
         <div>
+          {/* Phase 24.5: Persistent Clinical Decision-Support Disclaimer Banner */}
+          <div
+            style={{
+              background: '#fffbeb',
+              border: '1px solid #fde68a',
+              borderRadius: '0.375rem',
+              padding: '0.45rem 0.75rem',
+              marginBottom: '0.75rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              fontSize: '0.74rem',
+              color: '#92400e',
+              lineHeight: 1.4,
+            }}
+          >
+            <AlertTriangle size={15} style={{ flexShrink: 0, color: '#d97706' }} />
+            <span>
+              <strong>Decision support only:</strong> Unvalidated estimate based on smartphone sensors, not a clinical assessment. All indicators require clinician judgment.
+            </span>
+          </div>
+
           {/* Main Patient & Clinical Profile Strip */}
           <div
             style={{
@@ -816,7 +850,7 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
                       </strong>
                     </>
                   ) : (
-                    <span>ABHA Health Record: Clinical access available after case acceptance</span>
+                    <span>ABHA Health Record [MOCK RECORD (sandbox format)]: Clinical access available after case acceptance</span>
                   )}
                 </div>
               </div>
@@ -853,7 +887,7 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
                   fontWeight: 700,
                 }}
               >
-                {riderUnresponsive ? '⚠️ Victim Unresponsive' : '✓ Conscious & Responsive'}
+                {riderUnresponsive ? '⚠️ Unresponsive After Impact' : '✓ Responsive After Impact'}
               </span>
             </div>
           </div>
@@ -986,69 +1020,132 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
 
           {/* Action Row: Accept / Decline Emergency */}
           {!isAccepted && (
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                paddingTop: '0.5rem',
-                borderTop: '1px solid #f1f5f9',
-                marginBottom: '0.85rem',
-                flexWrap: 'wrap',
-                gap: '0.5rem',
-              }}
-            >
-              <div style={{ fontSize: '0.8rem', color: '#475569' }}>
-                Review trauma profile & bed availability to reserve trauma bay:
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
-                <button
-                  type="button"
-                  onClick={() => setIsRejectModalOpen(true)}
+            <div>
+              {/* Phase 24.5: Non-blocking Clinical Capability Advisory Banner */}
+              {capabilityMatch && capabilityMatch.hasMismatch && (
+                <div
                   style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '0.35rem',
-                    background: '#ffffff',
-                    color: '#dc2626',
-                    border: '1px solid #fca5a5',
-                    borderRadius: '0.375rem',
-                    padding: '0.5rem 0.9rem',
-                    fontSize: '0.8rem',
-                    fontWeight: 700,
-                    cursor: 'pointer',
+                    background: '#fef2f2',
+                    border: '1.5px solid #f87171',
+                    borderRadius: '0.5rem',
+                    padding: '0.75rem 1rem',
+                    marginBottom: '0.85rem',
                   }}
                 >
-                  <X size={14} /> Divert / Decline
-                </button>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', marginBottom: '0.35rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <AlertTriangle size={18} color="#dc2626" />
+                      <strong style={{ fontSize: '0.85rem', color: '#991b1b' }}>
+                        Clinical Advisory (Non-blocking): {capabilityMatch.suspectedInjuryTitle}
+                      </strong>
+                    </div>
+                    <span style={{ fontSize: '0.7rem', fontWeight: 800, background: '#fee2e2', color: '#dc2626', padding: '0.15rem 0.5rem', borderRadius: '4px' }}>
+                      CARE NOT BLOCKED
+                    </span>
+                  </div>
+                  <div style={{ fontSize: '0.8rem', color: '#7f1d1d', marginBottom: '0.5rem', lineHeight: 1.4 }}>
+                    {capabilityMatch.advisoryText}
+                    <div style={{ marginTop: '0.25rem', fontWeight: 600 }}>
+                      Facility equipment flagged offline: <span style={{ textDecoration: 'underline' }}>{capabilityMatch.missingEquipmentNames.join(', ')}</span>.
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        console.info('[IncidentCard] Physician chose: DIVERT TO APEX CENTER', {
+                          incidentId: incident.id,
+                          mismatch: capabilityMatch,
+                          choice: 'DIVERT_TO_APEX',
+                          timestamp: new Date().toISOString(),
+                        });
+                        if (onReject) {
+                          onReject(
+                            incident.id,
+                            `Diverted to Apex Center: Missing ${capabilityMatch.missingEquipmentNames.join(', ')} for ${capabilityMatch.suspectedInjuryTitle}`
+                          );
+                        }
+                      }}
+                      style={{
+                        padding: '0.45rem 0.85rem',
+                        borderRadius: '0.375rem',
+                        border: '1px solid #2563eb',
+                        background: '#eff6ff',
+                        color: '#1d4ed8',
+                        fontSize: '0.78rem',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      🔀 Divert to Apex Neuro Trauma Center (Optional)
+                    </button>
+                    <span style={{ fontSize: '0.74rem', color: '#64748b' }}>
+                      Or accept immediately below to initiate ED arrival stabilization:
+                    </span>
+                  </div>
+                </div>
+              )}
 
-                <button
-                  type="button"
-                  onClick={handleAcceptClick}
-                  disabled={isAccepting}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '0.45rem',
-                    background: isAccepting ? '#86efac' : capabilityMatch?.hasMismatch ? '#dc2626' : '#16a34a',
-                    color: '#ffffff',
-                    border: 'none',
-                    borderRadius: '0.375rem',
-                    padding: '0.5rem 1.25rem',
-                    fontSize: '0.85rem',
-                    fontWeight: 800,
-                    cursor: isAccepting ? 'not-allowed' : 'pointer',
-                    boxShadow: capabilityMatch?.hasMismatch ? '0 2px 6px rgba(220, 38, 38, 0.3)' : '0 2px 6px rgba(22, 163, 74, 0.3)',
-                  }}
-                >
-                  <Check size={16} />
-                  {isAccepting
-                    ? 'Accepting Dispatch...'
-                    : capabilityMatch?.hasMismatch
-                    ? 'REVIEW & ACCEPT CASE'
-                    : 'ACCEPT EMERGENCY CASE'}
-                </button>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  paddingTop: '0.5rem',
+                  borderTop: '1px solid #f1f5f9',
+                  marginBottom: '0.85rem',
+                  flexWrap: 'wrap',
+                  gap: '0.5rem',
+                }}
+              >
+                <div style={{ fontSize: '0.8rem', color: '#475569' }}>
+                  Review trauma profile & bed availability to reserve trauma bay:
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                  <button
+                    type="button"
+                    onClick={() => setIsRejectModalOpen(true)}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.35rem',
+                      background: '#ffffff',
+                      color: '#dc2626',
+                      border: '1px solid #fca5a5',
+                      borderRadius: '0.375rem',
+                      padding: '0.5rem 0.9rem',
+                      fontSize: '0.8rem',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <X size={14} /> Divert / Decline
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleAcceptClick}
+                    disabled={isAccepting}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.45rem',
+                      background: isAccepting ? '#86efac' : '#16a34a',
+                      color: '#ffffff',
+                      border: 'none',
+                      borderRadius: '0.375rem',
+                      padding: '0.5rem 1.25rem',
+                      fontSize: '0.85rem',
+                      fontWeight: 800,
+                      cursor: isAccepting ? 'not-allowed' : 'pointer',
+                      boxShadow: '0 2px 6px rgba(22, 163, 74, 0.3)',
+                    }}
+                  >
+                    <Check size={16} />
+                    {isAccepting ? 'Accepting Dispatch...' : 'ACCEPT EMERGENCY CASE'}
+                  </button>
+                </div>
               </div>
             </div>
           )}
@@ -1420,41 +1517,41 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
               <div>
                 <div style={{ background: '#0f172a', color: '#f8fafc', borderRadius: '0.5rem', padding: '0.85rem', marginBottom: '0.85rem' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.65rem' }}>
-                    <span style={{ fontSize: '0.8rem', fontWeight: 800, color: '#38bdf8' }}>
-                      KINETIC TRAUMA ESTIMATE (ILLUSTRATIVE / SIMULATED)
+                    <span style={{ fontSize: '0.78rem', fontWeight: 800, color: '#38bdf8' }}>
+                      POSSIBLE INJURY INDICATORS (UNVALIDATED DECISION-SUPPORT ESTIMATE, NOT A CLINICAL ASSESSMENT)
                     </span>
                     <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>
-                      Orientation: {biomechanics.impact_direction} ({biomechanics.pdof_degrees}°)
+                      Orientation: {biomechanics.impact_direction} ({biomechanics.pdof_degrees}°) (illustrative, assumed vehicle mass)
                     </span>
                   </div>
 
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '0.5rem', marginBottom: '0.65rem' }}>
                     <div style={{ background: 'rgba(255,255,255,0.05)', padding: '0.4rem 0.6rem', borderRadius: '4px' }}>
-                      <div style={{ fontSize: '0.65rem', color: '#94a3b8' }}>Delta-V Drop</div>
-                      <div style={{ fontSize: '1rem', fontWeight: 800, color: '#f87171' }}>{biomechanics.deltaV_kmh.toFixed(1)} km/h</div>
+                      <div style={{ fontSize: '0.65rem', color: '#94a3b8' }}>Delta-V Speed Drop</div>
+                      <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#f87171' }}>{biomechanics.deltaV_kmh.toFixed(1)} km/h <span style={{ fontSize: '0.65rem', fontWeight: 500 }}>(illustrative)</span></div>
                     </div>
                     <div style={{ background: 'rgba(255,255,255,0.05)', padding: '0.4rem 0.6rem', borderRadius: '4px' }}>
                       <div style={{ fontSize: '0.65rem', color: '#94a3b8' }}>Energy Dissipated</div>
-                      <div style={{ fontSize: '1rem', fontWeight: 800, color: '#fbbf24' }}>{biomechanics.energy_dissipation_kj.toFixed(1)} kJ</div>
+                      <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#fbbf24' }}>{biomechanics.energy_dissipation_kj.toFixed(1)} kJ <span style={{ fontSize: '0.65rem', fontWeight: 500 }}>(assumed mass)</span></div>
                     </div>
                     <div style={{ background: 'rgba(255,255,255,0.05)', padding: '0.4rem 0.6rem', borderRadius: '4px' }}>
-                      <div style={{ fontSize: '0.65rem', color: '#94a3b8' }}>Predicted ISS Score</div>
-                      <div style={{ fontSize: '1rem', fontWeight: 800, color: '#ef4444' }}>{biomechanics.iss_score_estimate}</div>
+                      <div style={{ fontSize: '0.65rem', color: '#94a3b8' }}>Estimated Injury Severity Index</div>
+                      <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#ef4444' }}>{biomechanics.iss_score_estimate} <span style={{ fontSize: '0.65rem', fontWeight: 500 }}>(estimate)</span></div>
                     </div>
                   </div>
 
                   <div style={{ fontSize: '0.725rem', fontWeight: 700, color: '#cbd5e1', marginBottom: '0.4rem' }}>
-                    Organ Trauma Probability Matrix:
+                    Possible Injury Indicators (unvalidated decision-support estimate, not a clinical assessment):
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
                     {biomechanics.predicted_injuries.map((inj, i) => (
                       <div key={i} style={{ background: 'rgba(255,255,255,0.03)', padding: '0.4rem 0.6rem', borderRadius: '4px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <div>
                           <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#ffffff' }}>{inj.injury}</div>
-                          <div style={{ fontSize: '0.65rem', color: '#38bdf8' }}>Action: {inj.clinical_action}</div>
+                          <div style={{ fontSize: '0.65rem', color: '#38bdf8' }}>Suggested checks for clinician judgment: {inj.clinical_action}</div>
                         </div>
                         <span style={{ background: inj.severity === 'CRITICAL' ? '#dc2626' : '#d97706', color: '#fff', fontSize: '0.65rem', fontWeight: 800, padding: '0.1rem 0.4rem', borderRadius: '3px' }}>
-                          {inj.risk_percent}% Risk
+                          {inj.risk_percent}% Indicator
                         </span>
                       </div>
                     ))}
@@ -1469,21 +1566,19 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
                       <span style={{ fontSize: '0.8rem', fontWeight: 800, color: '#0f172a' }}>
                         EMERGENCY HEALTH CARD
                       </span>
-                      {healthCardMode === 'MOCK' && (
-                        <span
-                          style={{
-                            background: '#fef3c7',
-                            color: '#b45309',
-                            fontSize: '0.65rem',
-                            fontWeight: 800,
-                            padding: '0.1rem 0.4rem',
-                            borderRadius: '4px',
-                            border: '1px solid #fde68a',
-                          }}
-                        >
-                          MOCK DATA
-                        </span>
-                      )}
+                      <span
+                        style={{
+                          background: '#fef3c7',
+                          color: '#b45309',
+                          fontSize: '0.65rem',
+                          fontWeight: 800,
+                          padding: '0.1rem 0.4rem',
+                          borderRadius: '4px',
+                          border: '1px solid #fde68a',
+                        }}
+                      >
+                        {healthCardMode === 'MOCK' ? 'MOCK RECORD (sandbox format)' : 'ABHA RECORD (sandbox format)'}
+                      </span>
                     </div>
                     {unlockedAudit && (
                       <span style={{ fontSize: '0.68rem', color: '#64748b' }}>
@@ -1680,13 +1775,13 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
               <div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0.5rem', marginBottom: '0.75rem' }}>
                   <div style={{ background: '#ffffff', padding: '0.5rem 0.75rem', borderRadius: '0.375rem', border: '1px solid #e2e8f0' }}>
-                    <div style={{ fontSize: '0.65rem', color: '#64748b', fontWeight: 600 }}>PEAK DECELERATION</div>
+                    <div style={{ fontSize: '0.65rem', color: '#64748b', fontWeight: 600 }}>PEAK ACCELERATION (SENSOR RANGE)</div>
                     <div style={{ fontSize: '1.05rem', fontWeight: 800, color: isSaturated ? '#e11d48' : '#0f172a' }}>
-                      {measuredPeakG.toFixed(1)}g {isSaturated && <span style={{ fontSize: '0.65rem', color: '#e11d48' }}>(Saturated)</span>}
+                      {measuredPeakG.toFixed(1)}g {isSaturated && <span style={{ fontSize: '0.65rem', color: '#e11d48' }}>(Sensor Saturated)</span>}
                     </div>
                   </div>
                   <div style={{ background: '#ffffff', padding: '0.5rem 0.75rem', borderRadius: '0.375rem', border: '1px solid #e2e8f0' }}>
-                    <div style={{ fontSize: '0.65rem', color: '#64748b', fontWeight: 600 }}>SPEED DROP (ΔV)</div>
+                    <div style={{ fontSize: '0.65rem', color: '#64748b', fontWeight: 600 }}>SPEED DROP (GPS-based, low sample rate)</div>
                     <div style={{ fontSize: '1.05rem', fontWeight: 800, color: '#0f172a' }}>{speedDropKmh.toFixed(1)} km/h</div>
                   </div>
                   <div style={{ background: '#ffffff', padding: '0.5rem 0.75rem', borderRadius: '0.375rem', border: '1px solid #e2e8f0' }}>
@@ -1914,205 +2009,6 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
         </div>
       )}
 
-
-      {/* Phase 23: Clinical Capability Mismatch Advisory Modal */}
-      {isCapabilityAdvisoryModalOpen && capabilityMatch && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(15, 23, 42, 0.75)',
-            backdropFilter: 'blur(3px)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 9999,
-            padding: '1rem',
-          }}
-        >
-          <div
-            style={{
-              background: '#ffffff',
-              borderRadius: '0.75rem',
-              padding: '1.75rem',
-              width: '100%',
-              maxWidth: '540px',
-              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
-              border: '2px solid #ef4444',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
-                <div
-                  style={{
-                    width: '2.5rem',
-                    height: '2.5rem',
-                    borderRadius: '0.5rem',
-                    background: '#fee2e2',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: '#dc2626',
-                  }}
-                >
-                  <AlertTriangle size={24} />
-                </div>
-                <div>
-                  <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: '#991b1b' }}>
-                    Clinical Capability Mismatch Alert
-                  </h3>
-                  <div style={{ fontSize: '0.78rem', color: '#64748b' }}>
-                    Incident #{incident.id.slice(0, 8)} • AI Biomechanical Triage
-                  </div>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsCapabilityAdvisoryModalOpen(false)}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            <div
-              style={{
-                background: '#fef2f2',
-                border: '1px solid #fecaca',
-                borderRadius: '0.5rem',
-                padding: '1rem',
-                marginBottom: '1.25rem',
-              }}
-            >
-              <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#991b1b', marginBottom: '0.35rem' }}>
-                🩺 Suspected Injury: {capabilityMatch.suspectedInjuryTitle}
-              </div>
-              <p style={{ margin: '0 0 0.65rem 0', fontSize: '0.825rem', color: '#7f1d1d', lineHeight: 1.45 }}>
-                {capabilityMatch.suspectedInjuryDescription}
-              </p>
-              <div
-                style={{
-                  padding: '0.5rem 0.75rem',
-                  background: '#ffffff',
-                  borderRadius: '0.375rem',
-                  border: '1px solid #fca5a5',
-                  fontSize: '0.8rem',
-                  color: '#991b1b',
-                  fontWeight: 600,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem',
-                }}
-              >
-                <strong>Missing at Your Facility:</strong>
-                <span style={{ color: '#dc2626', textDecoration: 'underline' }}>
-                  {capabilityMatch.missingEquipmentNames.join(', ')} (Marked OFFLINE)
-                </span>
-              </div>
-            </div>
-
-            <div
-              style={{
-                fontSize: '0.85rem',
-                color: '#334155',
-                lineHeight: 1.5,
-                marginBottom: '1.5rem',
-                background: '#f8fafc',
-                padding: '0.85rem',
-                borderRadius: '0.5rem',
-                border: '1px solid #e2e8f0',
-              }}
-            >
-              <div style={{ fontWeight: 700, color: '#0f172a', marginBottom: '0.3rem' }}>
-                Golden Hour Clinical Risk Advisory:
-              </div>
-              {capabilityMatch.advisoryText}
-              <div style={{ marginTop: '0.5rem', fontSize: '0.82rem', color: '#475569' }}>
-                <strong>Recommendation:</strong> {capabilityMatch.recommendedAction}
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
-              <button
-                type="button"
-                onClick={async () => {
-                  if (!onReject) return;
-                  setIsCapabilityAdvisoryModalOpen(false);
-                  await onReject(
-                    incident.id,
-                    `Diverted to Apex Center: Missing ${capabilityMatch.missingEquipmentNames.join(', ')} for ${capabilityMatch.suspectedInjuryTitle}`
-                  );
-                }}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '0.5rem',
-                  padding: '0.75rem 1.25rem',
-                  borderRadius: '0.45rem',
-                  border: '1.5px solid #2563eb',
-                  background: '#eff6ff',
-                  color: '#1d4ed8',
-                  fontSize: '0.88rem',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  boxShadow: '0 2px 4px rgba(37, 99, 235, 0.1)',
-                }}
-              >
-                🔀 Divert to Apex Neuro Trauma Center (NIMHANS / BMCRI)
-              </button>
-
-              <div style={{ display: 'flex', gap: '0.65rem' }}>
-                <button
-                  type="button"
-                  onClick={() => setIsCapabilityAdvisoryModalOpen(false)}
-                  style={{
-                    flex: 1,
-                    padding: '0.65rem 1rem',
-                    borderRadius: '0.45rem',
-                    border: '1px solid #cbd5e1',
-                    background: '#ffffff',
-                    color: '#475569',
-                    fontSize: '0.85rem',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                  }}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={async () => {
-                    setIsCapabilityAdvisoryModalOpen(false);
-                    if (onAccept) {
-                      await onAccept(incident.id);
-                    }
-                  }}
-                  disabled={isAccepting}
-                  style={{
-                    flex: 1.5,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '0.45rem',
-                    padding: '0.65rem 1rem',
-                    borderRadius: '0.45rem',
-                    border: 'none',
-                    background: '#dc2626',
-                    color: '#ffffff',
-                    fontSize: '0.85rem',
-                    fontWeight: 700,
-                    cursor: isAccepting ? 'not-allowed' : 'pointer',
-                    boxShadow: '0 2px 6px rgba(220, 38, 38, 0.3)',
-                  }}
-                >
-                  ⚠️ Accept (Stabilize & Transfer Protocol)
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Rejection Modal */}
       {isRejectModalOpen && (

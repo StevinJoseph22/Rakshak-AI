@@ -123,10 +123,12 @@ class _CrashDetectionScreenState extends State<CrashDetectionScreen> {
 
   EmergencyContact? _primaryContact;
   int _contactCount = 0;
+  final TextEditingController _testModeBackendUrlController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
+    _testModeBackendUrlController.text = gCustomConfiguredUrl ?? '';
     EmergencySmsService.navigatorKey = RakshakApp.navigatorKey;
     OfflineDispatchQueue.instance.initialize().catchError((_) {});
     _loadEmergencyContacts();
@@ -253,6 +255,7 @@ class _CrashDetectionScreenState extends State<CrashDetectionScreen> {
 
   @override
   void dispose() {
+    _testModeBackendUrlController.dispose();
     CrashDetectorService.instance.stop();
     _accelSubscription?.cancel();
     _gyroSubscription?.cancel();
@@ -2005,7 +2008,7 @@ class _CrashDetectionScreenState extends State<CrashDetectionScreen> {
             ),
             const SizedBox(height: 6),
             Text(
-              'Demonstrates survival if phone breaks down in <100ms or cellular IP is 100% dead.',
+              'Demonstrates survival if phone breaks down in <100ms or cellular IP connection is unavailable.',
               style: TextStyle(fontSize: 11, color: Colors.purple.shade800),
             ),
             const SizedBox(height: 12),
@@ -2015,7 +2018,7 @@ class _CrashDetectionScreenState extends State<CrashDetectionScreen> {
                 onPressed: _simulateDeadManSwitch,
                 icon: const Icon(Icons.flash_off, color: Colors.white),
                 label: const Text(
-                  'SIMULATE PHONE BREAKDOWN (CLOUD WATCHDOG)',
+                  '[SIMULATED] PHONE BREAKDOWN (CLOUD WATCHDOG)',
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.white),
                 ),
                 style: ElevatedButton.styleFrom(
@@ -2066,6 +2069,60 @@ class _CrashDetectionScreenState extends State<CrashDetectionScreen> {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                 ),
               ),
+            ),
+            const Divider(height: 24),
+            Text(
+              'VENUE / TEST NETWORK OVERRIDE (PERSISTED)',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 11,
+                color: Colors.purple.shade900,
+                letterSpacing: 0.5,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Configure custom laptop or venue backend URL for testing. Normal citizen UI stays zero-configuration.',
+              style: TextStyle(fontSize: 10, color: Colors.purple.shade700),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _testModeBackendUrlController,
+                    decoration: InputDecoration(
+                      hintText: 'http://192.168.x.x:5000',
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton(
+                  onPressed: () async {
+                    final text = _testModeBackendUrlController.text.trim();
+                    await setCustomBackendUrl(text.isEmpty ? null : text);
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(text.isEmpty
+                              ? 'Reset to automatic zero-config candidate discovery'
+                              : 'Custom backend override saved: $text'),
+                        ),
+                      );
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.purple.shade700,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  ),
+                  child: const Text('SAVE', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                ),
+              ],
             ),
           ],
         ),

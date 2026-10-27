@@ -31,7 +31,7 @@
 ## 1. System Architectural Blueprint
 
 Rakshak-AI is structured into three distributed operational tiers:
-1. **Edge Sensing Tier (Flutter Mobile Engine)**: Runs continuous 50Hz IMU circular buffers, kinematic collision detection, sub-second pre-alert microbursts, locked-screen full-screen intents, native P2P SMS alerts, and WebRTC streaming.
+1. **Edge Sensing Tier (Flutter Mobile Engine)**: Runs continuous 50Hz IMU circular buffers, kinematic collision detection, sub-second pre-alert microbursts, locked-screen full-screen intents, native SMS alerts via Android SmsManager, and WebRTC streaming.
 2. **Central Spatial Coordination Tier (Node.js, PostGIS, Volatile Redis RAM)**: Evaluates high-speed PostGIS radius searches, dispatches real-time Socket.io frames, runs 45-second auto-escalation watchdogs, enforces single-hospital acceptance locks via PostgreSQL transactions, and maintains zero medical PII in disk databases.
 3. **Multi-Agency Tactical Control Tier (React 18 + TypeScript Dashboards)**: Provides specialized views for Hospital Trauma Bays, Police Control Headquarters, Paramedic Ambulance Cockpits, and System Administration.
 
@@ -68,7 +68,7 @@ flowchart TD
 
 ## 2. End-to-End Emergency Lifecycle (State Machine)
 
-Every vehicular accident progresses through an immutable state machine designed to eliminate human latency and prevent false alarms.
+Every vehicular accident progresses through an strict state machine designed to eliminate human latency and prevent false alarms.
 
 ```mermaid
 stateDiagram-v2
@@ -235,9 +235,9 @@ db/
 │   ├── 005_create_users_and_auth.sql # RBAC users table with 25 hospital logins
 │   ├── 006_add_ambulance_arrival_metadata.sql # Paramedic scene arrival telemetry
 │   ├── 007_add_suspected_and_cancelled_status.sql # Pre-alert state machine columns
-│   └── 008_create_health_card_access_audit.sql # Immutable break-glass audit logs
+│   └── 008_create_health_card_access_audit.sql # Append-Only Break-Glass audit logs
 └── seeds/
-    └── 001_hospitals_bengaluru.sql # 25 verified hospitals with PostGIS Point geometries
+    └── 001_hospitals_bengaluru.sql # 25 sample hospitals (sample data, verify before real use) with PostGIS Point geometries
 ```
 
 ---
@@ -498,7 +498,7 @@ Under the Ayushman Bharat Digital Mission (ABDM), citizens link their 14-digit A
 * **Before Acceptance**: All hospital and police dashboards display locked provenance indicators (`ABHA Health Record: Clinical access available after case acceptance`).
 * **After Acceptance**: The designated hospital that reserved the trauma bay gains authorized access to the **"Access ABHA Health Record (Break-Glass)"** trigger.
 
-### 10.2 Immutable Break-Glass Audit Trail
+### 10.2 Append-Only Break-Glass Audit Trail
 When clinician breaks glass, [`backend/src/routes/incidents.ts`](file:///e:/Projects%20and%20Case%20Study/Rakshak-AI/backend/src/routes/incidents.ts) requires a mandatory clinical justification (e.g. *"Unconscious blunt trauma victim requiring urgent laparotomy and cross-match blood transfusion"*).
 
 An immutable regulatory audit record is written to the `health_card_access_audit` table:
@@ -596,7 +596,7 @@ Rakshak-AI functions as a mission-critical **Enterprise Resource Planning (ERP)*
 │ 3. MULTI-AGENCY PROCESS ENGINE   │ 4. PRE-ALLOCATION & AUDIT COMPLIANCE     │
 │ • PostGIS Spatial Match (8-20km) │ • ABDM / ABHA Vault Decryption           │
 │ • 45s Auto-Escalation State Hub  │ • Staged Blood & Surgery Units           │
-│ • Row-Level Locks (Single Claim) │ • Immutable Break-Glass Audit Trail      │
+│ • Row-Level Locks (Single Claim) │ • Append-Only Break-Glass Audit Trail      │
 └──────────────────────────────────┴──────────────────────────────────────────┘
 ```
 

@@ -50,7 +50,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('RAPID RESPONSE PARAMEDIC SUITE'), findsOneWidget);
     expect(find.text('ABHA Medical Vault Decryptor'), findsOneWidget);
-    expect(find.text('C-V2X Green Corridor Signal Force'), findsOneWidget);
+    expect(find.text('C-V2X Green Corridor Signal Force [SIMULATED]'), findsOneWidget);
 
     final vitalsFinder = find.text('Live Pre-Arrival Vitals Streamer');
     await tester.ensureVisible(vitalsFinder);

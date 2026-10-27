@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import http from 'http';
 import crypto from 'crypto';
 import { app } from '../server';

@@ -216,13 +216,26 @@ class _AmbulancePilotHomeScreenState extends State<AmbulancePilotHomeScreen> {
                           child: const Icon(Icons.translate, color: Color(0xFFDC2626), size: 20),
                         ),
                         const SizedBox(width: 10),
-                        Text(
-                          _t('select_language'),
-                          style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _t('select_language'),
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                            Text(
+                              'Machine-translated, pending native review',
+                              style: TextStyle(
+                                fontSize: 10.5,
+                                color: Colors.amber.shade200,
+                                fontStyle: FontStyle.italic,
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -600,8 +613,8 @@ class _AmbulancePilotHomeScreenState extends State<AmbulancePilotHomeScreen> {
           Expanded(
             child: Text(
               _currentLang == 'en'
-                  ? 'C-V2X OBU: 5.9 GHz DSRC Online • Dynamic Green Corridor Armed'
-                  : 'C-V2X OBU: 5.9 GHz DSRC Online • ${_t('c_v2x_banner')}',
+                  ? '[SIMULATED] C-V2X OBU: 5.9 GHz DSRC Online • Dynamic Green Corridor Armed'
+                  : '[SIMULATED] C-V2X OBU: 5.9 GHz DSRC Online • ${_t('c_v2x_banner')}',
               style: const TextStyle(fontSize: 10.5, color: Color(0xFF10B981), fontWeight: FontWeight.w600),
             ),
           ),
@@ -1422,7 +1435,7 @@ class _AmbulancePilotHomeScreenState extends State<AmbulancePilotHomeScreen> {
                       Icon(Icons.traffic, color: Color(0xFF10B981), size: 20),
                       SizedBox(width: 8),
                       Text(
-                        'C-V2X Green Corridor Signal Force',
+                        'C-V2X Green Corridor Signal Force [SIMULATED]',
                         style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white),
                       ),
                     ],
@@ -1439,7 +1452,7 @@ class _AmbulancePilotHomeScreenState extends State<AmbulancePilotHomeScreen> {
                         const SnackBar(
                           backgroundColor: Color(0xFF10B981),
                           content: Text(
-                            '⚡ SRM Signal Preemption Broadcast: 3 Intersections Locked GREEN along Silk Board vector.',
+                            '⚡ [SIMULATED] SRM Signal Preemption Broadcast: 3 Intersections Locked GREEN along Silk Board vector.',
                             style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
                           ),
                         ),

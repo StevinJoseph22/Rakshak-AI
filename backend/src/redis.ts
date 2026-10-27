@@ -158,7 +158,7 @@ export function registerHealthCardPurgeVerification(
       let existsInRedis = false;
       try {
         existsInRedis = (await redis.exists(key)) === 1;
-      } catch (_) {}
+      } catch (_) { /* test offline */ }
 
       // Clean up in-memory fallback
       ephemeralRamFallback.delete(key);

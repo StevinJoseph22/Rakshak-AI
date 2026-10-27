@@ -17,7 +17,7 @@ This master document provides an exhaustive breakdown of:
 1. **The Ground-Reality Problem Statement** of road trauma in India.
 2. **The End-to-End Technological Solution Architecture**.
 3. **The Multi-Platform Feature Matrix** (Citizen App, Multilingual Ambulance Driver App, Hospital Emergency Dashboard, and Police Traffic Control Center).
-4. **Government Liabilities, Statutory Approvals, Legal Immunities, and Regulatory Compliance** covering **Ayushman Bharat (ABHA/ABDM)**, **C-V2X 5.9 GHz ITS band wireless licensing (DoT/WPC)**, **Motor Vehicles Act Good Samaritan protections (Section 134A)**, **Supreme Court emergency treatment mandates (*Pt. Parmanand Katara*)**, **DPDP Act 2023**, and **TRAI emergency communications directives**.
+4. **Government Liabilities, Statutory Approvals, Legal Immunities, and Regulatory Compliance** covering **Ayushman Bharat (ABHA/ABDM - to be verified)**, **C-V2X 5.9 GHz ITS band wireless licensing (DoT/WPC - to be verified)**, **Motor Vehicles Act Good Samaritan protections (Section 134A - to be verified)**, **Supreme Court emergency treatment mandates (*Pt. Parmanand Katara* - to be verified)**, **DPDP Act 2023 (Section 7(f))**, and **TRAI emergency communications directives (to be verified)**.
 
 ---
 
@@ -31,14 +31,14 @@ flowchart TD
 
     subgraph TELEMETRY["ZERO-NETWORK FAILSAFE TRANSMISSION"]
         D -->|Normal 4G/5G Network| E1["WebSocket / HTTPS Encrypted REST API"]
-        D -->|Data Network Offline / 2G Only| E2["Native Dual-SIM GSM SMS Microburst (P1 Baseband)"]
+        D -->|Data Network Offline| E2["Native Emergency SMS via Android SmsManager to Configured Contacts"]
         D -->|Total Cellular Blackout| E3["C-V2X PC5 Direct Sidelink 5.9 GHz + BLE 5.2 Beacon"]
-        D -->|Phone Smashed / Total Destruction| E4["Cloud Watchdog 'Dead Man\'s Snitch' Inactivity Fire"]
+        D -->|Phone Smashed / Total Destruction| E4["Cloud Watchdog 'Dead Man\'s Snitch' Inactivity Fire (Simulated)"]
     end
 
     subgraph CLOUD["RAKSHAK-AI CLOUD DISPATCH ORCHESTRATOR"]
         E1 & E2 & E3 & E4 --> F["Ingestion Engine + PostGIS Spatial Clustering"]
-        F --> G["Biomechanics Injury Predictor (Delta-V, ISS Score, Head Trauma / TBI)"]
+        F --> G["Possible Injury Indicators Decision-Support (Delta-V, Estimated ISS Score, Head Trauma Indicators)"]
     end
 
     subgraph TRIAGE["INTELLIGENT TRIPLE-DISPATCH DISPATCH"]
@@ -182,7 +182,7 @@ In severe collisions (such as head-on heavy truck impacts), the smartphone may b
         | Encrypted JSON Payload     |    |  Microburst (140-byte Base64)  |
         +----------------------------+    +---------------+----------------+
                                                           |
-                                          [SMS Baseband Available?]
+                                          [Cellular Signal Available?]
                                                         /   \
                                                       YES    NO
                                                       /       \
@@ -201,9 +201,9 @@ In severe collisions (such as head-on heavy truck impacts), the smartphone may b
                                             +-------------------------------+ +-----------------------------+
 ```
 
-1. **Tier 1: Native Dual-SIM GSM SMS Signaling (2G Baseband)**:
-   When IP data networks are unavailable, the application leverages Android's `SmsManager` across both SIM cards to transmit a 140-byte compressed Base64 payload directly to the National PSAP Gateway (+91-800-RAKSHAK) and family ICE contacts:
-   `RAKSHAK:v1|INC:8F2A|LOC:12.9716,77.5946|G:9.4|V:-72|ROLL:1|ABHA:91-849204`
+1. **Tier 1: Native Emergency SMS Fallback (Android SmsManager)**:
+   When IP data networks are unavailable, the mobile application uses Android's `SmsManager` to transmit direct emergency SMS messages with Google Maps coordinates and basic telemetry to user-configured emergency contacts (ICE numbers).
+   *(Note on Central SMS Gateway: A central carrier gateway number like `+91-800-RAKSHAK` and an inbound cellular SMS daemon do not exist in the current backend codebase; the gateway path is marked SIMULATED. Native SMS is sent directly from the device's native SIM to personal emergency contacts).*
 2. **Tier 2: Delay-Tolerant Store-and-Forward SQLite Queue**:
    All sensor streams and location coordinates are stored in an encrypted SQLite database on the device. An active background worker polls for any network availability, executing exponential backoff across the Golden Hour window (30-minute TTL).
 3. **Tier 3: C-V2X PC5 Direct Sidelink (5.9 GHz ITS Band)**:
@@ -227,11 +227,11 @@ The citizen interface emphasizes minimalist, high-contrast usability that stays 
 | Feature Area | Technical Implementation & Capability |
 | :--- | :--- |
 | **Executive Clean Dashboard** | Displays active user profile, vehicle type selection (Two-Wheeler, Passenger Car, Heavy Commercial), real-time driving speed, and instantaneous trip telemetry. |
-| **Nearby Hospital Radar** | Geospatial query displaying up to 25 verified emergency hospitals in a dynamic radius (up to 5 km). Automatically resolves the nearest Apex Trauma Center if local facilities lack required trauma infrastructure. Includes one-tap turn-by-turn navigation via Google Maps. |
+| **Nearby Hospital Radar** | Geospatial query displaying up to 25 sample hospitals (sample data, verify before real use) in a dynamic radius (up to 5 km). Automatically resolves the nearest Apex Trauma Center if local facilities lack required trauma infrastructure. Includes one-tap turn-by-turn navigation via Google Maps. |
 | **ABHA Emergency Health Card** | Integrates with Ayushman Bharat Digital Mission (ABDM). Stores ABHA ID, primary blood group, severe drug allergies, pre-existing conditions, donor status, and ICE emergency contacts. |
 | **Instant SOS Trigger** | High-visibility emergency slider initiating a 5-second countdown with dual-SIM SMS and WebSocket cloud dispatch. |
-| **Cloud Watchdog Simulation** | Diagnostic simulation tool allowing users and authorities to test catastrophic phone destruction scenarios. |
-| **Privacy Mode** | Adheres strictly to the Digital Personal Data Protection (DPDP) Act 2023. Real-time telemetry is buffered exclusively in volatile RAM and is only written or transmitted upon verified crash signature detection. |
+| **Cloud Watchdog Simulation [SIMULATED]** | Diagnostic simulation tool allowing users and authorities to test catastrophic phone destruction scenarios. |
+| **Privacy Mode** | Adheres strictly to Section 7(f) of the Digital Personal Data Protection (DPDP) Act 2023. Real-time telemetry is buffered exclusively in volatile RAM and is only written or transmitted upon verified crash signature detection. |
 
 ### 3.2 Multilingual Ambulance Driver App
 Designed for fast-paced emergency conditions, factoring in regional language variations and diverse driver literacy levels:
@@ -288,7 +288,7 @@ Deploying an autonomous trauma system across civil infrastructure, wireless spec
 ### 4.1 Ayushman Bharat Digital Mission (ABDM) & National Health Authority (NHA)
 
 #### 4.1.1 Statutory Architecture:
-Under the National Health Authority (NHA), integration with the Ayushman Bharat Digital Mission requires strict adherence to the **ABDM Sandbox Governance Rules** and the **Ayushman Bharat Health Account (ABHA)** standard.
+Under the National Health Authority (NHA), integration with the Ayushman Bharat Digital Mission requires strict adherence to the **ABDM Sandbox Governance Rules (to be verified)** and the **Ayushman Bharat Health Account (ABHA) standard (to be verified)**.
 
 #### 4.1.2 The Three Sandbox Certification Milestones:
 1. **Milestone M1 (Identity Management & ABHA Issuance)**:
@@ -301,17 +301,16 @@ Under the National Health Authority (NHA), integration with the Ayushman Bharat 
 
 #### 4.1.3 The Legal "Break-Glass" Exception Protocol:
 Normal health record transactions require explicit user consent via an ABDM-registered Consent Manager app. In catastrophic road trauma where the patient is unconscious, obtaining real-time consent is impossible.
-- **Section 2.3.4 of the ABDM Consent Governance Framework** and the **National Health Data Management Policy** explicitly establish the **"Break-Glass Protocol"**.
+- **Section 2.3.4 of the ABDM Consent Governance Framework (to be verified)** and the **National Health Data Management Policy (to be verified)** explicitly reference emergency access exceptions (**"Break-Glass Protocol"**).
 - **Legal Requirements Implemented by Rakshak-AI**:
   1. The accessing individual must be an authorized clinical professional logged in with a validated state or national **Medical Council Registration Number (GMC/NMC ID)**.
   2. The system enforces a mandatory dropdown requiring the clinical reason for emergency access (e.g., *"Acute polytrauma resuscitation in emergency department"*).
-  3. A permanent, immutable audit log entry is generated recording the doctor's identity, precise GPS coordinate of the hospital terminal, timestamp, and incident ID.
+  3. A permanent, append-only audit log entry is generated recording the doctor's identity, precise GPS coordinate of the hospital terminal, timestamp, and incident ID.
   4. An automated retroactive notification is sent to the patient's registered mobile number via SMS and the ABDM Gateway as soon as connectivity allows.
 
 #### 4.1.4 Digital Personal Data Protection (DPDP) Act 2023 Compliance:
-The processing of sensitive personal health data without prior consent is covered under statutory exemptions within the DPDP Act 2023:
-- **Section 7(a)**: *"A Data Fiduciary may process personal data for the specified purpose of providing medical treatment or health service to an individual during an epidemic, outbreak of disease, or any other threat to public health."*
-- **Section 7(b)**: *"To respond to a medical emergency involving a threat to the life or immediate serious threat to the health of the Data Principal or any other individual."*
+The processing of personal data without prior consent for emergency medical triage is covered under legitimate uses within the DPDP Act 2023:
+- **Section 7(f)**: *"to respond to a medical emergency involving a threat to the life or immediate serious threat to the health of the Data Principal or any other individual."*
 
 ---
 
@@ -322,7 +321,7 @@ Radio frequency spectrum in India is governed by the **Wireless Planning and Coo
 
 #### 4.2.2 Spectrum Allocation for Intelligent Transportation Systems (ITS):
 - **Band Allocation**: The internationally harmonized band for V2X safety is **5875 MHz to 5925 MHz (5.9 GHz ITS Band)**.
-- **National Frequency Allocation Plan (NFAP-2022)**: IND 32 permits Intelligent Transport Systems in the 5875–5925 MHz band on a shared, non-interference, non-protection basis.
+- **National Frequency Allocation Plan (NFAP-2022) (to be verified)**: IND 32 (to be verified) addresses Intelligent Transport Systems in the 5875–5925 MHz band on a shared, non-interference, non-protection basis.
 - **Licensing Requirements**:
   1. **Experimental / Demonstration License**: Required during trial testing phases. Applied through the **Saral Sanchar** portal under Form WPC-ETA for trial operation of C-V2X Roadside Units (RSUs) and On-Board Units (OBUs).
   2. **Equipment Type Approval (ETA)**: Any C-V2X hardware module (e.g., Qualcomm 9150 C-V2X chipset or Autotalks Secton) imported into India must secure an ETA from WPC confirming it complies with specified emission masks, radiated power limits ($< 33\text{ dBm EIRP}$), and out-of-band suppression.
@@ -336,18 +335,18 @@ Administered by the **Telecommunication Engineering Centre (TEC)**:
   - Radio Conformance under ETSI EN 302 571 and 3GPP Rel-14/15/16 specifications.
 
 #### 4.2.4 Automotive Industry Standards (AIS) & MoRTH Notifications:
-- **AIS-140 Compliance**: MoRTH requires all public service and commercial vehicles to incorporate Vehicle Location Tracking (VLT) devices with emergency buttons. Rakshak-AI software integrates with AIS-140 devices via standard telemetry serial pipes (RS-232/CAN-bus).
-- **AIS-188 & ISO 26262 (Functional Safety)**: Software controlling vehicle-level crash reporting must achieve **Automotive Safety Integrity Level B (ASIL-B)** certification to ensure crash-detection algorithms do not interfere with Electronic Control Units (ECUs) controlling brakes or steering.
+- **AIS-140 Compliance (to be verified)**: MoRTH requires all public service and commercial vehicles to incorporate Vehicle Location Tracking (VLT) devices with emergency buttons. Rakshak-AI software integrates with AIS-140 devices via standard telemetry serial pipes (RS-232/CAN-bus).
+- **AIS-188 (to be verified)**: Telematics and crash-reporting software must follow automotive functional safety guidelines to ensure background sensor reading does not degrade operating system responsiveness.
 
 ---
 
 ### 4.3 Good Samaritan Protection & Police Liabilities
 
-#### 4.3.1 Section 134A of the Motor Vehicles (Amendment) Act 2019:
+#### 4.3.1 Section 134A of the Motor Vehicles (Amendment) Act 2019 (to be verified):
 Section 134A provides comprehensive statutory immunity:
 > *"A Good Samaritan shall not be liable for any civil or criminal action for any injury or death of the victim of an accident observed to have occurred, where such injury or death resulted from the Good Samaritan's assistance to the victim..."*
 
-#### 4.3.2 Supreme Court Guidelines in *SaveLIFE Foundation vs. Union of India (2016)*:
+#### 4.3.2 Supreme Court Guidelines in *SaveLIFE Foundation vs. Union of India (2016)* (to be verified):
 - **Voluntary Identification**: A citizen using Rakshak-AI or alerting authorities cannot be forced to disclose identity, phone number, or address.
 - **Police Interrogation Ban**: Police officials are prohibited from compelling Good Samaritans to appear at police stations for investigation.
 - **Civil and Criminal Protection**: Extends to developers and operators of emergency response software acting in good faith to facilitate emergency assistance.
@@ -361,7 +360,7 @@ Operated under the aegis of the **Ministry of Home Affairs (MHA)**:
 
 ### 4.4 Clinical Liabilities & Emergency Medical Treatment Mandates
 
-#### 4.4.1 The Landmark Supreme Court Precedent: *Pt. Parmanand Katara vs. Union of India (1989)*:
+#### 4.4.1 Supreme Court Precedent: *Pt. Parmanand Katara vs. Union of India (1989)* (to be verified):
 The Supreme Court established a fundamental constitutional mandate under **Article 21 (Right to Life)**:
 - **Unconditional Emergency Care**: Every doctor and hospital—whether government, private, or corporate—is under an immediate legal obligation to extend medical assistance to road trauma victims.
 - **No Procedural Delays**: Care cannot be withheld pending police clearance, registration of a Medico-Legal Case (MLC), or financial pre-deposits.
@@ -370,18 +369,18 @@ The Supreme Court established a fundamental constitutional mandate under **Artic
 #### 4.4.2 Clinical Establishments (Registration and Regulation) Act 2010:
 Section 12(2) makes it mandatory for registered clinical establishments to provide immediate emergency medical treatment to stabilize anyone presenting in an emergency condition.
 
-#### 4.4.3 Medical Negligence & The Bolam Test:
-- Under Indian jurisprudence (reaffirmed in *Jacob Mathew vs. State of Punjab, 2005*), a medical professional is not guilty of negligence if they act in accordance with a practice accepted as proper by a responsible body of medical professionals.
-- **Rakshak-AI Decision Support**: The automated **Clinical Capability Mismatch Advisory Modal** assists hospitals by preventing secondary neuro-trauma delays, supporting triage decisions in high-stakes emergency conditions.
+#### 4.4.3 Medical Negligence & Legal Standards (to be verified):
+- Under Indian jurisprudence (reaffirmed in *Jacob Mathew vs. State of Punjab (2005) (to be verified)*), a medical professional is not guilty of negligence if they act in accordance with a practice accepted as proper by a responsible body of medical professionals.
+- **Rakshak-AI Decision Support**: The non-blocking **Clinical Capability Mismatch Advisory** assists hospitals (care is never blocked; one-tap acceptance remains active while displaying non-blocking decision support) by preventing secondary neuro-trauma delays, supporting triage decisions in high-stakes emergency conditions.
 
 ---
 
 ### 4.5 Telecom Regulatory Authority of India (TRAI) & SMS Gateway Compliance
 
-#### 4.5.1 Commercial Communications Customer Preference Regulations (TCCCPR 2018):
-To deliver Tier-1 emergency signaling SMS microbursts during network outages, Rakshak-AI complies with the **TRAI Distributed Ledger Technology (DLT)** framework:
+#### 4.5.1 Commercial Communications Customer Preference Regulations (TCCCPR 2018 - to be verified):
+To deliver Tier-1 emergency signaling SMS microbursts during network outages, Rakshak-AI complies with the **TRAI Distributed Ledger Technology (DLT) framework (to be verified)**:
 - **Emergency Sender IDs**: Registered under dedicated government-priority alphanumeric headers (`RAKSHK`, `EMRGNC`).
-- **Scrubbing Exemption**: Under TRAI emergency directives, safety alerts originating from verified public safety applications are assigned **Priority-1 (P1)** routing. These bypass promotional/transactional scrubbing filters to guarantee delivery in **under 3 seconds** across all telecom providers.
+- **Scrubbing Exemption**: Under TRAI emergency directives, safety alerts originating from verified public safety applications are assigned **Priority-1 (P1)** routing. These bypass promotional/transactional scrubbing filters aiming for rapid transmission across participating telecom providers (to be verified).
 
 ---
 
@@ -409,6 +408,29 @@ To deliver Tier-1 emergency signaling SMS microbursts during network outages, Ra
 |                                                                                                    |
 +----------------------------------------------------------------------------------------------------+
 ```
+
+
+---
+
+### 4.6 Hardware Bill of Materials (BOM) & Infrastructure Estimates (Indicative Estimates)
+
+All hardware figures below are **indicative estimates** based on preliminary engineering research and reference vendor quotes. Actual procurement costs will vary based on volume, vendor negotiations, state taxes, and installation environments.
+
+#### Key Cost Assumptions:
+1. **Volume Basis**: Component pricing assumes commercial batch procurement (>1,000 units).
+2. **Exclusions**: Estimates exclude local GST (18%), customs/import duties, field labor, pole trenching, and civil works.
+3. **Citizen Smartphone Tier**: **₹0 incremental hardware cost** (runs on citizen's existing Android device; requires Android 8.0+ with accelerometer and GNSS).
+
+| Subsystem | Hardware Component | Indicative Unit Cost (INR) | Primary Purpose | Assumptions & Notes |
+| :--- | :--- | :--- | :--- | :--- |
+| **Ambulance OBU** | C-V2X Transceiver (Qualcomm 9150 / Quectel AG15) | ₹14,000 – ₹22,000 | Direct 5.9 GHz PC5 V2I & V2V broadcast | Automotive COTS module, external 5.9 GHz antenna |
+| **Ambulance Cockpit** | Rugged Paramedic Tablet (8-inch, high-nits) | ₹8,000 – ₹14,000 | EMS driver navigation & vitals dashboard | Vehicle 12V DC powered, high-contrast display |
+| **Ambulance Sensor** | 12V Siren & Beacon Relay Sensor Line | ₹800 – ₹1,500 | Senses emergency beacon activation | Opto-isolated 12V-to-5V TTL trigger |
+| **Total Ambulance Unit** | **Complete In-Vehicle EMS Telematics Pack** | **₹22,800 – ₹37,500** | **Per Ambulance** | Excludes vehicle installation labor |
+| **Traffic Signal RSU** | Pole-Mounted C-V2X Roadside Unit (RSU) | ₹45,000 – ₹75,000 | Receives J2735 SRM priority requests | IP67 outdoor enclosure, dual omni-antennas |
+| **Traffic Controller Interface**| NEMA TS2 / 2070 SNMP Preemption Card | ₹15,000 – ₹28,000 | NTCIP 1202 hold trigger to traffic cabinet | Interfaces to municipal ATC cabinet over Ethernet |
+| **Total Intersection Node**| **Complete C-V2X Green Corridor Junction** | **₹60,000 – ₹1,03,000** | **Per Signalized Intersection** | Assumes existing municipal ATC controller |
+| **Cloud Central Infrastructure**| Managed PostGIS + Volatile Redis Cluster | ₹45,000 – ₹85,000 / mo | City-wide dispatch & spatial matching | MeitY-empaneled Indian cloud region (AWS/GCP) |
 
 ### 5.1 Infrastructure Topology & Cloud Scalability
 - **Kubernetes Container Orchestration**: Deployed on MeitY-empaneled Indian cloud regions (AWS Mumbai / GCP Delhi) to comply with data sovereignty regulations.

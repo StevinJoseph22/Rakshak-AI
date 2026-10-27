@@ -148,7 +148,7 @@ In vehicular trauma accidents, **50% of fatalities occur within the first 60 min
   * **Milestone 1**: Instant Crash SOS with live Google Maps coordinate link.
   * **Milestone 2**: Hospital Acceptance Notification with admitting trauma center details.
   * **Milestone 3**: Paramedic Unit Dispatched Notification with responding ambulance ID.
-* Constrained strictly to single-part GSM ($<160$ characters) to guarantee 100% carrier delivery across all Indian telecom operators.
+* Constrained strictly to single-part GSM ($<160$ characters) to maximize carrier delivery compatibility across all Indian telecom operators.
 
 ---
 
@@ -208,7 +208,7 @@ In enterprise software terminology, an ERP integrates core operational processes
 2. **Fleet & Logistics Management (SCM / SCM-E)**: Real-time GPS beaconing, vehicle status management, and automated C-V2X route preemption for ambulance fleets.
 3. **Multi-Agency Workflow Orchestration**: End-to-end event-driven state transitions connecting Citizens, Municipal Police Headquarters, EMS Fleets, and Accredited Hospitals into one unified ledger.
 4. **Supply-Chain Pre-Allocation**: While the ambulance is in transit, the hospital's trauma department automatically receives victim blood group, allergies, and estimated arrival time, staging surgical teams *before* the victim arrives.
-5. **Regulatory Compliance & Auditability**: Enforces RBAC permissions, single-claim row-level transaction locks, and immutable ABDM break-glass audit logs.
+5. **Regulatory Compliance & Auditability**: Enforces RBAC permissions, single-claim row-level transaction locks, and append-only ABDM break-glass audit logs.
 
 ---
 
@@ -227,7 +227,7 @@ Rakshak-AI is engineered with a pluggable **Hardware Abstraction Layer (HAL)** t
  │  • Tri-axial MEMS Gyroscope (rad/s)    │  • Airbag ECU Deployment Trigger   │
  │  • MEMS Barometer (Airbag ΔP pulse)    │  • Vehicle Speed Sensor (VSS)      │
  │  • Multi-GNSS (GPS / NavIC / Galileo)  │  • Siren & Strobe Arming Sense     │
- │  • Baseband SIM Modem (Native SMS)     │  • 12V/24V Automotive Power Supply │
+ │  • Cellular Telephony Modem (Native SMS)     │  • 12V/24V Automotive Power Supply │
  └───────────────────┬────────────────────┴──────────────────┬─────────────────┘
                      │                                       │
      Sub-Second      │ C-V2X PC5 Sidelink (5.9 GHz)          │ BLE Beacon (UUID: 0xFD6F)
@@ -293,7 +293,7 @@ Integrated via `VehicleObuService` (`mobile/lib/services/vehicle_obu_service.dar
 * **Free-Fall Invalidation ($50\text{ Hz}$)**: Suppresses false alarms if $|g| < 0.2\text{g}$ for $>100\text{ms}$ (indicates a dropped phone).
 * **MEMS Barometer ($10\text{ Hz}$)**: Captures cabin pressure spikes ($\Delta P \ge 12\text{ hPa}$) caused by vehicle airbag deployments.
 * **Multi-GNSS Receiver**: Dual-band GPS/GLONASS/NavIC measuring deceleration down to $0\text{ km/h}$.
-* **Cellular Baseband Radio**: Direct native P2P SMS using Android `SmsManager` over the physical SIM, bypassing cloud gateway vulnerabilities.
+* **Native SMS Fallback (Android SmsManager)**: Direct native P2P SMS using Android `SmsManager` over the physical SIM, bypassing cloud gateway vulnerabilities.
 
 ### 4. Zero-Network & Broken-Device Resilience Matrix
 * **Zero Cellular Data (No 4G/5G)**: Native SIM P2P SMS transmits Google Maps coordinates and ABHA medical ID directly to family. Local SQLite queue synchronizes via exponential backoff upon network restoration.
@@ -456,7 +456,7 @@ To ensure clean demonstrations without stale alerts:
 ## 🔒 Privacy, Security & Compliance Guarantees
 
 * **Zero Persistent Image Storage**: Accident photos are held exclusively in volatile RAM and destroyed after 10 minutes.
-* **On-Device Contact Privacy**: Victim emergency contacts reside 100% locally on-device in `SharedPreferences`. They are never harvested or stored in cloud user tables.
+* **On-Device Contact Privacy**: Victim emergency contacts reside locally on-device in `SharedPreferences`. They are never harvested or stored in cloud user tables.
 * **Privacy-Gated Hospital Access**: Family phone numbers are concealed on the dashboard until an accredited hospital officially accepts the case.
 * **TRAI DLT Compliance**: Bypasses commercial SMS gateways by routing personal peer-to-peer notifications through Android’s native SIM stack.
 * **Dead-Man Switch Privacy**: Trip Sentinel heartbeats maintain a rolling 120-second TTL in Redis; historical GPS trajectories are never recorded or stored.
