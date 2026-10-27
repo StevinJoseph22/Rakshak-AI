@@ -249,11 +249,11 @@ The edge detection logic in [`crash_detector_service.dart`](file:///e:/Projects%
 ### 4.1 Kinematic Trigger Criteria
 To prevent false triggers from dropped phones, potholes, or sharp braking, a crash is confirmed only when multiple physical indicators correlate:
 
-$$\text{Impact Trigger} \iff (G_{\text{peak}} \ge 6.5g) \land (\Delta V \ge 35\text{ km/h}) \land (V_{\text{post}} \le 5\text{ km/h}) \land (\neg \text{FreeFall})$$
+$$\text{Impact Trigger} \iff (G_{\text{peak}} \ge 4.8g) \land (\Delta V \ge 35\text{ km/h}) \land (V_{\text{post}} \le 5\text{ km/h}) \land (\neg \text{FreeFall})$$
 
 1. **Peak Deceleration Magnitude ($G_{\text{peak}}$)**:
    $$\|a(t)\| = \frac{\sqrt{a_x^2(t) + a_y^2(t) + a_z^2(t)}}{9.80665}$$
-   * Threshold: $\|a(t)\| \ge 6.5g$. Sensor hardware saturation is flagged if $\|a(t)\| \ge 16.0g$.
+   * Threshold: $\|a(t)\| \ge 4.8g$. Sensor hardware saturation is flagged if $\|a(t)\| \ge 16.0g$.
 2. **Delta-V Speed Drop ($\Delta V$)**:
    $$\Delta V = V_{\text{pre}} - V_{\text{post}}$$
    * Measured over a 500ms sliding window before and after the acceleration spike.
@@ -324,7 +324,7 @@ sequenceDiagram
 ```
 
 1. **Sub-Second Pre-Alert Microburst (`pre_alert_service.dart` / `preAlertService.ts`)**:
-   * The millisecond the acceleration vector breaches $6.5g$—**before any UI countdown screen renders**—the edge background worker dispatches an encrypted lightweight JSON frame:
+   * The millisecond the acceleration vector breaches $4.8g$—**before any UI countdown screen renders**—the edge background worker dispatches an encrypted lightweight JSON frame:
      ```json
      {
        "client_id": "771aee64-f7ea-440b-9491-dc83612f2d1f",

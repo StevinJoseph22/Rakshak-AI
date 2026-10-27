@@ -65,7 +65,7 @@
   * Point to the live photo: appeared in $<400\text{ms}$ via volatile RAM.
   * Point to the **Measured Crash Severity Index** (Peak Accel, Speed Drop, Rollover, Responsiveness) and **Ayushman Bharat (ABHA) Medical Profile** (Blood Group O+, Organ Donor, Allergies).
 * **Words to Say:**
-  > *"Our edge-sensor engine detected a 6.5G deceleration and instant speed drop, checking for free-fall to eliminate false drops.  
+  > *"Our edge-sensor engine detected a 4.8G deceleration and instant speed drop, checking for free-fall to eliminate false drops.  
   > Even before the 10-second countdown finished, a sub-second pre-alert flagged the police. And if the phone had been smashed to pieces, our 30-second silent watchdog would auto-escalate it anyway.  
   > Notice the photo: it is streamed straight through volatile RAM into Redis with a 10-minute TTL — never saved to the victim's device gallery. Maximum clinical context, zero privacy risk."*
 

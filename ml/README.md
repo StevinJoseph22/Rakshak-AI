@@ -4,7 +4,7 @@
 This module trains and exports a lightweight, mobile-optimized 1D Convolutional Neural Network (1D-CNN) that classifies rolling IMU telemetry windows (accelerometer and gyroscope) into three distinct motion classes:
 1. **`normal`** (Class 0): Routine vehicle cruising, braking, phone handling, and mild road vibration.
 2. **`pothole`** (Class 1): High-frequency, low-amplitude oscillatory bursts (1.5G - 4.0G) per Phase 9's kinematic filter.
-3. **`crash`** (Class 2): Severe vehicle impact deceleration spikes ($\ge 6.5$G) with rotational shock and rapid halt.
+3. **`crash`** (Class 2): Severe vehicle impact deceleration spikes ($\ge 4.8$G) with rotational shock and rapid halt.
 
 The trained model is exported as `crash_classifier.tflite` (~12.8 KB) for sub-millisecond on-device inference on Flutter via `tflite_flutter`.
 
@@ -14,7 +14,7 @@ The trained model is exported as `crash_classifier.tflite` (~12.8 KB) for sub-mi
 > **CRITICAL TRANSPARENCY NOTE**:
 > Real labeled vehicle crash IMU telemetry from real-world high-speed vehicular accidents is not publicly available or safely reproducible during hackathon development.
 > 
-> Therefore, this model was trained and evaluated on **high-fidelity synthetic telemetry** generated from physical kinematic equations and stochastic noise models matching the platform's crash specifications (6.5G+ spike, 500ms speed drop, oscillatory pothole rejection).
+> Therefore, this model was trained and evaluated on **high-fidelity synthetic telemetry** generated from physical kinematic equations and stochastic noise models matching the platform's crash specifications (4.8G+ spike, 500ms speed drop, oscillatory pothole rejection).
 >
 > **Accuracy metrics reported below represent performance on held-out synthetic test distributions, NOT real-world crash events.** In production, the model functions strictly as an **auxiliary second-opinion signal**, while the deterministic rule-based kinematic engine retains primary authority over crash event triggering.
 

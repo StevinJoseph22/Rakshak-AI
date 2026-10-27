@@ -37,7 +37,7 @@ void main() {
     test('mock classifier returns synthetic classification predictions with high confidence', () {
       TfLiteClassifierStub.setMockClassifier((accel, gyro) {
         final peakG = accel.isNotEmpty ? accel.reduce((a, b) => a > b ? a : b) : 0.0;
-        if (peakG >= 6.5) {
+        if (peakG >= 4.8) {
           return const ClassificationResult(label: 'crash', confidence: 0.98);
         } else if (peakG >= 1.5) {
           return const ClassificationResult(label: 'pothole', confidence: 0.89);

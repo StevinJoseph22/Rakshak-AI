@@ -12,8 +12,8 @@ import '../config/crash_confidence_config.dart';
 // ==============================================================================
 // CONFIGURABLE CRASH DETECTION CONSTANTS (TUNABLE FOR REAL-PHONE TESTING)
 // ------------------------------------------------------------------------------
-/// Deceleration spike threshold in Gs required to flag an impact signature (6.0G - 8.0G)
-const double kImpactDecelerationThresholdG = 6.5;
+/// Deceleration spike threshold in Gs required to flag an impact signature (4.8G)
+const double kImpactDecelerationThresholdG = 4.8;
 
 /// Minimum GPS-reported speed drop in km/h toward 0 km/h indicating sudden stop
 const double kImpactSpeedDropThresholdKmh = 25.0;

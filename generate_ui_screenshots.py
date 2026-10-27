@@ -55,7 +55,7 @@ def generate_citizen_guard():
     d.line(pts, fill=(16, 185, 129), width=2)
 
     d.text((32, 325), "CURRENT FORCE: 1.02 G [NORMAL VEHICULAR MOTION]", fill=(16, 185, 129), font=get_font(12, bold=True, mono=True))
-    d.text((32, 350), "Impact Trigger Threshold: > 6.50 G Peak with Speed Drop", fill=(148, 163, 184), font=get_font(10))
+    d.text((32, 350), "Impact Trigger Threshold: > 4.80 G Peak with Speed Drop", fill=(148, 163, 184), font=get_font(10))
 
     # On-Device ML Diagnostics Card
     d.rounded_rectangle((15, 395, W - 15, 660), radius=16, fill=(15, 23, 42), outline=(30, 41, 59), width=1)

@@ -24,7 +24,7 @@ This master document provides an exhaustive breakdown of:
 ```mermaid
 flowchart TD
     subgraph SENSING["EDGE DETECTION & BIOMECHANICS"]
-        A["Citizen Smartphone / In-Vehicle Unit (IMU + GNSS)"] --> B{"Kinematic Trigger: Decel ≥ 6.5G, Tilt > 120°, Speed Drop > 30 km/h"}
+        A["Citizen Smartphone / In-Vehicle Unit (IMU + GNSS)"] --> B{"Kinematic Trigger: Decel ≥ 4.8G, Tilt > 120°, Speed Drop > 30 km/h"}
         B -->|False Positive (Drop/Pothole)| C["Auto-Dismissed / Local Reset"]
         B -->|Confirmed Crash Signature| D["15s Cancellation Safety Countdown"]
     end
@@ -150,7 +150,7 @@ The mobile application runs a background foreground service in Android utilizing
 
 #### Mathematical Trigger Formula:
 A potential crash is recognized when the composite acceleration vector ($A_{\text{total}}$) and angular rotational rate ($\omega_{\text{total}}$) exceed empirical thresholds:
-$$A_{\text{total}} = \sqrt{a_x^2 + a_y^2 + a_z^2} \ge 6.5g \quad (63.7\text{ m/s}^2)$$
+$$A_{\text{total}} = \sqrt{a_x^2 + a_y^2 + a_z^2} \ge 4.8g \quad (47.07\text{ m/s}^2)$$
 $$\omega_{\text{total}} = \sqrt{\omega_x^2 + \omega_y^2 + \omega_z^2} \ge 4.2\text{ rad/s}$$
 
 #### False-Positive Discrimination Engine:

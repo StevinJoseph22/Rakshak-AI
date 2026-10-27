@@ -21,7 +21,7 @@ void main() {
 
   group('CrashDetectorService Configuration & Constants', () {
     test('named constants are defined and configurable', () {
-      expect(kImpactDecelerationThresholdG, 6.5);
+      expect(kImpactDecelerationThresholdG, 4.8);
       expect(kImpactSpeedDropThresholdKmh, 25.0);
       expect(kSpeedDropWindowMs, 500);
       expect(kPotholeMinG, 1.5);

@@ -331,7 +331,7 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
     contributing_factors?: string[];
   } | undefined;
 
-  const measuredPeakG = Number(rawSeverity?.measured_peak_g ?? metadata.deceleration_g ?? 6.5);
+  const measuredPeakG = Number(rawSeverity?.measured_peak_g ?? metadata.deceleration_g ?? 4.8);
   const isSaturated = Boolean(rawSeverity?.is_saturated ?? metadata.deceleration_saturated ?? (measuredPeakG >= 16.0));
   const speedDropKmh = Number(rawSeverity?.speed_drop_kmh ?? metadata.speed_drop_kmh ?? 55.0);
   const impactDurationMs = Number(rawSeverity?.impact_duration_ms ?? 180);

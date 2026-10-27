@@ -14,7 +14,7 @@
 - Bystanders hesitate to report crashes due to privacy fears, police harassment concerns, and personal data leakage.
 
 ### The Rakshak-AI Solution
-1. **Instant Autonomous Detection**: Mobile IMU sensors detect collision kinematic signatures ($>6.5\text{G}$ deceleration + acute speed drop) with on-device TensorFlow Lite ML verification.
+1. **Instant Autonomous Detection**: Mobile IMU sensors detect collision kinematic signatures ($>4.8\text{G}$ deceleration + acute speed drop) with on-device TensorFlow Lite ML verification.
 2. **Deterministic Fallback**: If ML is unavailable, an immutable physics-based rule engine guarantees detection reliability.
 3. **Zero-Storage Privacy Protocol**: Ephemeral photos stream over WebRTC/WebSocket directly to volatile RAM (`redis.setex(TTL=900s)`). Zero image data ever touches disk storage, S3 buckets, or local camera galleries.
 4. **Geo-Spatial PostGIS Triage Ring**: Collisions are instantly matched within an $8\text{km}$ urban radius to certified Level-1 trauma centers with live ICU capacity.
@@ -71,7 +71,7 @@ flowchart TD
 
 ### 2.1 Mobile Application (`/mobile`)
 - **Dual-Engine Crash Detection**:
-  - *Kinematic Rule Filter*: Real-time $50\text{Hz}$ stream monitoring of accelerometer & gyroscope ($>6.5\text{G}$ deceleration threshold, $>50\text{km/h}$ delta speed drop within $500\text{ms}$).
+  - *Kinematic Rule Filter*: Real-time $50\text{Hz}$ stream monitoring of accelerometer & gyroscope ($>4.8\text{G}$ deceleration threshold, $>50\text{km/h}$ delta speed drop within $500\text{ms}$).
   - *On-Device TFLite 1D-CNN Classifier*: 3-class classifier (Crash, Pothole/Speed-bump, Normal Driving) evaluating a rolling window of recent sensor vectors.
   - *Anti-False-Positive Filter*: High-frequency, low-amplitude oscillatory bursts ($1.5\text{G} - 4.0\text{G}$) typical of Bengaluru potholes and rumble strips are discarded.
 - **10-Second Locked Screen Countdown Screen**:
@@ -241,7 +241,7 @@ sequenceDiagram
     participant Ambulance as EMS Ambulance Unit
     participant Traffic as City ITMS / Traffic Signals
 
-    Bystander->>ML: Severe Collision Occurs (Decel > 6.5G, Speed Drop 60km/h)
+    Bystander->>ML: Severe Collision Occurs (Decel > 4.8G, Speed Drop 60km/h)
     ML->>Bystander: Displays 10s Countdown Screen with Siren
     Note over Bystander: 10s timer expires or user confirms dispatch
     Bystander->>Backend: POST /incidents (GPS, Telemetry, Metadata)

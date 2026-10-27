@@ -7,7 +7,7 @@
 // CLASSIFICATION CLASSES:
 //   - 'normal':   Everyday vehicle cruising, phone handling, mild road vibration.
 //   - 'pothole':  High-frequency, low-amplitude oscillatory burst (1.5G - 4.0G).
-//   - 'crash':    Severe deceleration spike (>=6.5G) with sudden stop.
+//   - 'crash':    Severe deceleration spike (>=4.8G) with sudden stop.
 //
 // ARCHITECTURAL ROLE:
 //   This model acts as a SECOND OPINION / AUXILIARY SIGNAL alongside the primary

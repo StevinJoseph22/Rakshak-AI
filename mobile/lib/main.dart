@@ -110,7 +110,7 @@ class _CrashDetectionScreenState extends State<CrashDetectionScreen> {
   int _selectedNavIndex = 0;
 
   // Phase 2 Simulation Harness State
-  double _simulatedDecelerationG = 6.5;
+  double _simulatedDecelerationG = 4.8;
   double _simulatedSpeedDropKmh = 65.0;
   bool _useLiveDeviceLocation = true;
 

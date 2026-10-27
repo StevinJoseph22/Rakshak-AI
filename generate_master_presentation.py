@@ -265,7 +265,7 @@ def create_presentation():
         ("Model Size:", "42 KB (INT8 Quantized 1D-CNN)"),
         ("Inference Execution:", "18.2 ms on Snapdragon 680"),
         ("Battery Drain:", "< 1.4% per 8 hrs monitor"),
-        ("Peak Decel Threshold:", "> 6.5 G Sudden Deceleration"),
+        ("Peak Decel Threshold:", "> 4.8 G Sudden Deceleration"),
         ("Ayushman Bharat:", "Verified ABHA ID Synced"),
         ("Platform Support:", "Android 8.0+ & iOS 14.0+")
     ]

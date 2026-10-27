@@ -89,7 +89,7 @@
   - **18.2ms On-Device TFLite Inference**: INT8-quantized 1D-CNN processes inertial data locally with zero cloud latency.
   - **100Hz Tri-Axial Sensor Fusion**: Continuous accelerometer (±16G), gyroscope, and GPS speed drop sampling.
   - **Zero False Alarm Guarantee**: Bandpass filtering and jerk derivative calculation ($da/dt$) prevent phone drops from triggering false alarms.
-  - **Deterministic Physics Fallback**: Rule engine ($>6.5\text{G}$ deceleration + acute speed drop) ensures detection even if ML fails.
+  - **Deterministic Physics Fallback**: Rule engine ($>4.8\text{G}$ deceleration + acute speed drop) ensures detection even if ML fails.
 - **Hardware & Battery Benchmarks**:
   - Model Size: 42 KB
   - Runtime Latency: 18.2 ms on Snapdragon 680

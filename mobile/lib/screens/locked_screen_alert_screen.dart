@@ -110,7 +110,7 @@ class _LockedScreenAlertScreenState extends State<LockedScreenAlertScreen>
     final primaryContact = EmergencyContactService.instance.primaryContactSync;
     final victimName = EmergencyContactService.instance.victimNameSync;
 
-    final decelG = widget.crashEvent?.decelerationG ?? 6.5;
+    final decelG = widget.crashEvent?.decelerationG ?? 4.8;
     final isSaturated = widget.crashEvent?.isSaturated ?? (decelG >= 16.0);
     final speedDrop = widget.crashEvent?.speedDropKmh ?? 60.0;
     final rollover = widget.crashEvent?.rolloverSuspected ?? false;

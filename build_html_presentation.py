@@ -438,7 +438,7 @@ html_template = """<!DOCTYPE html>
                   </div>
                   <div>
                     <span class="text-cyan-300 font-bold">🔒 Immutable Physics Fallback:</span>
-                    Kinematic rule engine (>6.5G deceleration) guarantees detection if neural buffer fails.
+                    Kinematic rule engine (>4.8G deceleration) guarantees detection if neural buffer fails.
                   </div>
                 </div>
               </div>
