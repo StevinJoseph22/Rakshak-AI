@@ -343,6 +343,51 @@ incidentsRouter.post(
       }
     }
 
+    // 1.5 Spatiotemporal Collision Deduplication Engine:
+    // Merges concurrent reports within 45s and 150m into the active incident.
+    const spatiotemporalQuery = `
+      SELECT id, status, accepted_hospital_id, victim_metadata,
+             ST_Y(location::geometry) AS latitude, ST_X(location::geometry) AS longitude,
+             created_at, updated_at
+      FROM incidents
+      WHERE status IN ('suspected', 'broadcasting', 'escalated')
+        AND created_at > NOW() - INTERVAL '45 seconds'
+        AND ST_DWithin(location, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography, 150)
+      ORDER BY created_at DESC
+      LIMIT 1;
+    `;
+    const spatiotemporalResult = await query<Incident>(spatiotemporalQuery, [longitude, latitude]);
+
+    if (spatiotemporalResult.rows.length > 0) {
+      const activeExisting = spatiotemporalResult.rows[0];
+      console.log(`[Deduplication Engine] 🛡️ Merged concurrent crash report into active incident: ${activeExisting.id} (distance < 150m, within 45s)`);
+
+      // Promote if it was suspected and incoming is broadcasting
+      if (activeExisting.status === 'suspected' && (status === 'broadcasting' || !status)) {
+        const promoted = await promoteSuspectedIncident(activeExisting.id, 'CONCURRENT_CONFIRM');
+        if (promoted) {
+          return res.status(200).json({
+            message: 'Suspected incident promoted to broadcasting (concurrent confirm)',
+            incident: promoted.incident,
+            matched_hospitals: promoted.matchedHospitals,
+          });
+        }
+      }
+
+      if (healthCardToStore) {
+        await storeEphemeralHealthCard(activeExisting.id, JSON.stringify(healthCardToStore));
+      }
+
+      return res.status(200).json({
+        message: 'Concurrent crash report deduplicated into active emergency incident',
+        incident: {
+          ...activeExisting,
+          latitude: Number(activeExisting.latitude),
+          longitude: Number(activeExisting.longitude),
+        },
+      });
+    }
+
     // If client requested 'suspected' status explicitly
     if (status === 'suspected') {
       const insertSql = id

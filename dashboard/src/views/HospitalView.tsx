@@ -882,7 +882,36 @@ export const HospitalView: React.FC = () => {
     (inc) => inc.status === 'accepted' && inc.accepted_hospital_id === selectedHospitalId
   ).length;
 
-  const displayedIncidents = activeIncidents.filter((inc) => {
+  
+  // Spatiotemporal deduplication filter (<45s and <150m or matching victim name)
+  const deduplicateIncidents = (list: IncidentPayload[]): IncidentPayload[] => {
+    const unique: IncidentPayload[] = [];
+    list.forEach((inc) => {
+      const isDuplicate = unique.some((existing) => {
+        if (existing.id === inc.id) return true;
+        const timeDiffMs = Math.abs(new Date(existing.created_at).getTime() - new Date(inc.created_at).getTime());
+        if (timeDiffMs < 45000) {
+          const victimA = (existing.victim_metadata as Record<string, unknown> | undefined)?.victim_name;
+          const victimB = (inc.victim_metadata as Record<string, unknown> | undefined)?.victim_name;
+          if (victimA && victimB && String(victimA).trim().toLowerCase() === String(victimB).trim().toLowerCase()) {
+            return true;
+          }
+          const dLat = Math.abs(existing.latitude - inc.latitude);
+          const dLng = Math.abs(existing.longitude - inc.longitude);
+          if (dLat < 0.0015 && dLng < 0.0015) {
+            return true;
+          }
+        }
+        return false;
+      });
+      if (!isDuplicate) {
+        unique.push(inc);
+      }
+    });
+    return unique;
+  };
+
+  const rawDisplayedIncidents = activeIncidents.filter((inc) => {
     if (filterMode === 'action_required') {
       return inc.status === 'broadcasting' || inc.status === 'escalated';
     }
@@ -891,6 +920,8 @@ export const HospitalView: React.FC = () => {
     }
     return true;
   });
+
+  const displayedIncidents = deduplicateIncidents(rawDisplayedIncidents);
 
   return (
     <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '1.5rem 1rem' }}>

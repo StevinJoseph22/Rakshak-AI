@@ -53,6 +53,8 @@ class CrashEvent {
 /// Both simulated events (Phase 2) and background sensor algorithms (Phase 3)
 /// emit events here, which UI layers listen to.
 class CrashEventService {
+  bool isAlertActive = false;
+
   CrashEventService._internal();
   static final CrashEventService _instance = CrashEventService._internal();
   static CrashEventService get instance => _instance;

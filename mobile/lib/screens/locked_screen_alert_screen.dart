@@ -43,6 +43,7 @@ class _LockedScreenAlertScreenState extends State<LockedScreenAlertScreen>
   @override
   void initState() {
     super.initState();
+    CrashEventService.instance.isAlertActive = true;
     _apiClient = widget.apiClient ?? ApiClient();
     _countdownDurationSeconds = widget.crashEvent?.adaptiveCountdownSeconds ?? 10;
     _controller = AnimationController(
@@ -74,6 +75,7 @@ class _LockedScreenAlertScreenState extends State<LockedScreenAlertScreen>
 
   @override
   void dispose() {
+    CrashEventService.instance.isAlertActive = false;
     _controller.dispose();
     // Do not call _apiClient.dispose() here; the emergency incident broadcast is
     // an asynchronous operation that must complete in the background as the UI transitions.

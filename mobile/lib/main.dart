@@ -146,6 +146,10 @@ class _CrashDetectionScreenState extends State<CrashDetectionScreen> {
   Future<void> _checkPendingBackgroundCrash() async {
     final pending = await LockScreenService.instance.getPendingCrashEvent();
     if (pending != null && mounted) {
+      if (CrashEventService.instance.isAlertActive) {
+        debugPrint('[MainActivity] 🛡️ Pending background crash suppressed: active alert screen already visible.');
+        return;
+      }
       final peakG = (pending['deceleration_g'] as num?)?.toDouble() ?? 4.8;
       debugPrint('[MainActivity] 🚨 Recovered pending background crash event (peak: ${peakG}G). Dispatching...');
       final crashEvent = CrashEvent(
@@ -379,11 +383,7 @@ class _CrashDetectionScreenState extends State<CrashDetectionScreen> {
       longitude: CrashDetectorService.instance.lastKnownLongitude,
     );
 
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => LockedScreenAlertScreen(crashEvent: event),
-      ),
-    );
+    CrashEventService.instance.triggerCrash(event);
   }
 
   void _openAmbulanceApp() {
