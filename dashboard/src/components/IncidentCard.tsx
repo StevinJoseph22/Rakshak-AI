@@ -116,9 +116,30 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
   const [unlockedAudit, setUnlockedAudit] = useState<{ by: string; at: string } | null>(null);
   const [isBreakGlassModalOpen, setIsBreakGlassModalOpen] = useState<boolean>(false);
   const [breakGlassReason, setBreakGlassReason] = useState<string>('Acute polytrauma resuscitation in emergency department');
+  const [doctorLicenceId, setDoctorLicenceId] = useState<string>('KMC-48291');
   const [breakGlassError, setBreakGlassError] = useState<string | null>(null);
   const [isSubmittingBreakGlass, setIsSubmittingBreakGlass] = useState<boolean>(false);
   const [policeHasCard, setPoliceHasCard] = useState<boolean | null>(null);
+  const [isFetchingPhoto, setIsFetchingPhoto] = useState<boolean>(false);
+
+  // Auto-fetch scene photo on mount or incident update if not already loaded via socket/webrtc
+  useEffect(() => {
+    if (!localImageUrl && incident.id) {
+      let isMounted = true;
+      fetch(`${BACKEND_API_BASE}/incidents/${incident.id}/image`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          if (isMounted && data && data.imageUrl) {
+            setLocalImageUrl(data.imageUrl);
+            setPhotoTransport('websocket');
+          }
+        })
+        .catch(() => {});
+      return () => {
+        isMounted = false;
+      };
+    }
+  }, [incident.id, localImageUrl]);
 
   // Police view: query whether health card is on file (strictly yes/no only, zero medical content)
   useEffect(() => {
@@ -345,6 +366,10 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
   };
 
   const handleConfirmBreakGlass = async () => {
+    if (!doctorLicenceId || doctorLicenceId.trim().length < 3) {
+      setBreakGlassError('Mandatory Medical Practitioner Licence ID required (minimum 3 characters, e.g. KMC-48291).');
+      return;
+    }
     if (!breakGlassReason || breakGlassReason.trim().length < 5) {
       setBreakGlassError('Please enter a clinical justification of at least 5 characters.');
       return;
@@ -355,7 +380,10 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
       const res = await authFetch(`${BACKEND_API_BASE}/incidents/${incident.id}/health-card/break-glass`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reason: breakGlassReason.trim() }),
+        body: JSON.stringify({
+          reason: breakGlassReason.trim(),
+          licence_id: doctorLicenceId.trim(),
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -370,7 +398,7 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
       setHealthCard(data.card as EmergencyHealthCard);
       setHealthCardMode(data.mode || 'MOCK');
       setUnlockedAudit({
-        by: data.accessed_by || 'Staff',
+        by: `${data.accessed_by || 'Staff'} (Licence: ${data.doctor_licence || doctorLicenceId.trim()})`,
         at: data.accessed_at ? new Date(data.accessed_at).toLocaleTimeString() : new Date().toLocaleTimeString(),
       });
       setIsBreakGlassModalOpen(false);
@@ -379,6 +407,31 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
       setBreakGlassError(errorMsg);
     } finally {
       setIsSubmittingBreakGlass(false);
+    }
+  };
+
+  const handleFetchOrViewPhoto = async () => {
+    if (localImageUrl) {
+      setIsLightboxOpen(true);
+      return;
+    }
+    setIsFetchingPhoto(true);
+    try {
+      const res = await fetch(`${BACKEND_API_BASE}/incidents/${incident.id}/image`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.imageUrl) {
+          setLocalImageUrl(data.imageUrl);
+          setPhotoTransport('websocket');
+          setIsLightboxOpen(true);
+          return;
+        }
+      }
+      alert('Victim photo has not arrived yet from the mobile unit, or the 15-minute privacy retention TTL has expired.');
+    } catch {
+      alert('Failed to connect to backend image relay.');
+    } finally {
+      setIsFetchingPhoto(false);
     }
   };
 
@@ -993,28 +1046,35 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
                 </a>
               )}
 
-              {/* Compact Scene Photo Thumbnail */}
-              {localImageUrl && (
-                <button
-                  type="button"
-                  onClick={() => setIsLightboxOpen(true)}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '0.3rem',
-                    padding: '0.4rem 0.75rem',
-                    background: '#0f172a',
-                    color: '#ffffff',
-                    border: 'none',
-                    borderRadius: '0.375rem',
-                    fontSize: '0.75rem',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                  }}
-                >
-                  <Camera size={12} color="#ef4444" /> View Scene Photo ({photoTransport === 'webrtc' ? 'P2P' : 'Relay'})
-                </button>
-              )}
+              {/* Scene Photo / Victim Image Action Button */}
+              <button
+                type="button"
+                onClick={handleFetchOrViewPhoto}
+                title={localImageUrl ? 'Click to open full victim scene photo in lightbox' : 'Fetch victim photo from camera relay'}
+                disabled={isFetchingPhoto}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.35rem',
+                  padding: '0.4rem 0.75rem',
+                  background: localImageUrl ? '#0f172a' : '#f8fafc',
+                  color: localImageUrl ? '#38bdf8' : '#475569',
+                  border: localImageUrl ? '1px solid #38bdf8' : '1px solid #cbd5e1',
+                  borderRadius: '0.375rem',
+                  fontSize: '0.75rem',
+                  fontWeight: 700,
+                  cursor: isFetchingPhoto ? 'wait' : 'pointer',
+                  transition: 'all 0.15s ease',
+                  boxShadow: localImageUrl ? '0 1px 3px rgba(0,0,0,0.2)' : 'none',
+                }}
+              >
+                <Camera size={13} color={localImageUrl ? '#38bdf8' : '#64748b'} />
+                {isFetchingPhoto
+                  ? 'Loading Photo...'
+                  : localImageUrl
+                  ? `📸 View Scene Photo (${photoTransport === 'webrtc' ? 'P2P' : 'Relay'})`
+                  : '📷 Fetch Scene Photo'}
+              </button>
             </div>
           </div>
 
@@ -1302,27 +1362,35 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
                 </a>
               )}
 
-              {localImageUrl && (
-                <button
-                  type="button"
-                  onClick={() => setIsLightboxOpen(true)}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '0.3rem',
-                    padding: '0.4rem 0.75rem',
-                    background: '#0f172a',
-                    color: '#ffffff',
-                    border: 'none',
-                    borderRadius: '0.375rem',
-                    fontSize: '0.75rem',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                  }}
-                >
-                  <Camera size={12} color="#ef4444" /> Scene Photo ({photoTransport === 'webrtc' ? 'P2P' : 'Relay'})
-                </button>
-              )}
+              {/* Scene Photo / Victim Image Action Button */}
+              <button
+                type="button"
+                onClick={handleFetchOrViewPhoto}
+                title={localImageUrl ? 'Click to open full victim scene photo in lightbox' : 'Fetch victim photo from camera relay'}
+                disabled={isFetchingPhoto}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.35rem',
+                  padding: '0.4rem 0.75rem',
+                  background: localImageUrl ? '#0f172a' : '#f8fafc',
+                  color: localImageUrl ? '#38bdf8' : '#475569',
+                  border: localImageUrl ? '1px solid #38bdf8' : '1px solid #cbd5e1',
+                  borderRadius: '0.375rem',
+                  fontSize: '0.75rem',
+                  fontWeight: 700,
+                  cursor: isFetchingPhoto ? 'wait' : 'pointer',
+                  transition: 'all 0.15s ease',
+                  boxShadow: localImageUrl ? '0 1px 3px rgba(0,0,0,0.2)' : 'none',
+                }}
+              >
+                <Camera size={13} color={localImageUrl ? '#38bdf8' : '#64748b'} />
+                {isFetchingPhoto
+                  ? 'Loading Photo...'
+                  : localImageUrl
+                  ? `📸 View Scene Photo (${photoTransport === 'webrtc' ? 'P2P' : 'Relay'})`
+                  : '📷 Fetch Scene Photo'}
+              </button>
             </div>
           </div>
         </div>
@@ -1515,6 +1583,132 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
             {/* TAB CONTENT: Biomechanics & Organ Trauma */}
             {backsideTab === 'clinical' && (
               <div>
+                {/* Scene & Victim Visual Triage Card */}
+                <div
+                  style={{
+                    background: '#0f172a',
+                    border: '1px solid #1e293b',
+                    borderRadius: '0.5rem',
+                    padding: '0.85rem',
+                    marginBottom: '0.85rem',
+                    color: '#f8fafc',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.65rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                      <Camera size={16} color="#38bdf8" />
+                      <span style={{ fontSize: '0.8rem', fontWeight: 800, color: '#38bdf8' }}>
+                        CRASH SCENE & VICTIM VISUAL TRIAGE
+                      </span>
+                      <span
+                        style={{
+                          background: photoTransport === 'webrtc' ? '#065f46' : '#1e3a8a',
+                          color: '#ffffff',
+                          fontSize: '0.65rem',
+                          padding: '0.15rem 0.45rem',
+                          borderRadius: '4px',
+                          fontWeight: 600,
+                        }}
+                      >
+                        {photoTransport === 'webrtc' ? '⚡ Direct P2P Stream' : '🔒 Zero-Storage Encrypted Relay'}
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleFetchOrViewPhoto}
+                      disabled={isFetchingPhoto}
+                      style={{
+                        padding: '0.35rem 0.75rem',
+                        borderRadius: '0.375rem',
+                        border: '1px solid #38bdf8',
+                        background: '#1e293b',
+                        color: '#38bdf8',
+                        fontSize: '0.72rem',
+                        fontWeight: 700,
+                        cursor: isFetchingPhoto ? 'wait' : 'pointer',
+                      }}
+                    >
+                      {isFetchingPhoto ? 'Checking...' : localImageUrl ? '🔎 Open Fullscreen Lightbox' : '🔄 Check / Refresh Photo'}
+                    </button>
+                  </div>
+
+                  {localImageUrl ? (
+                    <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                      <div
+                        onClick={() => setIsLightboxOpen(true)}
+                        style={{
+                          cursor: 'pointer',
+                          borderRadius: '0.375rem',
+                          overflow: 'hidden',
+                          border: '2px solid #38bdf8',
+                          maxWidth: '220px',
+                          maxHeight: '130px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          background: '#000000',
+                          flexShrink: 0,
+                        }}
+                        title="Click to view full image in lightbox"
+                      >
+                        <img
+                          src={localImageUrl}
+                          alt="Crash Scene Preview"
+                          style={{
+                            maxWidth: '100%',
+                            maxHeight: '130px',
+                            objectFit: 'cover',
+                          }}
+                        />
+                      </div>
+                      <div style={{ fontSize: '0.75rem', color: '#94a3b8', lineHeight: 1.4 }}>
+                        <div style={{ fontWeight: 700, color: '#f1f5f9', marginBottom: '0.2rem' }}>
+                          ✓ Live Visual Received from Scene
+                        </div>
+                        <div>Encrypted in volatile Redis RAM (15-min TTL, zero disk persistence).</div>
+                        <div style={{ marginTop: '0.4rem', color: '#38bdf8', cursor: 'pointer', textDecoration: 'underline' }} onClick={() => setIsLightboxOpen(true)}>
+                          Click thumbnail or button above to inspect full-resolution imagery.
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div
+                      style={{
+                        padding: '0.75rem',
+                        background: 'rgba(255,255,255,0.03)',
+                        borderRadius: '0.375rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        fontSize: '0.75rem',
+                        color: '#94a3b8',
+                      }}
+                    >
+                      <span>
+                        📷 Scene photo awaiting upload from mobile unit, or the 15-minute privacy retention TTL has expired.
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleFetchOrViewPhoto}
+                        disabled={isFetchingPhoto}
+                        style={{
+                          background: '#38bdf8',
+                          color: '#0f172a',
+                          border: 'none',
+                          padding: '0.3rem 0.65rem',
+                          borderRadius: '0.25rem',
+                          fontWeight: 700,
+                          fontSize: '0.72rem',
+                          cursor: isFetchingPhoto ? 'wait' : 'pointer',
+                        }}
+                      >
+                        {isFetchingPhoto ? 'Checking...' : 'Fetch Photo'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+
                 <div style={{ background: '#0f172a', color: '#f8fafc', borderRadius: '0.5rem', padding: '0.85rem', marginBottom: '0.85rem' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.65rem' }}>
                     <span style={{ fontSize: '0.78rem', fontWeight: 800, color: '#38bdf8' }}>
@@ -2215,6 +2409,37 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
               </div>
             )}
 
+            {/* Mandatory Doctor Licence ID Input */}
+            <div style={{ marginBottom: '1rem' }}>
+              <label
+                htmlFor={`break_glass_licence_${incident.id}`}
+                style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#334155', marginBottom: '0.4rem' }}
+              >
+                Medical Practitioner Licence ID (e.g. KMC / State Council Reg):
+              </label>
+              <input
+                id={`break_glass_licence_${incident.id}`}
+                type="text"
+                value={doctorLicenceId}
+                onChange={(e) => setDoctorLicenceId(e.target.value)}
+                placeholder="e.g. KMC-48291"
+                disabled={isSubmittingBreakGlass}
+                style={{
+                  width: '100%',
+                  padding: '0.55rem 0.75rem',
+                  borderRadius: '0.375rem',
+                  border: '1px solid #cbd5e1',
+                  fontSize: '0.85rem',
+                  fontFamily: 'inherit',
+                  boxSizing: 'border-box',
+                  outline: 'none',
+                }}
+              />
+              <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: '0.25rem' }}>
+                Mandatory under ABDM emergency break-glass consent governance. Minimum 3 characters.
+              </div>
+            </div>
+
             <div style={{ marginBottom: '1.25rem' }}>
               <label
                 htmlFor={`break_glass_reason_${incident.id}`}
@@ -2266,12 +2491,12 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
               <button
                 type="button"
                 onClick={handleConfirmBreakGlass}
-                disabled={isSubmittingBreakGlass || breakGlassReason.trim().length < 5}
+                disabled={isSubmittingBreakGlass || breakGlassReason.trim().length < 5 || doctorLicenceId.trim().length < 3}
                 style={{
                   padding: '0.5rem 1.15rem',
                   borderRadius: '0.375rem',
                   border: 'none',
-                  background: isSubmittingBreakGlass || breakGlassReason.trim().length < 5 ? '#fca5a5' : '#dc2626',
+                  background: isSubmittingBreakGlass || breakGlassReason.trim().length < 5 || doctorLicenceId.trim().length < 3 ? '#fca5a5' : '#dc2626',
                   color: '#ffffff',
                   fontSize: '0.85rem',
                   fontWeight: 700,

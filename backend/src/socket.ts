@@ -569,6 +569,21 @@ export function initSocketIO(httpServer: HttpServer | HttpsServer): SocketIOServ
             }
           }
 
+          // Always ensure accepted hospital receives the image update
+          try {
+            const accRes = await query<{ accepted_hospital_id: string | null }>(
+              'SELECT accepted_hospital_id FROM incidents WHERE id = $1',
+              [effectiveIncidentId]
+            );
+            if (accRes.rows.length > 0 && accRes.rows[0].accepted_hospital_id) {
+              if (!hospitalIds.includes(accRes.rows[0].accepted_hospital_id)) {
+                hospitalIds.push(accRes.rows[0].accepted_hospital_id);
+              }
+            }
+          } catch (_) {
+            // Non-fatal
+          }
+
           const updatePayload = {
             incident_id: effectiveIncidentId,
             imageUrl: dataUrl,

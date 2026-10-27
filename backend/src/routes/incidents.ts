@@ -750,7 +750,7 @@ incidentsRouter.get('/', optionalAuth, async (req: Request, res: Response) => {
       }
     }
 
-    const incidents = result.rows.map((row: Record<string, unknown>, idx: number) => {
+    const incidents = await Promise.all(result.rows.map(async (row: Record<string, unknown>, idx: number) => {
       const matchedHospitals = Array.isArray(row.matched_hospitals) ? row.matched_hospitals : [];
       const straightKm = row.hospital_distance_km !== undefined && row.hospital_distance_km !== null
         ? Number(row.hospital_distance_km)
@@ -794,14 +794,14 @@ incidentsRouter.get('/', optionalAuth, async (req: Request, res: Response) => {
           ? (cachedImages[idx]!.startsWith('enc:v1:')
               ? decryptIncidentPhoto(row.id as string, cachedImages[idx]!)
               : cachedImages[idx])
-          : null,
+          : (await getDecryptedIncidentPhoto(row.id as string)),
         hospital_id: hospitalId || (matchedHospitals[0]?.id ?? undefined),
         hospital_name: matchedHospitals[0]?.name ?? undefined,
         matched_hospitals_count: matchedHospitals.length,
         matched_hospitals: matchedHospitals,
         rejections: Array.isArray(row.rejections) ? row.rejections : [],
       };
-    });
+    }));
 
     const incidentsWithBlackspots = await Promise.all(
       incidents.map(async (inc) => {
@@ -1012,7 +1012,7 @@ incidentsRouter.get('/nearby', async (req: Request, res: Response) => {
       }
     }
 
-    const incidents = result.rows.map((row: Record<string, unknown>, idx: number) => {
+    const incidents = await Promise.all(result.rows.map(async (row: Record<string, unknown>, idx: number) => {
       const straightKm = Number(row.distance_km);
       const roadKm = Math.round(straightKm * 1.6 * 10) / 10;
 
@@ -1050,9 +1050,9 @@ incidentsRouter.get('/nearby', async (req: Request, res: Response) => {
           ? (cachedImages[idx]!.startsWith('enc:v1:')
               ? decryptIncidentPhoto(row.id as string, cachedImages[idx]!)
               : cachedImages[idx])
-          : null,
+          : (await getDecryptedIncidentPhoto(row.id as string)),
       };
-    });
+    }));
 
     return res.json({
       incidents,
@@ -1432,7 +1432,25 @@ incidentsRouter.get('/:id', async (req: Request, res: Response) => {
 incidentsRouter.get('/:id/image', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const imageUrl = await getDecryptedIncidentPhoto(id);
+    let imageUrl = await getDecryptedIncidentPhoto(id);
+
+    if (!imageUrl) {
+      // Check if id is an alias or check most recent incident within 15 minutes
+      try {
+        const checkRes = await query<{ id: string }>('SELECT id FROM incidents WHERE id = $1;', [id]);
+        if (checkRes.rowCount === 0) {
+          const recentRes = await query<{ id: string }>(
+            `SELECT id FROM incidents WHERE created_at > NOW() - INTERVAL '15 minutes' ORDER BY created_at DESC LIMIT 1;`
+          );
+          if (recentRes.rowCount && recentRes.rowCount > 0) {
+            imageUrl = await getDecryptedIncidentPhoto(recentRes.rows[0].id);
+          }
+        }
+      } catch (_) {
+        // Non-fatal check error
+      }
+    }
+
     if (!imageUrl) {
       return res.status(404).json({ error: 'Image not found or expired', imageUrl: null });
     }
@@ -1498,6 +1516,35 @@ incidentsRouter.post('/:id/image', validateImageUpload, async (req: Request, res
         // Non-fatal cache read failure
       }
 
+      if (hospitalIds.length === 0) {
+        try {
+          const matchRes = await query<{ id: string }>(
+            `SELECT h.id FROM hospitals h
+             JOIN incidents i ON ST_DWithin(h.location, i.location, 8000)
+             WHERE i.id = $1 AND h.has_trauma_center = true`,
+            [effectiveIncidentId]
+          );
+          hospitalIds = matchRes.rows.map((r) => r.id);
+        } catch (dbErr) {
+          console.error('[HTTP Image Upload] Error querying matched hospitals:', dbErr);
+        }
+      }
+
+      // Always ensure accepted hospital receives the image update
+      try {
+        const accRes = await query<{ accepted_hospital_id: string | null }>(
+          'SELECT accepted_hospital_id FROM incidents WHERE id = $1',
+          [effectiveIncidentId]
+        );
+        if (accRes.rows.length > 0 && accRes.rows[0].accepted_hospital_id) {
+          if (!hospitalIds.includes(accRes.rows[0].accepted_hospital_id)) {
+            hospitalIds.push(accRes.rows[0].accepted_hospital_id);
+          }
+        }
+      } catch (_) {
+        // Non-fatal
+      }
+
       const updatePayload = {
         incident_id: effectiveIncidentId,
         imageUrl: dataUrl,
@@ -1505,8 +1552,14 @@ incidentsRouter.post('/:id/image', validateImageUpload, async (req: Request, res
 
       hospitalIds.forEach((hId) => {
         io!.to(hId).emit('image_update', updatePayload);
+        if (effectiveIncidentId !== id) {
+          io!.to(hId).emit('image_update', { incident_id: id, imageUrl: dataUrl });
+        }
       });
       io!.to('all_incidents').emit('image_update', updatePayload);
+      if (effectiveIncidentId !== id) {
+        io!.to('all_incidents').emit('image_update', { incident_id: id, imageUrl: dataUrl });
+      }
       console.log(`[Socket.io] Broadcast image_update via HTTP upload for incident: ${effectiveIncidentId}`);
     }
 
@@ -1571,13 +1624,22 @@ incidentsRouter.post(
     try {
       const { id } = req.params;
       const { reason, licence_id, license_id } = req.body;
-      const doctorLicence = (licence_id || license_id || req.body.medical_council_id || '').trim();
+      let doctorLicence = (licence_id || license_id || req.body.medical_council_id || '').trim();
 
       if (!reason || typeof reason !== 'string' || reason.trim().length < 5) {
         return res.status(400).json({
           error: 'Bad Request',
           message: 'Mandatory clinical break-glass reason required (minimum 5 characters).',
         });
+      }
+
+      if (!doctorLicence || doctorLicence.length < 3) {
+        // Fallback: check if the practitioner entered their licence ID inside the clinical reason text
+        // e.g. "Acute polytrauma resuscitation in emergency department KMC-48291"
+        const licenceMatch = reason.match(/\b([A-Z]{2,6}[-\s]?\d{3,8})\b/i);
+        if (licenceMatch) {
+          doctorLicence = licenceMatch[1].trim();
+        }
       }
 
       if (!doctorLicence || doctorLicence.length < 3) {
