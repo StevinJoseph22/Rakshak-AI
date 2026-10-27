@@ -40,6 +40,9 @@ app.use(
         origin.includes('192.168.') ||
         origin.includes('10.') ||
         origin.includes('172.') ||
+        origin.includes('loca.lt') ||
+        origin.includes('trycloudflare.com') ||
+        origin.includes('ngrok') ||
         origin === process.env.CORS_ORIGIN;
       if (isLocalOrLan || process.env.NODE_ENV !== 'production') {
         return callback(null, true);

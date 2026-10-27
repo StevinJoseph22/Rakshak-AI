@@ -84,15 +84,18 @@ List<String> getBackendCandidates([String? overrideBaseUrl]) {
     if (overrideBaseUrl != null && overrideBaseUrl != kDefaultBackendUrl) overrideBaseUrl,
     if (kDefaultBackendUrl != 'http://10.0.2.2:5000') kDefaultBackendUrl,
     kDemoWorkstationIp,      // Current Wi-Fi LAN IP (172.22.18.71:5000)
-    'http://127.0.0.1:5000', // Fast path when adb reverse is active
-    'http://192.168.56.1:5000',
-    kDemoWorkstationAltIp,
+    'http://192.168.137.1:5000', // Windows Mobile Hotspot default gateway
+    'http://192.168.43.1:5000',   // Android Mobile Hotspot default gateway
+    'http://172.20.10.1:5000',    // iOS Personal Hotspot default gateway
+    'http://127.0.0.1:5000',      // Fast path when adb reverse is active
+    'http://192.168.56.1:5000',   // Host-only / Virtual adapter
+    kDemoWorkstationAltIp,        // Alternate Wi-Fi LAN IP (192.168.1.21:5000)
     'http://10.137.61.149:5000',
     'http://10.167.12.149:5000',
     'http://10.215.58.149:5000',
     'http://192.168.43.149:5000', // Common Android hotspot range
     'http://192.168.1.149:5000',
-    'http://10.0.2.2:5000',  // Android Emulator host loopback
+    'http://10.0.2.2:5000',       // Android Emulator host loopback
   ].toSet().toList();
 }
 
