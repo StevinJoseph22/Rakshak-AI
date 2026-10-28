@@ -303,6 +303,9 @@ class IncidentTrackingService {
         final response = await http.get(uri).timeout(const Duration(seconds: 3));
 
         if (response.statusCode == 200) {
+          if (!statusNotifier.value.isConnected) {
+            statusNotifier.value = statusNotifier.value.copyWith(isConnected: true);
+          }
           final body = json.decode(response.body);
           final inc = body['incident'] as Map<String, dynamic>?;
           if (inc == null) return;

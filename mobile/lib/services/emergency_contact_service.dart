@@ -16,35 +16,28 @@ class EmergencyContactService {
   static const String _keyContacts = 'rakshak_emergency_contacts_v1';
   static const String _keyVictimName = 'rakshak_victim_name_v1';
 
-  // In-memory cache pre-seeded with defaults for instant synchronous access
-  List<EmergencyContact> _cachedContacts = List.from(defaultDemoContacts);
-  String _cachedVictimName = defaultDemoVictimName;
+  // In-memory cache pre-seeded with registered profile for instant synchronous access
+  List<EmergencyContact> _cachedContacts = [];
+  String _cachedVictimName = '';
 
   /// Synchronous accessors for UI and test stability
   bool get hasContactsSync => _cachedContacts.isNotEmpty;
   EmergencyContact? get primaryContactSync =>
       _cachedContacts.isEmpty ? null : _cachedContacts.firstWhere((c) => c.isPrimary, orElse: () => _cachedContacts.first);
-  String get victimNameSync => _cachedVictimName;
+  String get victimNameSync => _cachedVictimName.isNotEmpty ? _cachedVictimName : 'Stevin Joseph';
 
   /// Default demo seed if user hasn't configured any contacts yet
   static final List<EmergencyContact> defaultDemoContacts = [
     const EmergencyContact(
       id: 'default-1',
-      name: 'Priya Sharma',
-      phone: '+919876543210',
-      relationship: 'Sister',
+      name: 'Anjali Sharma',
+      phone: '+919876543211',
+      relationship: 'Spouse',
       isPrimary: true,
-    ),
-    const EmergencyContact(
-      id: 'default-2',
-      name: 'Rajesh Verma',
-      phone: '+919812345678',
-      relationship: 'Father',
-      isPrimary: false,
     ),
   ];
 
-  static const String defaultDemoVictimName = 'Rahul Verma';
+  static const String defaultDemoVictimName = 'Stevin Joseph';
 
   /// Loads emergency contacts from SharedPreferences (or seeds defaults on first run)
   Future<List<EmergencyContact>> getContacts() async {
@@ -57,7 +50,6 @@ class EmergencyContactService {
             .map((item) => EmergencyContact.fromJson(item as Map<String, dynamic>))
             .toList();
       } else {
-        // First run: seed demo contacts
         _cachedContacts = List.from(defaultDemoContacts);
         await saveContacts(_cachedContacts);
       }

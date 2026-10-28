@@ -967,6 +967,73 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
             </div>
           )}
 
+          {/* Registered Citizen Identity, Emergency Contact & Edge AI Strip */}
+          {Boolean((incident.victim_metadata?.emergency_contact_phone) || (incident.victim_metadata?.victim_phone) || (incident.victim_metadata?.edge_computing)) && (
+            <div
+              style={{
+                background: '#f1f5f9',
+                border: '1px solid #cbd5e1',
+                borderRadius: '0.5rem',
+                padding: '0.65rem 0.85rem',
+                marginBottom: '0.85rem',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '0.5rem',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                {Boolean(incident.victim_metadata?.victim_phone) && (
+                  <div style={{ fontSize: '0.775rem', color: '#334155' }}>
+                    <span style={{ color: '#64748b', fontWeight: 600 }}>Citizen Phone:</span>{' '}
+                    <strong style={{ color: '#0f172a' }}>{String(incident.victim_metadata!.victim_phone)}</strong>
+                  </div>
+                )}
+                {Boolean(incident.victim_metadata?.emergency_contact_phone) && (
+                  <div style={{ fontSize: '0.775rem', color: '#334155', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                    <span style={{ color: '#64748b', fontWeight: 600 }}>SOS Contact:</span>{' '}
+                    <strong style={{ color: '#0f172a' }}>
+                      {String(incident.victim_metadata!.emergency_contact_name || 'Emergency Contact')} (
+                      {String(incident.victim_metadata!.emergency_contact_relationship || 'Family')})
+                    </strong>
+                    <a
+                      href={`tel:${incident.victim_metadata!.emergency_contact_phone}`}
+                      style={{
+                        color: '#0284c7',
+                        fontWeight: 700,
+                        textDecoration: 'none',
+                        marginLeft: '0.2rem',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.2rem',
+                      }}
+                    >
+                      <Phone size={11} /> {String(incident.victim_metadata!.emergency_contact_phone)}
+                    </a>
+                  </div>
+                )}
+              </div>
+              <div
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.3rem',
+                  fontSize: '0.7rem',
+                  fontWeight: 700,
+                  color: '#0369a1',
+                  background: '#e0f2fe',
+                  padding: '0.2rem 0.5rem',
+                  borderRadius: '0.375rem',
+                  border: '1px solid #7dd3fc',
+                }}
+              >
+                <span>⚡ Rakshak Edge AI</span>
+                <span style={{ color: '#0284c7' }}>• 0ms Cloud Latency</span>
+              </div>
+            </div>
+          )}
+
           {/* Logistics & Ambulance Status Strip */}
           <div
             style={{

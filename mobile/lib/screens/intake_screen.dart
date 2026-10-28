@@ -6,6 +6,7 @@ import '../services/crash_event_service.dart';
 import '../services/photo_stream_service.dart';
 import '../services/incident_tracking_service.dart';
 import '../services/offline_dispatch_queue.dart';
+import '../config/backend_config.dart';
 
 /// Camera intake screen with strict Zero-Gallery privacy guarantee.
 /// Captures photo directly to volatile RAM (`Uint8List`) and purges temp cache.
@@ -471,6 +472,28 @@ class _IntakeScreenState extends State<IntakeScreen> {
                           'Reconnecting to trauma dispatch stream...',
                           style: TextStyle(fontSize: 12, color: Colors.deepOrange.shade900, fontWeight: FontWeight.w600),
                         ),
+                      ),
+                      TextButton.icon(
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        icon: const Icon(Icons.refresh, size: 14, color: Colors.deepOrange),
+                        label: const Text('Retry', style: TextStyle(fontSize: 11, color: Colors.deepOrange, fontWeight: FontWeight.bold)),
+                        onPressed: () {
+                          final incId = widget.incidentId ?? CrashEventService.instance.lastDispatchedIncidentId;
+                          if (incId != null && incId.isNotEmpty) {
+                            IncidentTrackingService.instance.trackIncident(incId);
+                          }
+                        },
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.settings, size: 16, color: Colors.deepOrange),
+                        tooltip: 'Configure Server IP',
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                        onPressed: () => showServerEndpointDialog(context),
                       ),
                     ],
                   ),

@@ -23,6 +23,7 @@ import 'screens/settings_screen.dart';
 import 'screens/citizen_settings_screen.dart';
 import 'screens/hospital_radar_screen.dart';
 import 'screens/welcome_splash_screen.dart';
+import 'screens/citizen_login_screen.dart';
 import 'services/user_profile_service.dart';
 import 'widgets/cloud_watchdog_simulation_dialog.dart';
 import 'widgets/about_system_dialog.dart';
@@ -34,14 +35,23 @@ void main() async {
   await initBackendConfig();
   await UserProfileService.instance.init();
   final seen = await UserProfileService.instance.hasSeenWelcomeScreen();
-  runApp(RakshakApp(startWithWelcome: !seen));
+  final isRegistered = UserProfileService.instance.profile.isRegistered;
+  runApp(RakshakApp(
+    startWithWelcome: !seen,
+    startWithLogin: !isRegistered,
+  ));
 }
 
 /// Primary Citizen Life-Guard Application for Riders, Commuters, and Citizens.
 class RakshakApp extends StatefulWidget {
   final bool startWithWelcome;
+  final bool startWithLogin;
 
-  const RakshakApp({super.key, this.startWithWelcome = false});
+  const RakshakApp({
+    super.key,
+    this.startWithWelcome = false,
+    this.startWithLogin = false,
+  });
 
   static final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
@@ -51,11 +61,13 @@ class RakshakApp extends StatefulWidget {
 
 class _RakshakAppState extends State<RakshakApp> {
   late bool _showWelcome;
+  late bool _showLogin;
 
   @override
   void initState() {
     super.initState();
     _showWelcome = widget.startWithWelcome;
+    _showLogin = widget.startWithLogin;
     UserProfileService.instance.init();
   }
 
@@ -91,7 +103,13 @@ class _RakshakAppState extends State<RakshakApp> {
                 setState(() => _showWelcome = false);
               },
             )
-          : const CrashDetectionScreen(),
+          : (_showLogin
+              ? CitizenLoginScreen(
+                  onRegistrationComplete: () {
+                    setState(() => _showLogin = false);
+                  },
+                )
+              : const CrashDetectionScreen()),
     );
   }
 }
@@ -510,6 +528,30 @@ class _CrashDetectionScreenState extends State<CrashDetectionScreen> {
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
               ),
             ),
+          ),
+          // Citizen Identity & ABHA Registration Button
+          IconButton(
+            icon: const Icon(Icons.account_circle_outlined, color: Color(0xFF0284C7), size: 22),
+            tooltip: 'Citizen Profile & ABHA Identity',
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+            onPressed: () async {
+              await Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => const CitizenLoginScreen(),
+                ),
+              );
+              _loadEmergencyContacts();
+              setState(() {});
+            },
+          ),
+          // Server Gateway & Network Settings Button
+          IconButton(
+            icon: const Icon(Icons.wifi_tethering, color: Color(0xFFD97706), size: 21),
+            tooltip: 'Server Gateway & Network Settings',
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+            onPressed: () => showServerEndpointDialog(context),
           ),
           // Dedicated Citizen Settings Button (Profile, Vehicle Type, Emergency Contacts, ABHA)
           IconButton(

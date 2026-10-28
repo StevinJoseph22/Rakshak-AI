@@ -35,12 +35,12 @@ class AbhaEmergencyVault {
 
   factory AbhaEmergencyVault.fromJson(Map<String, dynamic> json) {
     return AbhaEmergencyVault(
-      abhaId: json['abha_id'] as String? ?? '91-8842-9912-3401',
-      abhaAddress: json['abha_address'] as String? ?? 'aarav.sharma@abdm',
-      patientName: json['patient_name'] as String? ?? 'Aarav Sharma (Verified)',
-      gender: json['gender'] as String? ?? 'Male',
+      abhaId: json['abha_id'] as String? ?? '91-4829-1029-4821',
+      abhaAddress: json['abha_address'] as String? ?? 'stevin.joseph@abdm',
+      patientName: json['patient_name'] as String? ?? 'Stevin Joseph (Verified)',
+      gender: json['gender'] as String? ?? 'Specified',
       dob: json['dob'] as String? ?? '1998-05-14',
-      bloodGroup: json['blood_group'] as String? ?? 'B+ Positive',
+      bloodGroup: json['blood_group'] as String? ?? 'O+ Positive',
       criticalAllergies: (json['critical_allergies'] as List<dynamic>?)
               ?.map((e) => e.toString())
               .toList() ??
@@ -48,14 +48,14 @@ class AbhaEmergencyVault {
       chronicConditions: (json['chronic_conditions'] as List<dynamic>?)
               ?.map((e) => e.toString())
               .toList() ??
-          ['Type-1 Diabetes'],
+          ['Asthma', 'Type 2 Diabetes'],
       currentMedications: (json['current_medications'] as List<dynamic>?)
               ?.map((e) => e.toString())
               .toList() ??
-          ['Warfarin (Blood Thinner - High Hemorrhage Risk)', 'Insulin Glargine'],
+          ['Salbutamol Inhaler', 'Metformin 500mg'],
       organDonorRegistered: json['organ_donor_registered'] as bool? ?? true,
       nottoId: json['notto_id'] as String? ?? 'NOTTO-IND-2024-88419',
-      zkProofSignature: json['zk_proof_signature'] as String? ?? 'ABDM-MOCK-SIGNATURE',
+      zkProofSignature: json['zk_proof_signature'] as String? ?? 'RAKSHAK-EDGE-ZK-PROOF',
       isAbdmVerified: json['is_abdm_verified'] as bool? ?? true,
     );
   }
@@ -85,24 +85,36 @@ class AbhaEmergencyVault {
     return AbhaEmergencyVault.defaultProfile();
   }
 
-  factory AbhaEmergencyVault.defaultProfile() {
-    return const AbhaEmergencyVault(
-      abhaId: '91-8842-9912-3401',
-      abhaAddress: 'aarav.sharma@abdm',
-      patientName: 'Aarav Sharma (Verified)',
-      gender: 'Male',
+  factory AbhaEmergencyVault.create({
+    String? name,
+    String? bloodGroup,
+    String? abhaId,
+    String? abhaAddress,
+    List<String>? allergies,
+    List<String>? conditions,
+    List<String>? medications,
+  }) {
+    final citizenName = (name != null && name.trim().isNotEmpty) ? name.trim() : 'Stevin Joseph';
+    return AbhaEmergencyVault(
+      abhaId: (abhaId != null && abhaId.trim().isNotEmpty) ? abhaId.trim() : '91-4829-1029-4821',
+      abhaAddress: (abhaAddress != null && abhaAddress.trim().isNotEmpty)
+          ? abhaAddress.trim()
+          : '${citizenName.toLowerCase().replaceAll(RegExp(r'\s+'), '.')}@abdm',
+      patientName: citizenName,
+      gender: 'Specified',
       dob: '1998-05-14',
-      bloodGroup: 'B+ Positive',
-      criticalAllergies: ['Penicillin Anaphylaxis', 'Sulfa Drugs'],
-      chronicConditions: ['Type-1 Diabetes'],
-      currentMedications: [
-        'Warfarin (Blood Thinner - Severe Internal Bleed Risk)',
-        'Insulin Glargine'
-      ],
+      bloodGroup: (bloodGroup != null && bloodGroup.trim().isNotEmpty) ? bloodGroup.trim() : 'O+ Positive',
+      criticalAllergies: allergies ?? const ['Penicillin Anaphylaxis', 'Sulfa Drugs'],
+      chronicConditions: conditions ?? const ['Asthma', 'Type 2 Diabetes'],
+      currentMedications: medications ?? const ['Salbutamol Inhaler', 'Metformin 500mg'],
       organDonorRegistered: true,
       nottoId: 'NOTTO-IND-2024-88419',
-      zkProofSignature: 'ABDM-MOCK-SIGNATURE',
+      zkProofSignature: 'RAKSHAK-EDGE-ZK-PROOF',
       isAbdmVerified: true,
     );
+  }
+
+  factory AbhaEmergencyVault.defaultProfile() {
+    return AbhaEmergencyVault.create();
   }
 }
