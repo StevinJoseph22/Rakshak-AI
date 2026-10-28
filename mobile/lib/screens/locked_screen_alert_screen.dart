@@ -178,6 +178,9 @@ class _LockedScreenAlertScreenState extends State<LockedScreenAlertScreen>
       'emergency_contact_name': primaryContact?.name ?? (profile.emergencyContactName.isNotEmpty ? profile.emergencyContactName : 'Anjali Sharma'),
       'emergency_contact_phone': primaryContact?.phone ?? (profile.emergencyContactPhone.isNotEmpty ? profile.emergencyContactPhone : '+919876543211'),
       'emergency_contact_relationship': primaryContact?.relationship ?? (profile.emergencyContactRelation.isNotEmpty ? profile.emergencyContactRelation : 'Spouse'),
+      'emergency_contact_secondary_name': profile.secondaryContactName.isNotEmpty ? profile.secondaryContactName : 'Rajesh Joseph',
+      'emergency_contact_secondary_phone': profile.secondaryContactPhone.isNotEmpty ? profile.secondaryContactPhone : '+919845012345',
+      'emergency_contact_secondary_relationship': profile.secondaryContactRelation.isNotEmpty ? profile.secondaryContactRelation : 'Parent',
     };
 
     // Deterministically assign a client-generated UUID for strict idempotency if not already suspected

@@ -8,7 +8,9 @@ import 'health_card_storage_service.dart';
 /// Data model representing the citizen's personalized profile and registered vehicle
 class UserProfile {
   final String userName;
+  final String userEmail;
   final String phone;
+  final bool isPhoneVerified;
   final String vehicleType; // 'Two-Wheeler' or 'Four-Wheeler'
   final String vehicleModel;
   final String vehiclePlate;
@@ -21,9 +23,24 @@ class UserProfile {
   // Citizen Registration & Emergency Vault metadata
   final bool isRegistered;
   final String authMethod; // 'GOOGLE', 'MANUAL', 'DEMO_SANDBOX'
+
+  // Contact 1 (Mandatory Primary)
   final String emergencyContactName;
   final String emergencyContactPhone;
   final String emergencyContactRelation;
+
+  // Contact 2 (Mandatory Secondary)
+  final String secondaryContactName;
+  final String secondaryContactPhone;
+  final String secondaryContactRelation;
+
+  // Contact 3 (Optional)
+  final String? tertiaryContactName;
+  final String? tertiaryContactPhone;
+  final String? tertiaryContactRelation;
+
+  // ABHA Health Card (Optional)
+  final bool hasAbhaCard;
   final String abhaNumber;
   final String abhaAddress;
   final List<String> criticalAllergies;
@@ -32,7 +49,9 @@ class UserProfile {
 
   const UserProfile({
     this.userName = 'Stevin Joseph',
+    this.userEmail = 'stevinjoseph@gmail.com',
     this.phone = '+91 90743 38964',
+    this.isPhoneVerified = true,
     this.vehicleType = 'Two-Wheeler',
     this.vehicleModel = 'Yamaha MT-15',
     this.vehiclePlate = 'KA-05-AB-1234',
@@ -42,10 +61,17 @@ class UserProfile {
     this.overSpeedingCount = 0,
     this.suddenBrakingCount = 0,
     this.isRegistered = false,
-    this.authMethod = 'DEMO_SANDBOX',
+    this.authMethod = 'GOOGLE',
     this.emergencyContactName = 'Anjali Sharma',
     this.emergencyContactPhone = '+91 98765 43211',
     this.emergencyContactRelation = 'Spouse',
+    this.secondaryContactName = 'Rajesh Joseph',
+    this.secondaryContactPhone = '+91 98450 12345',
+    this.secondaryContactRelation = 'Parent',
+    this.tertiaryContactName,
+    this.tertiaryContactPhone,
+    this.tertiaryContactRelation,
+    this.hasAbhaCard = true,
     this.abhaNumber = '91-4829-1029-4821',
     this.abhaAddress = 'stevin.joseph@abdm',
     this.criticalAllergies = const ['Penicillin Anaphylaxis', 'Sulfa Drugs'],
@@ -57,7 +83,9 @@ class UserProfile {
 
   UserProfile copyWith({
     String? userName,
+    String? userEmail,
     String? phone,
+    bool? isPhoneVerified,
     String? vehicleType,
     String? vehicleModel,
     String? vehiclePlate,
@@ -71,6 +99,13 @@ class UserProfile {
     String? emergencyContactName,
     String? emergencyContactPhone,
     String? emergencyContactRelation,
+    String? secondaryContactName,
+    String? secondaryContactPhone,
+    String? secondaryContactRelation,
+    String? tertiaryContactName,
+    String? tertiaryContactPhone,
+    String? tertiaryContactRelation,
+    bool? hasAbhaCard,
     String? abhaNumber,
     String? abhaAddress,
     List<String>? criticalAllergies,
@@ -79,7 +114,9 @@ class UserProfile {
   }) {
     return UserProfile(
       userName: userName ?? this.userName,
+      userEmail: userEmail ?? this.userEmail,
       phone: phone ?? this.phone,
+      isPhoneVerified: isPhoneVerified ?? this.isPhoneVerified,
       vehicleType: vehicleType ?? this.vehicleType,
       vehicleModel: vehicleModel ?? this.vehicleModel,
       vehiclePlate: vehiclePlate ?? this.vehiclePlate,
@@ -93,6 +130,13 @@ class UserProfile {
       emergencyContactName: emergencyContactName ?? this.emergencyContactName,
       emergencyContactPhone: emergencyContactPhone ?? this.emergencyContactPhone,
       emergencyContactRelation: emergencyContactRelation ?? this.emergencyContactRelation,
+      secondaryContactName: secondaryContactName ?? this.secondaryContactName,
+      secondaryContactPhone: secondaryContactPhone ?? this.secondaryContactPhone,
+      secondaryContactRelation: secondaryContactRelation ?? this.secondaryContactRelation,
+      tertiaryContactName: tertiaryContactName ?? this.tertiaryContactName,
+      tertiaryContactPhone: tertiaryContactPhone ?? this.tertiaryContactPhone,
+      tertiaryContactRelation: tertiaryContactRelation ?? this.tertiaryContactRelation,
+      hasAbhaCard: hasAbhaCard ?? this.hasAbhaCard,
       abhaNumber: abhaNumber ?? this.abhaNumber,
       abhaAddress: abhaAddress ?? this.abhaAddress,
       criticalAllergies: criticalAllergies ?? this.criticalAllergies,
@@ -103,7 +147,9 @@ class UserProfile {
 
   Map<String, dynamic> toJson() => {
         'userName': userName,
+        'userEmail': userEmail,
         'phone': phone,
+        'isPhoneVerified': isPhoneVerified,
         'vehicleType': vehicleType,
         'vehicleModel': vehicleModel,
         'vehiclePlate': vehiclePlate,
@@ -117,6 +163,13 @@ class UserProfile {
         'emergencyContactName': emergencyContactName,
         'emergencyContactPhone': emergencyContactPhone,
         'emergencyContactRelation': emergencyContactRelation,
+        'secondaryContactName': secondaryContactName,
+        'secondaryContactPhone': secondaryContactPhone,
+        'secondaryContactRelation': secondaryContactRelation,
+        'tertiaryContactName': tertiaryContactName,
+        'tertiaryContactPhone': tertiaryContactPhone,
+        'tertiaryContactRelation': tertiaryContactRelation,
+        'hasAbhaCard': hasAbhaCard,
         'abhaNumber': abhaNumber,
         'abhaAddress': abhaAddress,
         'criticalAllergies': criticalAllergies,
@@ -127,7 +180,9 @@ class UserProfile {
   factory UserProfile.fromJson(Map<String, dynamic> json) {
     return UserProfile(
       userName: json['userName'] as String? ?? 'Stevin Joseph',
+      userEmail: json['userEmail'] as String? ?? 'stevinjoseph@gmail.com',
       phone: json['phone'] as String? ?? '+91 90743 38964',
+      isPhoneVerified: json['isPhoneVerified'] as bool? ?? true,
       vehicleType: json['vehicleType'] as String? ?? 'Two-Wheeler',
       vehicleModel: json['vehicleModel'] as String? ?? 'Yamaha MT-15',
       vehiclePlate: json['vehiclePlate'] as String? ?? 'KA-05-AB-1234',
@@ -137,10 +192,17 @@ class UserProfile {
       overSpeedingCount: (json['overSpeedingCount'] as num?)?.toInt() ?? 0,
       suddenBrakingCount: (json['suddenBrakingCount'] as num?)?.toInt() ?? 0,
       isRegistered: json['isRegistered'] as bool? ?? false,
-      authMethod: json['authMethod'] as String? ?? 'DEMO_SANDBOX',
+      authMethod: json['authMethod'] as String? ?? 'GOOGLE',
       emergencyContactName: json['emergencyContactName'] as String? ?? 'Anjali Sharma',
       emergencyContactPhone: json['emergencyContactPhone'] as String? ?? '+91 98765 43211',
       emergencyContactRelation: json['emergencyContactRelation'] as String? ?? 'Spouse',
+      secondaryContactName: json['secondaryContactName'] as String? ?? 'Rajesh Joseph',
+      secondaryContactPhone: json['secondaryContactPhone'] as String? ?? '+91 98450 12345',
+      secondaryContactRelation: json['secondaryContactRelation'] as String? ?? 'Parent',
+      tertiaryContactName: json['tertiaryContactName'] as String?,
+      tertiaryContactPhone: json['tertiaryContactPhone'] as String?,
+      tertiaryContactRelation: json['tertiaryContactRelation'] as String?,
+      hasAbhaCard: json['hasAbhaCard'] as bool? ?? true,
       abhaNumber: json['abhaNumber'] as String? ?? '91-4829-1029-4821',
       abhaAddress: json['abhaAddress'] as String? ?? 'stevin.joseph@abdm',
       criticalAllergies: (json['criticalAllergies'] as List<dynamic>?)?.map((e) => e.toString()).toList() ??
@@ -208,40 +270,71 @@ class UserProfileService {
       // 1. Cross-sync victim name with EmergencyContactService
       await EmergencyContactService.instance.setVictimName(updated.userName);
 
-      // 2. Cross-sync primary emergency contact
+      // 2. Cross-sync mandatory 2 emergency contacts (+ optional 3rd)
+      final contacts = <EmergencyContact>[];
       if (updated.emergencyContactPhone.isNotEmpty) {
-        final contact = EmergencyContact(
+        contacts.add(EmergencyContact(
           id: 'primary-registered',
-          name: updated.emergencyContactName.isNotEmpty ? updated.emergencyContactName : 'Emergency Contact',
+          name: updated.emergencyContactName.isNotEmpty ? updated.emergencyContactName : 'Primary Contact',
           phone: updated.emergencyContactPhone,
-          relationship: updated.emergencyContactRelation.isNotEmpty ? updated.emergencyContactRelation : 'Family',
+          relationship: updated.emergencyContactRelation.isNotEmpty ? updated.emergencyContactRelation : 'Spouse',
           isPrimary: true,
-        );
-        await EmergencyContactService.instance.saveContacts([contact]);
+        ));
+      }
+      if (updated.secondaryContactPhone.isNotEmpty) {
+        contacts.add(EmergencyContact(
+          id: 'secondary-registered',
+          name: updated.secondaryContactName.isNotEmpty ? updated.secondaryContactName : 'Secondary Contact',
+          phone: updated.secondaryContactPhone,
+          relationship: updated.secondaryContactRelation.isNotEmpty ? updated.secondaryContactRelation : 'Parent',
+          isPrimary: false,
+        ));
+      }
+      if (updated.tertiaryContactPhone != null && updated.tertiaryContactPhone!.isNotEmpty) {
+        contacts.add(EmergencyContact(
+          id: 'tertiary-registered',
+          name: updated.tertiaryContactName ?? 'Emergency Contact 3',
+          phone: updated.tertiaryContactPhone!,
+          relationship: updated.tertiaryContactRelation ?? 'Family',
+          isPrimary: false,
+        ));
+      }
+      if (contacts.isNotEmpty) {
+        await EmergencyContactService.instance.saveContacts(contacts);
       }
 
       // 3. Cross-sync verified ABDM Health Card storage
-      await HealthCardStorageService.instance.saveAbdmVerifiedData(
-        profile: {
-          'name': updated.userName,
-          'abhaNumber': updated.abhaNumber,
-          'abhaAddress': updated.abhaAddress,
-          'gender': 'Specified',
-          'age': 28,
-        },
-        records: {
-          'status': 'AVAILABLE',
-          'blood_group': updated.bloodGroup,
-          'allergies': updated.criticalAllergies,
-          'chronic_conditions': updated.chronicConditions,
-          'current_medications': updated.currentMedications,
-          'organ_donor_status': 'Registered Organ Donor',
-        },
-        sessionToken: 'ABDM-SESSION-VERIFIED',
-        mode: 'MOCK',
-      );
+      if (updated.hasAbhaCard) {
+        await HealthCardStorageService.instance.saveAbdmVerifiedData(
+          profile: {
+            'name': updated.userName,
+            'abhaNumber': updated.abhaNumber,
+            'abhaAddress': updated.abhaAddress,
+            'gender': 'Specified',
+            'age': 28,
+          },
+          records: {
+            'status': 'AVAILABLE',
+            'blood_group': updated.bloodGroup,
+            'allergies': updated.criticalAllergies,
+            'chronic_conditions': updated.chronicConditions,
+            'current_medications': updated.currentMedications,
+            'organ_donor_status': 'Registered Organ Donor',
+          },
+          sessionToken: 'ABDM-SESSION-VERIFIED',
+          mode: 'MOCK',
+        );
+      } else {
+        await HealthCardStorageService.instance.saveSelfDeclaredData(
+          name: updated.userName,
+          bloodGroup: updated.bloodGroup,
+          allergies: updated.criticalAllergies,
+          conditions: updated.chronicConditions,
+          medications: updated.currentMedications,
+        );
+      }
 
-      debugPrint('[UserProfileService] Synchronized profile across Edge Health Card & Emergency Contacts');
+      debugPrint('[UserProfileService] Synchronized multi-contact profile & ABHA vault across Edge Guard');
     } catch (e) {
       debugPrint('[UserProfileService] Save error: $e');
     }
@@ -253,6 +346,7 @@ class UserProfileService {
       await prefs.remove(_storageKey);
       _profile = const UserProfile(
         userName: '',
+        userEmail: '',
         phone: '',
         vehicleModel: '',
         vehiclePlate: '',
@@ -262,9 +356,14 @@ class UserProfileService {
         overSpeedingCount: 0,
         suddenBrakingCount: 0,
         isRegistered: false,
+        isPhoneVerified: false,
         emergencyContactName: '',
         emergencyContactPhone: '',
         emergencyContactRelation: '',
+        secondaryContactName: '',
+        secondaryContactPhone: '',
+        secondaryContactRelation: '',
+        hasAbhaCard: false,
         abhaNumber: '',
         abhaAddress: '',
         criticalAllergies: [],

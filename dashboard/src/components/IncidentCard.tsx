@@ -992,9 +992,9 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
                 )}
                 {Boolean(incident.victim_metadata?.emergency_contact_phone) && (
                   <div style={{ fontSize: '0.775rem', color: '#334155', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                    <span style={{ color: '#64748b', fontWeight: 600 }}>SOS Contact:</span>{' '}
+                    <span style={{ color: '#64748b', fontWeight: 600 }}>SOS 1:</span>{' '}
                     <strong style={{ color: '#0f172a' }}>
-                      {String(incident.victim_metadata!.emergency_contact_name || 'Emergency Contact')} (
+                      {String(incident.victim_metadata!.emergency_contact_name || 'Emergency Contact 1')} (
                       {String(incident.victim_metadata!.emergency_contact_relationship || 'Family')})
                     </strong>
                     <a
@@ -1010,6 +1010,29 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
                       }}
                     >
                       <Phone size={11} /> {String(incident.victim_metadata!.emergency_contact_phone)}
+                    </a>
+                  </div>
+                )}
+                {Boolean(incident.victim_metadata?.emergency_contact_secondary_phone) && (
+                  <div style={{ fontSize: '0.775rem', color: '#334155', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                    <span style={{ color: '#64748b', fontWeight: 600 }}>SOS 2:</span>{' '}
+                    <strong style={{ color: '#0f172a' }}>
+                      {String(incident.victim_metadata!.emergency_contact_secondary_name || 'Emergency Contact 2')} (
+                      {String(incident.victim_metadata!.emergency_contact_secondary_relationship || 'Family')})
+                    </strong>
+                    <a
+                      href={`tel:${incident.victim_metadata!.emergency_contact_secondary_phone}`}
+                      style={{
+                        color: '#0284c7',
+                        fontWeight: 700,
+                        textDecoration: 'none',
+                        marginLeft: '0.2rem',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.2rem',
+                      }}
+                    >
+                      <Phone size={11} /> {String(incident.victim_metadata!.emergency_contact_secondary_phone)}
                     </a>
                   </div>
                 )}
