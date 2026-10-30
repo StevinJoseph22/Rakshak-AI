@@ -243,3 +243,23 @@ export async function getDecryptedIncidentPhoto(incidentId: string): Promise<str
     return null;
   }
 }
+
+/**
+ * Explicitly purges an incident photo from both Redis RAM and in-memory fallback.
+ * Strictly enforces zero-storage privacy once 15-minute TTL expires.
+ */
+export async function purgeIncidentPhoto(incidentId: string): Promise<void> {
+  const key = `incident_image:${incidentId}`;
+  ephemeralRamFallback.delete(key);
+  if (redis.status === 'ready') {
+    try {
+      await redis.del(key);
+    } catch (_) {}
+  }
+  const timer = purgeTimers.get(incidentId);
+  if (timer) {
+    clearTimeout(timer);
+    purgeTimers.delete(incidentId);
+  }
+  console.log(`[Zero-Storage Privacy Engine] [PURGED] Photo for incident ${incidentId} scrubbed from RAM.`);
+}

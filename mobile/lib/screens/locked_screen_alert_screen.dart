@@ -9,6 +9,7 @@ import '../services/api_client.dart';
 import '../services/crash_detector_service.dart';
 import '../services/crash_event_service.dart';
 import '../services/emergency_contact_service.dart';
+import '../services/emergency_siren_service.dart';
 import '../services/emergency_sms_service.dart';
 import '../services/incident_tracking_service.dart';
 import '../services/offline_dispatch_queue.dart';
@@ -46,7 +47,7 @@ class _LockedScreenAlertScreenState extends State<LockedScreenAlertScreen>
     super.initState();
     CrashEventService.instance.isAlertActive = true;
     _apiClient = widget.apiClient ?? ApiClient();
-    _countdownDurationSeconds = widget.crashEvent?.adaptiveCountdownSeconds ?? 10;
+    _countdownDurationSeconds = 10;
     _controller = AnimationController(
       vsync: this,
       duration: Duration(seconds: _countdownDurationSeconds),
@@ -56,10 +57,9 @@ class _LockedScreenAlertScreenState extends State<LockedScreenAlertScreen>
       if (mounted) setState(() => _healthCard = c);
     });
 
-    // Initial alert haptic vibration
-    try {
-      HapticFeedback.vibrate();
-    } catch (_) {}
+    // Start 10-second high-intensity emergency crash siren and heavy vibration
+    // (Bypasses Do Not Disturb, Silent Mode, and Vibrate Mode via Android STREAM_ALARM)
+    EmergencySirenService.instance.startCrashAlarmSiren(durationSeconds: _countdownDurationSeconds);
 
     _controller.addListener(() {
       setState(() {});
@@ -76,6 +76,7 @@ class _LockedScreenAlertScreenState extends State<LockedScreenAlertScreen>
 
   @override
   void dispose() {
+    EmergencySirenService.instance.stopSiren();
     CrashEventService.instance.isAlertActive = false;
     _controller.dispose();
     // Do not call _apiClient.dispose() here; the emergency incident broadcast is
@@ -84,6 +85,7 @@ class _LockedScreenAlertScreenState extends State<LockedScreenAlertScreen>
   }
 
   void _onAutoDispatch() {
+    EmergencySirenService.instance.stopSiren();
     if (!_hasDispatched && mounted) {
       _hasDispatched = true;
       _riderUnresponsive = true; // Auto-dispatch implies rider did not tap prompt within countdown
@@ -93,6 +95,7 @@ class _LockedScreenAlertScreenState extends State<LockedScreenAlertScreen>
   }
 
   void _onConfirm() {
+    EmergencySirenService.instance.stopSiren();
     if (!_hasDispatched) {
       _hasDispatched = true;
       _riderUnresponsive = false; // User actively interacted with prompt
@@ -200,12 +203,24 @@ class _LockedScreenAlertScreenState extends State<LockedScreenAlertScreen>
       longitude: lng,
       victimMetadata: metadata,
       healthCard: cardJson,
+      preCrashTelemetry: widget.crashEvent?.preCrashTelemetry,
     ).then((result) {
       if (result.isSuccess) {
         final incidentId = result.data?.incident.id ?? clientIncidentId;
         CrashEventService.instance.lastDispatchedIncidentId = incidentId;
         IncidentTrackingService.instance.trackIncident(incidentId);
         debugPrint('Successfully broadcast incident ' + incidentId.toString() + ' to backend');
+
+        // Automatically dispatch official Police Case Reference SMS to emergency contacts
+        final incidentData = result.data?.incident;
+        if (incidentData != null && incidentData.caseNumber != null && incidentData.caseNumber!.isNotEmpty) {
+          EmergencySmsService.instance.sendPoliceCaseAlert(
+            caseNumber: incidentData.caseNumber!,
+            stationName: incidentData.policeStationName ?? 'Bengaluru Traffic Police Division',
+            officerPhone: incidentData.policeOfficerPhone ?? '080-22942888',
+            context: mounted ? context : null,
+          );
+        }
       } else {
         // Maintain clientIncidentId so photo streaming tags the exact queued store-and-forward incident
         CrashEventService.instance.lastDispatchedIncidentId = clientIncidentId;
@@ -241,6 +256,7 @@ class _LockedScreenAlertScreenState extends State<LockedScreenAlertScreen>
   }
 
   void _onCancel() {
+    EmergencySirenService.instance.stopSiren();
     // Full abort: cancel animation, flag as dispatched to prevent late callbacks
     _hasDispatched = true;
     _controller.stop();

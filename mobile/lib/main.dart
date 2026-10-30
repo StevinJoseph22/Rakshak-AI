@@ -24,9 +24,13 @@ import 'screens/citizen_settings_screen.dart';
 import 'screens/hospital_radar_screen.dart';
 import 'screens/welcome_splash_screen.dart';
 import 'screens/citizen_login_screen.dart';
+import 'screens/india_emergency_directory_screen.dart';
 import 'services/user_profile_service.dart';
+import 'services/theme_service.dart';
+import 'services/live_telemetry_stream_service.dart';
 import 'widgets/cloud_watchdog_simulation_dialog.dart';
 import 'widgets/about_system_dialog.dart';
+import 'widgets/backend_relay_dialog.dart';
 import 'widgets/test_mode_qr_scanner_dialog.dart';
 import 'config/backend_config.dart';
 
@@ -34,6 +38,9 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initBackendConfig();
   await UserProfileService.instance.init();
+  await ThemeService.instance.init();
+  // Start continuous edge kinematics blackbox & live telemetry streaming
+  LiveTelemetryStreamService.instance.start();
   final seen = await UserProfileService.instance.hasSeenWelcomeScreen();
   final isRegistered = UserProfileService.instance.profile.isRegistered;
   runApp(RakshakApp(
@@ -73,31 +80,17 @@ class _RakshakAppState extends State<RakshakApp> {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      navigatorKey: RakshakApp.navigatorKey,
-      title: 'Rakshak-AI Guard',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFFDC2626),
-          primary: const Color(0xFFDC2626),
-          secondary: const Color(0xFF0284C7),
-          surface: Colors.white,
-        ),
-        useMaterial3: true,
-        scaffoldBackgroundColor: const Color(0xFFF8FAFC),
-        appBarTheme: const AppBarTheme(
-          backgroundColor: Colors.white,
-          elevation: 1,
-          iconTheme: IconThemeData(color: Color(0xFF0F172A)),
-          titleTextStyle: TextStyle(
-            color: Color(0xFF0F172A),
-            fontWeight: FontWeight.bold,
-            fontSize: 18,
-          ),
-        ),
-      ),
-      home: _showWelcome
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: ThemeService.instance.themeMode,
+      builder: (context, currentThemeMode, _) {
+        return MaterialApp(
+          navigatorKey: RakshakApp.navigatorKey,
+          title: 'Rakshak-AI Guard',
+          debugShowCheckedModeBanner: false,
+          theme: ThemeService.instance.lightTheme,
+          darkTheme: ThemeService.instance.darkTheme,
+          themeMode: currentThemeMode,
+          home: _showWelcome
           ? WelcomeSplashScreen(
               onContinue: () {
                 setState(() => _showWelcome = false);
@@ -110,6 +103,8 @@ class _RakshakAppState extends State<RakshakApp> {
                   },
                 )
               : const CrashDetectionScreen()),
+        );
+      },
     );
   }
 }
@@ -458,166 +453,309 @@ class _CrashDetectionScreenState extends State<CrashDetectionScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = ThemeService.instance.isDarkMode;
+    final titleTextColor = isDark ? Colors.white : const Color(0xFF0F172A);
+    final subtitleTextColor = _isMonitoring
+        ? const Color(0xFF10B981)
+        : (isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B));
+
     return Scaffold(
       appBar: AppBar(
+        titleSpacing: 12,
         title: Row(
-          mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              padding: const EdgeInsets.all(5),
+              padding: const EdgeInsets.all(6.5),
               decoration: BoxDecoration(
-                color: const Color(0xFFDC2626),
-                borderRadius: BorderRadius.circular(8),
+                gradient: const LinearGradient(
+                  colors: [Color(0xFFEF4444), Color(0xFFDC2626)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(9),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFFEF4444).withOpacity(0.35),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
               ),
-              child: const Icon(Icons.shield, color: Colors.white, size: 18),
+              child: const Icon(Icons.shield, color: Colors.white, size: 17),
             ),
-            const SizedBox(width: 6),
-            const Flexible(
-              child: Text(
-                'Rakshak-AI Guard',
-                style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
-                overflow: TextOverflow.ellipsis,
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Rakshak AI',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w900,
+                      fontSize: 16,
+                      letterSpacing: 0.2,
+                      color: titleTextColor,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 5.5,
+                        height: 5.5,
+                        decoration: BoxDecoration(
+                          color: _isMonitoring ? const Color(0xFF10B981) : const Color(0xFF64748B),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          _isMonitoring ? 'SENTINEL ACTIVE' : 'PAUSED',
+                          style: TextStyle(
+                            fontSize: 8.5,
+                            fontWeight: FontWeight.w800,
+                            color: subtitleTextColor,
+                            letterSpacing: 0.4,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ),
           ],
         ),
         actions: [
-          // Dedicated high-contrast Test Lab toggle chip (meets widget tests)
+          // 1. Direct Emergency Helpline Button (Red Pill)
           Padding(
             padding: const EdgeInsets.only(right: 4.0),
-            child: ActionChip(
-              avatar: Icon(
-                _isTestMode ? Icons.shield_outlined : Icons.science_outlined,
-                size: 13,
-                color: _isTestMode ? Colors.white : Colors.amber.shade900,
-              ),
-              label: Text(
-                _isTestMode ? 'Live Guard' : 'Test Lab',
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                  color: _isTestMode ? Colors.white : Colors.amber.shade900,
-                ),
-              ),
-              backgroundColor: _isTestMode ? Colors.red.shade700 : Colors.amber.shade100,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-              padding: EdgeInsets.zero,
-              labelPadding: const EdgeInsets.symmetric(horizontal: 4),
+            child: ElevatedButton.icon(
               onPressed: () {
-                setState(() {
-                  _isTestMode = !_isTestMode;
-                  _selectedNavIndex = _isTestMode ? 3 : 0;
-                });
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const IndiaEmergencyDirectoryScreen()),
+                );
               },
-            ),
-          ),
-          // Dedicated Ambulance Pilot App Launcher Button (Compact to prevent overflow)
-          Padding(
-            padding: const EdgeInsets.only(right: 4.0),
-            child: OutlinedButton.icon(
-              onPressed: _openAmbulanceApp,
-              icon: const Icon(Icons.emergency, color: Color(0xFFDC2626), size: 12),
+              icon: const Icon(Icons.phone_in_talk_rounded, color: Colors.white, size: 13),
               label: const Text(
-                'Ambulance App',
-                style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: Color(0xFFDC2626)),
+                '112 SOS',
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 10.5),
               ),
-              style: OutlinedButton.styleFrom(
-                side: const BorderSide(color: Color(0xFFDC2626)),
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 0),
-                minimumSize: const Size(0, 28),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFDC2626),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
+                minimumSize: const Size(0, 30),
+                elevation: 1.5,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
               ),
             ),
           ),
-          // Citizen Identity & ABHA Registration Button
+
+          // 2. Citizen Profile / Identity Button
           IconButton(
-            icon: const Icon(Icons.account_circle_outlined, color: Color(0xFF0284C7), size: 22),
+            icon: Icon(
+              Icons.account_circle_outlined,
+              color: isDark ? const Color(0xFF38BDF8) : const Color(0xFF0284C7),
+              size: 22,
+            ),
             tooltip: 'Citizen Profile & ABHA Identity',
             padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
             onPressed: () async {
               await Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (context) => const CitizenLoginScreen(),
-                ),
+                MaterialPageRoute(builder: (context) => const CitizenLoginScreen()),
               );
               _loadEmergencyContacts();
               setState(() {});
             },
           ),
-          // Server Gateway & Network Settings Button
+
+          // 2.5 Backend Connection & Cloud Relay Hub
           IconButton(
-            icon: const Icon(Icons.wifi_tethering, color: Color(0xFFD97706), size: 21),
-            tooltip: 'Server Gateway & Network Settings',
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
-            onPressed: () => showServerEndpointDialog(context),
-          ),
-          // Dedicated Citizen Settings Button (Profile, Vehicle Type, Emergency Contacts, ABHA)
-          IconButton(
-            icon: const Icon(Icons.settings_outlined, color: Color(0xFF0F172A), size: 21),
-            tooltip: 'Citizen Settings & Vehicle Configuration',
+            icon: Icon(
+              Icons.hub_outlined,
+              color: isDark ? const Color(0xFF38BDF8) : const Color(0xFF0284C7),
+              size: 20,
+            ),
+            tooltip: 'Backend Connection & Public Cloud Relay',
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-            onPressed: () async {
-              await Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (context) => const CitizenSettingsScreen(),
+            onPressed: () => BackendRelayDialog.show(context),
+          ),
+
+          // 3. Theme Toggle Button (Dark / Light Mode)
+          ValueListenableBuilder<ThemeMode>(
+            valueListenable: ThemeService.instance.themeMode,
+            builder: (ctx, mode, _) {
+              final isThemeDark = mode == ThemeMode.dark;
+              return IconButton(
+                icon: Icon(
+                  isThemeDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+                  color: isThemeDark ? const Color(0xFFFBBF24) : const Color(0xFF475569),
+                  size: 20,
                 ),
+                tooltip: isThemeDark ? 'Switch to Light Mode' : 'Switch to Dark Mode',
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                onPressed: () => ThemeService.instance.toggleTheme(),
               );
-              _loadEmergencyContacts();
             },
           ),
-          // About Rakshak-AI Claims & Capabilities
-          IconButton(
-            icon: const Icon(Icons.info_outline, color: Color(0xFF0F172A), size: 21),
-            tooltip: 'About Rakshak-AI (Claims & Verification)',
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-            onPressed: () => AboutSystemDialog.show(context),
+
+          // 4. Clean Overflow Menu (Ambulance, Test Lab, Settings, Gateway, About)
+          PopupMenuButton<String>(
+            icon: Icon(
+              Icons.more_vert,
+              color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+              size: 21,
+            ),
+            color: isDark ? const Color(0xFF111827) : Colors.white,
+            elevation: 4,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+              side: BorderSide(color: isDark ? const Color(0xFF1F2937) : const Color(0xFFE2E8F0)),
+            ),
+            onSelected: (val) {
+              if (val == 'ambulance') {
+                _openAmbulanceApp();
+              } else if (val == 'test_lab') {
+                setState(() {
+                  _isTestMode = !_isTestMode;
+                  _selectedNavIndex = _isTestMode ? 3 : 0;
+                });
+              } else if (val == 'settings') {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const CitizenSettingsScreen()),
+                ).then((_) => _loadEmergencyContacts());
+              } else if (val == 'gateway') {
+                showServerEndpointDialog(context);
+              } else if (val == 'about') {
+                AboutSystemDialog.show(context);
+              }
+            },
+            itemBuilder: (ctx) => [
+              PopupMenuItem(
+                value: 'ambulance',
+                child: Row(
+                  children: [
+                    const Icon(Icons.emergency_rounded, color: Color(0xFFEF4444), size: 18),
+                    const SizedBox(width: 10),
+                    Text(
+                      'Ambulance Pilot App',
+                      style: TextStyle(
+                        color: isDark ? Colors.white : const Color(0xFF0F172A),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              PopupMenuItem(
+                value: 'test_lab',
+                child: Row(
+                  children: [
+                    Icon(
+                      _isTestMode ? Icons.shield_outlined : Icons.science_outlined,
+                      color: const Color(0xFFF59E0B),
+                      size: 18,
+                    ),
+                    const SizedBox(width: 10),
+                    Text(
+                      _isTestMode ? 'Exit Test Lab' : 'Enter Test Lab',
+                      style: TextStyle(
+                        color: isDark ? Colors.white : const Color(0xFF0F172A),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              PopupMenuDivider(height: 1),
+              PopupMenuItem(
+                value: 'settings',
+                child: Row(
+                  children: [
+                    Icon(Icons.settings_outlined, color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B), size: 18),
+                    const SizedBox(width: 10),
+                    Text(
+                      'Citizen Settings & Vehicle',
+                      style: TextStyle(
+                        color: isDark ? Colors.white : const Color(0xFF0F172A),
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              PopupMenuItem(
+                value: 'gateway',
+                child: Row(
+                  children: [
+                    const Icon(Icons.wifi_tethering, color: Color(0xFF38BDF8), size: 18),
+                    const SizedBox(width: 10),
+                    Text(
+                      'Server Gateway',
+                      style: TextStyle(
+                        color: isDark ? Colors.white : const Color(0xFF0F172A),
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              PopupMenuItem(
+                value: 'about',
+                child: Row(
+                  children: [
+                    Icon(Icons.info_outline, color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B), size: 18),
+                    const SizedBox(width: 10),
+                    Text(
+                      'About Rakshak-AI',
+                      style: TextStyle(
+                        color: isDark ? Colors.white : const Color(0xFF0F172A),
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 4),
+          const SizedBox(width: 6),
         ],
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(12.0),
+        padding: const EdgeInsets.symmetric(horizontal: 14.0, vertical: 12.0),
         child: Column(
           children: <Widget>[
-            // Rider & Connected Vehicle Card (Synced with User Profile & Vehicle)
-            _buildRiderVehicleCard(),
-            const SizedBox(height: 10),
+            // 1. Executive Master Sentinel Command Center (Hero Card)
+            _buildUnifiedSentinelCommandCard(),
+            const SizedBox(height: 14),
 
-            // Segmented Mode Selector
-            _buildModeSelector(),
-            const SizedBox(height: 10),
+            // 2. High-Priority Emergency & Dispatch Action Grid (2x2 Balanced Modern Tiles)
+            _buildRapidActionGrid(context),
+            const SizedBox(height: 14),
 
-            // Protection Status Hero Card
-            _buildProtectionHeroCard(),
-            const SizedBox(height: 10),
-
-            // Recent Travel & Driving Safety Insights
-            _buildRideSafetyInsightsCard(),
-            const SizedBox(height: 10),
-
-            // Trip Sentinel Highway Safeguard
+            // 3. Trip Sentinel Highway Safeguard (Executive Glass)
             _buildTripSentinelCard(),
-            const SizedBox(height: 10),
+            const SizedBox(height: 14),
 
             if (!_isTestMode) ...[
-              // PRODUCTION PRESENTATION VIEW (As if real app is deployed)
+              // 4. Live Sensor Telemetry (Executive Dark Gauges)
               _buildProfessionalTelemetryCard(context),
               const SizedBox(height: 14),
-              _buildBlackspotRadarBanner(context),
-              const SizedBox(height: 14),
-              _buildEmergencyQuickActions(context),
-              const SizedBox(height: 14),
+
+              // 5. ABHA Emergency Health Passport (Executive Dark Glass)
               _buildAbhaMedicalPassportCard(context),
               const SizedBox(height: 14),
-              _buildAmbulanceAppPromoCard(context),
-              const SizedBox(height: 14),
-              _buildPlatformTrustCard(context),
-              const SizedBox(height: 14),
-              _buildTestLabPromptCard(context),
             ] else ...[
               // DEMO / TEST LAB SIMULATION VIEW
               _buildTestLabBanner(context),
@@ -631,8 +769,8 @@ class _CrashDetectionScreenState extends State<CrashDetectionScreen> {
       ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedNavIndex,
-        selectedItemColor: const Color(0xFFDC2626),
-        unselectedItemColor: Colors.grey.shade600,
+        selectedItemColor: const Color(0xFFEF4444),
+        unselectedItemColor: const Color(0xFF64748B),
         type: BottomNavigationBarType.fixed,
         onTap: (index) {
           setState(() {
@@ -647,8 +785,8 @@ class _CrashDetectionScreenState extends State<CrashDetectionScreen> {
               );
             } else if (index == 2) {
               Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const SettingsScreen()),
-              ).then((_) => _loadEmergencyContacts());
+                MaterialPageRoute(builder: (_) => const IndiaEmergencyDirectoryScreen()),
+              );
             } else if (index == 3) {
               _isTestMode = true;
             }
@@ -664,14 +802,450 @@ class _CrashDetectionScreenState extends State<CrashDetectionScreen> {
             label: 'Radar',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.badge_outlined),
-            label: 'Medical ID',
+            icon: Icon(Icons.phone_in_talk_rounded),
+            label: 'Helplines',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.science),
             label: 'Test Lab',
           ),
         ],
+      ),
+    );
+  }
+
+
+  // ===========================================================================
+  // UI SUB-COMPONENTS: WORLD-CLASS UNIFIED SENTINEL COMMAND ARCHITECTURE
+  // ===========================================================================
+
+  Widget _buildUnifiedSentinelCommandCard() {
+    return ValueListenableBuilder<UserProfile>(
+      valueListenable: UserProfileService.instance.profileNotifier,
+      builder: (context, profile, _) {
+        final isDark = ThemeService.instance.isDarkMode;
+        final vehicleIcon = profile.isTwoWheeler ? Icons.two_wheeler : Icons.directions_car;
+        final vehicleLabel = profile.isTwoWheeler ? 'Two-Wheeler (4.8G Threshold)' : 'Four-Wheeler (4.8G Threshold)';
+        final riderName = profile.userName.isNotEmpty ? profile.userName : 'Registered Citizen';
+        final bloodGroup = profile.bloodGroup.isNotEmpty ? profile.bloodGroup : 'O+';
+        final speed = _useLiveDeviceLocation ? (CrashDetectorService.instance.currentSpeedKmh.toStringAsFixed(0)) : '0';
+
+        final cardBg = isDark ? const Color(0xFF111827) : Colors.white;
+        final cardBorder = _isMonitoring
+            ? const Color(0xFF10B981)
+            : (isDark ? const Color(0xFF1F2937) : const Color(0xFFE2E8F0));
+        final titleColor = isDark ? Colors.white : const Color(0xFF0F172A);
+        final subtitleColor = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+        final stripBg = isDark ? const Color(0xFF0D1322) : const Color(0xFFF1F5F9);
+        final dividerColor = isDark ? const Color(0xFF1F2937) : const Color(0xFFE2E8F0);
+
+        return Container(
+          width: double.infinity,
+          decoration: BoxDecoration(
+            color: cardBg,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: cardBorder,
+              width: 1.2,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: _isMonitoring ? const Color(0xFF10B981).withOpacity(0.08) : Colors.black.withOpacity(isDark ? 0.2 : 0.04),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Top Bar: Rider Profile Info + Vehicle Mode Pill + Edit Shortcut
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
+                      ),
+                      child: Icon(vehicleIcon, color: const Color(0xFF0284C7), size: 18),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Text(
+                                riderName,
+                                style: TextStyle(
+                                  color: titleColor,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFDC2626).withOpacity(0.2),
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(color: const Color(0xFFDC2626).withOpacity(0.4)),
+                                ),
+                                child: Text(
+                                  bloodGroup,
+                                  style: const TextStyle(
+                                    color: Color(0xFFFCA5A5),
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            vehicleLabel,
+                            style: TextStyle(color: subtitleColor, fontSize: 11),
+                          ),
+                        ],
+                      ),
+                    ),
+                    // Quick Activate / Pause switch
+                    Transform.scale(
+                      scale: 0.85,
+                      child: Switch(
+                        value: _isMonitoring,
+                        activeColor: const Color(0xFF10B981),
+                        activeTrackColor: const Color(0xFF064E3B),
+                        inactiveThumbColor: const Color(0xFF94A3B8),
+                        inactiveTrackColor: const Color(0xFF1E293B),
+                        onChanged: (val) => _toggleMonitoring(),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              Divider(height: 1, color: dividerColor),
+
+              // Center Hero Sentinel Visual
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: _isMonitoring
+                            ? const Color(0xFF064E3B).withOpacity(isDark ? 0.4 : 0.15)
+                            : (isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9)),
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: _isMonitoring
+                              ? const Color(0xFF10B981).withOpacity(0.5)
+                              : (isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1)),
+                          width: 2,
+                        ),
+                      ),
+                      child: Icon(
+                        _isMonitoring ? Icons.shield : Icons.shield_outlined,
+                        size: 32,
+                        color: _isMonitoring ? const Color(0xFF10B981) : const Color(0xFF64748B),
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _isMonitoring ? 'SENTINEL GUARD ACTIVE' : 'PROTECTION PAUSED',
+                            style: TextStyle(
+                              color: _isMonitoring
+                                  ? const Color(0xFF10B981)
+                                  : (isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B)),
+                              fontWeight: FontWeight.w900,
+                              fontSize: 14,
+                              letterSpacing: 0.4,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            _isMonitoring
+                                ? '50Hz Edge IMU running • 4.8G Impact Trigger • Cloud watchdog armed'
+                                : 'Sensors suspended. Flip switch to re-arm life protection.',
+                            style: TextStyle(
+                              color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                              fontSize: 11,
+                              height: 1.3,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Bottom Real-time Telemetry Metrics Strip
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: stripBg,
+                  borderRadius: const BorderRadius.vertical(bottom: Radius.circular(18)),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    _buildMetricPill(Icons.speed, 'SPEED', '$speed km/h', const Color(0xFF38BDF8)),
+                    _buildMetricDivider(),
+                    _buildMetricPill(Icons.bolt, 'TRIGGER', '4.8 G', const Color(0xFFF59E0B)),
+                    _buildMetricDivider(),
+                    _buildMetricPill(Icons.contact_phone, 'CONTACTS', '$_contactCount Active', const Color(0xFF10B981)),
+                    _buildMetricDivider(),
+                    _buildMetricPill(Icons.location_on, 'GPS', 'Active Fix', const Color(0xFFEC4899)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildMetricPill(IconData icon, String label, String value, Color color) {
+    final isDark = ThemeService.instance.isDarkMode;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 12, color: color),
+            const SizedBox(width: 3),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 9,
+                color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 2),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 11,
+            color: isDark ? Colors.white : const Color(0xFF0F172A),
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMetricDivider() {
+    final isDark = ThemeService.instance.isDarkMode;
+    return Container(
+      width: 1,
+      height: 22,
+      color: isDark ? const Color(0xFF1F2937) : const Color(0xFFCBD5E1),
+    );
+  }
+
+  Widget _buildRapidActionGrid(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+          child: Text(
+            'EMERGENCY & RAPID DISPATCH',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              color: Color(0xFF94A3B8),
+              letterSpacing: 0.6,
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            // Tile 1: Broadcast SOS
+            Expanded(
+              child: _buildActionTile(
+                title: 'Broadcast SOS',
+                subtitle: 'Alerts EMS in 10s',
+                icon: Icons.sos_rounded,
+                isPrimarySos: true,
+                onTap: _triggerManualSosAlert,
+              ),
+            ),
+            const SizedBox(width: 10),
+            // Tile 2: India Helplines
+            Expanded(
+              child: _buildActionTile(
+                title: 'All Helplines',
+                subtitle: '112, 108, Police, NHAI',
+                icon: Icons.phone_in_talk_rounded,
+                badgeText: '1-TAP CALL',
+                accentColor: const Color(0xFFEF4444),
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const IndiaEmergencyDirectoryScreen()),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            // Tile 3: Bystander Report
+            Expanded(
+              child: _buildActionTile(
+                title: 'Bystander Intake',
+                subtitle: 'Photo scene triage',
+                icon: Icons.camera_alt_rounded,
+                accentColor: const Color(0xFF38BDF8),
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const IntakeScreen()),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(width: 10),
+            // Tile 4: Trauma Radar
+            Expanded(
+              child: _buildActionTile(
+                title: 'Trauma Radar',
+                subtitle: 'Nearby ICU beds',
+                icon: Icons.radar_rounded,
+                accentColor: const Color(0xFF10B981),
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const HospitalRadarScreen()),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildActionTile({
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required VoidCallback onTap,
+    Color accentColor = const Color(0xFFEF4444),
+    String? badgeText,
+    bool isPrimarySos = false,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          height: 98,
+          decoration: BoxDecoration(
+            gradient: isPrimarySos
+                ? const LinearGradient(
+                    colors: [Color(0xFF991B1B), Color(0xFFDC2626)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  )
+                : null,
+            color: isPrimarySos
+                ? null
+                : (ThemeService.instance.isDarkMode ? const Color(0xFF111827) : Colors.white),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: isPrimarySos
+                  ? const Color(0xFFEF4444)
+                  : (ThemeService.instance.isDarkMode ? const Color(0xFF1F2937) : const Color(0xFFE2E8F0)),
+              width: 1.2,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: isPrimarySos ? const Color(0xFFDC2626).withOpacity(0.25) : Colors.black.withOpacity(0.1),
+                blurRadius: 8,
+                offset: const Offset(0, 3),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(7),
+                    decoration: BoxDecoration(
+                      color: isPrimarySos ? Colors.white.withOpacity(0.2) : accentColor.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(icon, color: isPrimarySos ? Colors.white : accentColor, size: 20),
+                  ),
+                  if (badgeText != null)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                      decoration: BoxDecoration(
+                        color: accentColor.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: accentColor.withOpacity(0.4)),
+                      ),
+                      child: Text(
+                        badgeText,
+                        style: TextStyle(color: accentColor, fontSize: 8, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                ],
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      color: isPrimarySos
+                          ? Colors.white
+                          : (ThemeService.instance.isDarkMode ? Colors.white : const Color(0xFF0F172A)),
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12.5,
+                    ),
+                  ),
+                  const SizedBox(height: 1),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      color: isPrimarySos ? Colors.white70 : const Color(0xFF94A3B8),
+                      fontSize: 10,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -1018,30 +1592,38 @@ class _CrashDetectionScreenState extends State<CrashDetectionScreen> {
   }
 
   Widget _buildTripSentinelCard() {
+    final isArmed = TripSentinelClientService.instance.isConsentEnabled;
+    final isDark = ThemeService.instance.isDarkMode;
     return Material(
-      color: TripSentinelClientService.instance.isConsentEnabled
-          ? const Color(0xFFEFF6FF)
-          : Colors.white,
+      color: isDark ? const Color(0xFF111827) : Colors.white,
+      elevation: isDark ? 0 : 1.5,
+      shadowColor: Colors.black.withOpacity(0.04),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(16),
         side: BorderSide(
-          color: TripSentinelClientService.instance.isConsentEnabled
-              ? const Color(0xFF3B82F6)
-              : Colors.grey.shade200,
+          color: isArmed ? const Color(0xFF38BDF8) : (isDark ? const Color(0xFF1F2937) : const Color(0xFFE2E8F0)),
+          width: 1.2,
         ),
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         child: SwitchListTile(
           contentPadding: EdgeInsets.zero,
           dense: true,
-          title: const Text(
-            'Trip Sentinel (Contact Loss Safeguard)',
-            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+          title: Text(
+            'Trip Sentinel (Highway Contact-Loss Safeguard)',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 13,
+              color: isDark ? Colors.white : const Color(0xFF0F172A),
+            ),
           ),
-          subtitle: const Text(
-            'Privacy Protected: Armed strictly for highway speeds (>60 km/h). Cloud watchdog detects silent incapacitation if heartbeat drops suddenly.',
-            style: TextStyle(fontSize: 10.5, color: Colors.black54),
+          subtitle: Text(
+            'Privacy Protected: Armed strictly for highway speeds (>60 km/h). Cloud watchdog detects sudden collision incapacitation.',
+            style: TextStyle(
+              fontSize: 10.5,
+              color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+            ),
           ),
           value: TripSentinelClientService.instance.isConsentEnabled,
           onChanged: (val) async {
@@ -1049,28 +1631,36 @@ class _CrashDetectionScreenState extends State<CrashDetectionScreen> {
               final consented = await showDialog<bool>(
                 context: context,
                 builder: (ctx) => AlertDialog(
-                  backgroundColor: const Color(0xFF1E293B),
+                  backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  title: const Row(
+                  title: Row(
                     children: [
-                      Icon(Icons.security, color: Color(0xFF38BDF8), size: 22),
-                      SizedBox(width: 8),
+                      const Icon(Icons.security, color: Color(0xFF0284C7), size: 22),
+                      const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           'Trip Sentinel Consent',
-                          style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                          style: TextStyle(
+                            color: isDark ? Colors.white : const Color(0xFF0F172A),
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
                     ],
                   ),
-                  content: const Text(
+                  content: Text(
                     'In compliance with DPDP Act Section 7(f), Trip Sentinel streams anonymized GPS heartbeat telemetry to the secure watchdog server ONLY when travelling at highway speeds (>60 km/h).\n\nTelemetry resides strictly in volatile RAM and is permanently purged once you reach your destination. If communication drops abruptly during high speed, responders are alerted to check for silent roadside accidents.\n\nDo you grant explicit consent for journey telemetry monitoring?',
-                    style: TextStyle(color: Color(0xFFCBD5E1), fontSize: 12.5, height: 1.45),
+                    style: TextStyle(
+                      color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF334155),
+                      fontSize: 12.5,
+                      height: 1.45,
+                    ),
                   ),
                   actions: [
                     TextButton(
                       onPressed: () => Navigator.pop(ctx, false),
-                      child: const Text('Decline', style: TextStyle(color: Color(0xFF94A3B8))),
+                      child: Text('Decline', style: TextStyle(color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B))),
                     ),
                     ElevatedButton(
                       style: ElevatedButton.styleFrom(
@@ -1203,12 +1793,15 @@ class _CrashDetectionScreenState extends State<CrashDetectionScreen> {
   Widget _buildProfessionalTelemetryCard(BuildContext context) {
     final lat = CrashDetectorService.instance.lastKnownLatitude;
     final lng = CrashDetectorService.instance.lastKnownLongitude;
+    final isDark = ThemeService.instance.isDarkMode;
 
     return Card(
-      elevation: 2,
+      elevation: isDark ? 0 : 1.5,
+      shadowColor: Colors.black.withOpacity(0.04),
+      color: isDark ? const Color(0xFF111827) : Colors.white,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: Colors.grey.shade200),
+        side: BorderSide(color: isDark ? const Color(0xFF1F2937) : const Color(0xFFE2E8F0)),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -1220,10 +1813,11 @@ class _CrashDetectionScreenState extends State<CrashDetectionScreen> {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: Colors.green.shade50,
+                    color: isDark ? const Color(0xFF064E3B).withOpacity(0.4) : const Color(0xFFECFDF5),
                     borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFF10B981).withOpacity(isDark ? 0.3 : 0.4)),
                   ),
-                  child: Icon(Icons.speed_rounded, color: Colors.green.shade700, size: 20),
+                  child: const Icon(Icons.speed_rounded, color: Color(0xFF10B981), size: 20),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
@@ -1232,13 +1826,18 @@ class _CrashDetectionScreenState extends State<CrashDetectionScreen> {
                     children: [
                       Text(
                         'Protection Telemetry',
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
-                            ),
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: isDark ? Colors.white : const Color(0xFF0F172A),
+                        ),
                       ),
                       Text(
                         _isMonitoring ? 'Continuous IMU & GPS Analysis Active' : 'Protection Paused',
-                        style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                        ),
                       ),
                     ],
                   ),
@@ -1246,10 +1845,14 @@ class _CrashDetectionScreenState extends State<CrashDetectionScreen> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: _isMonitoring ? const Color(0xFFF0FDF4) : const Color(0xFFFEF2F2),
+                    color: _isMonitoring
+                        ? (isDark ? const Color(0xFF064E3B).withOpacity(0.4) : const Color(0xFFF0FDF4))
+                        : (isDark ? const Color(0xFF450A0A).withOpacity(0.4) : const Color(0xFFFEF2F2)),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: _isMonitoring ? const Color(0xFF86EFAC) : const Color(0xFFFECACA),
+                      color: _isMonitoring
+                          ? (isDark ? const Color(0xFF059669) : const Color(0xFF86EFAC))
+                          : (isDark ? const Color(0xFFDC2626) : const Color(0xFFFECACA)),
                     ),
                   ),
                   child: Row(
@@ -1269,7 +1872,9 @@ class _CrashDetectionScreenState extends State<CrashDetectionScreen> {
                         style: TextStyle(
                           fontSize: 10,
                           fontWeight: FontWeight.bold,
-                          color: _isMonitoring ? const Color(0xFF166534) : const Color(0xFF991B1B),
+                          color: _isMonitoring
+                              ? (isDark ? const Color(0xFF34D399) : const Color(0xFF166534))
+                              : (isDark ? const Color(0xFFF87171) : const Color(0xFF991B1B)),
                         ),
                       ),
                     ],
@@ -1338,24 +1943,29 @@ class _CrashDetectionScreenState extends State<CrashDetectionScreen> {
     required String subtext,
     required MaterialColor color,
   }) {
+    final isDark = ThemeService.instance.isDarkMode;
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: color.shade50.withOpacity(0.6),
+        color: isDark ? color.shade900.withOpacity(0.22) : color.shade50.withOpacity(0.7),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.shade100),
+        border: Border.all(color: isDark ? color.shade700.withOpacity(0.35) : color.shade100),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(icon, size: 16, color: color.shade700),
+              Icon(icon, size: 16, color: isDark ? color.shade300 : color.shade700),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
                   title,
-                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.grey.shade700),
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF475569),
+                  ),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
@@ -1364,12 +1974,19 @@ class _CrashDetectionScreenState extends State<CrashDetectionScreen> {
           const SizedBox(height: 6),
           Text(
             value,
-            style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: color.shade900),
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.bold,
+              color: isDark ? Colors.white : color.shade900,
+            ),
           ),
           const SizedBox(height: 2),
           Text(
             subtext,
-            style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
+            style: TextStyle(
+              fontSize: 10,
+              color: isDark ? const Color(0xFF64748B) : Colors.grey.shade600,
+            ),
             overflow: TextOverflow.ellipsis,
           ),
         ],
@@ -1548,33 +2165,134 @@ class _CrashDetectionScreenState extends State<CrashDetectionScreen> {
             ),
           ),
         ),
+        const SizedBox(height: 12),
+        Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const IndiaEmergencyDirectoryScreen()),
+              );
+            },
+            borderRadius: BorderRadius.circular(14),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: const Color(0xFFDC2626).withOpacity(0.35)),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFFDC2626).withOpacity(0.06),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFEF2F2),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.phone_in_talk_rounded, color: Color(0xFFDC2626), size: 22),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Text(
+                              'India Emergency Helplines',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                                color: Color(0xFF0F172A),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFDC2626),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: const Text(
+                                '1-TAP CALL',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 8.5,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        const Text(
+                          'Direct calling for 112, 108 Ambulance, Highway, Police & Women helplines',
+                          style: TextStyle(color: Color(0xFF64748B), fontSize: 11),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Icon(Icons.chevron_right, color: Color(0xFFDC2626)),
+                ],
+              ),
+            ),
+          ),
+        ),
       ],
     );
   }
 
   Widget _buildAbhaMedicalPassportCard(BuildContext context) {
+    final isDark = ThemeService.instance.isDarkMode;
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.grey.shade200),
+        color: isDark ? const Color(0xFF111827) : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: isDark ? const Color(0xFF1F2937) : const Color(0xFFE2E8F0)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(isDark ? 0.2 : 0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            children: const [
-              Icon(Icons.badge, color: Color(0xFF0284C7), size: 18),
-              SizedBox(width: 8),
+            children: [
+              const Icon(Icons.badge, color: Color(0xFF0284C7), size: 18),
+              const SizedBox(width: 8),
               Text(
                 'ABHA Emergency Health Passport',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF0F172A)),
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                  color: isDark ? Colors.white : const Color(0xFF0F172A),
+                ),
               ),
-              Spacer(),
-              Text(
-                'ABDM Verified',
-                style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF0284C7)),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0284C7).withOpacity(isDark ? 0.2 : 0.1),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: const Text(
+                  'ABDM Verified',
+                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF0284C7)),
+                ),
               ),
             ],
           ),
@@ -1585,14 +2303,22 @@ class _CrashDetectionScreenState extends State<CrashDetectionScreen> {
                 child: Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFEFF6FF),
+                    color: isDark ? const Color(0xFF0D1E38) : const Color(0xFFEFF6FF),
                     borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: isDark ? const Color(0xFF1E3A8A) : const Color(0xFFBFDBFE)),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    children: const [
-                      Text('BLOOD TYPE', style: TextStyle(fontSize: 9, color: Color(0xFF64748B))),
-                      Text('B+ Positive', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Color(0xFFDC2626))),
+                    children: [
+                      Text(
+                        'BLOOD TYPE',
+                        style: TextStyle(
+                          fontSize: 9,
+                          color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const Text('B+ Positive', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Color(0xFFDC2626))),
                     ],
                   ),
                 ),
@@ -1602,14 +2328,22 @@ class _CrashDetectionScreenState extends State<CrashDetectionScreen> {
                 child: Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFFEF2F2),
+                    color: isDark ? const Color(0xFF2D1515) : const Color(0xFFFEF2F2),
                     borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: isDark ? const Color(0xFF7F1D1D) : const Color(0xFFFECACA)),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    children: const [
-                      Text('CRITICAL ALLERGY', style: TextStyle(fontSize: 9, color: Color(0xFF64748B))),
-                      Text('Penicillin Anaphylaxis', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Color(0xFFB91C1C))),
+                    children: [
+                      Text(
+                        'CRITICAL ALLERGY',
+                        style: TextStyle(
+                          fontSize: 9,
+                          color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const Text('Penicillin Anaphylaxis', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Color(0xFFB91C1C))),
                     ],
                   ),
                 ),

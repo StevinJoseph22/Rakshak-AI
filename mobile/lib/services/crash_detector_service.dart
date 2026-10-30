@@ -7,6 +7,7 @@ import 'crash_event_service.dart';
 import 'tflite_classifier_stub.dart';
 import 'pre_crash_microburst_service.dart';
 import 'trip_sentinel_client_service.dart';
+import 'pre_crash_blackbox_service.dart';
 import '../config/crash_confidence_config.dart';
 
 // ==============================================================================
@@ -95,6 +96,8 @@ class CrashDetectorService {
 
   double get lastKnownLatitude => _lastKnownLatitude;
   double get lastKnownLongitude => _lastKnownLongitude;
+  double get currentSpeedKmh => _currentSpeedKmh;
+  double get lastKnownSpeedKmh => _currentSpeedKmh;
   bool get hasLiveGpsFix => _hasLiveGpsFix;
 
   final List<_AccelSample> _accelHistory = [];
@@ -110,12 +113,14 @@ class CrashDetectorService {
     _clearBuffers();
     _initGps();
     TfLiteClassifierStub.initialize().catchError((_) => false);
+    PreCrashBlackboxService.instance.startRecording();
   }
 
   /// Stops monitoring and cancels GPS listeners.
   void stop() {
     _isMonitoring = false;
     _gpsSubscription?.cancel();
+    PreCrashBlackboxService.instance.stopRecording();
     _gpsSubscription = null;
     _clearBuffers();
   }
@@ -200,6 +205,11 @@ class CrashDetectorService {
 
   /// Records a GPS speed sample (can also be called by tests/simulations).
   void recordSpeedSample(double speedKmh, {double? latitude, double? longitude, DateTime? timestamp}) {
+    PreCrashBlackboxService.instance.updateLiveTelematics(
+      speedKmh: speedKmh,
+      gForce: _accelHistory.isNotEmpty ? _accelHistory.last.netG : 1.0,
+      heading: 0.0,
+    );
     final now = timestamp ?? DateTime.now();
     _currentSpeedKmh = speedKmh;
     if (latitude != null) _lastKnownLatitude = latitude;
@@ -421,6 +431,9 @@ class CrashDetectorService {
           rolloverSuspected: confidenceResult.rolloverSuspected,
           postImpactStillness: confidenceResult.postImpactStillness,
           factorBreakdown: confidenceResult.factorBreakdown,
+          preCrashTelemetry: PreCrashBlackboxService.instance.sealPreCrashTelemetry(
+            impactGForce: currentSample.netG,
+          ),
         );
 
         debugPrint('CRASH DETECTED by Sensor Rule Engine: $event');

@@ -151,6 +151,54 @@ class EmergencySmsService {
         'Driver: $driverName (Ph: $driverPhone). Paramedics are administering trauma care.';
   }
 
+  /// Builds Message 5: Official Police Case Docket Reference (for Emergency Contacts / Family)
+  String buildPoliceCaseAlertMessage({
+    required String victimName,
+    required String caseNumber,
+    required String stationName,
+    required String officerPhone,
+  }) {
+    return 'POLICE UPDATE: Official Incident Case ID #$caseNumber registered for $victimName at $stationName. '
+        'Investigating Officer Ph: $officerPhone. Track case: https://rakshak.ai/case/$caseNumber';
+  }
+
+  /// Sends Police Case Reference SMS to registered emergency contacts
+  Future<EmergencySmsDispatchResult> sendPoliceCaseAlert({
+    required String caseNumber,
+    required String stationName,
+    required String officerPhone,
+    BuildContext? context,
+  }) async {
+    final alertKey = 'POLICE_CASE_${caseNumber.trim()}';
+    if (_dispatchedAlertKeys.contains(alertKey)) {
+      debugPrint('[EmergencySmsService] Police case alert already dispatched for $caseNumber. Skipping duplicate.');
+      return EmergencySmsDispatchResult(
+        success: true,
+        mode: SmsDeliveryMode.nativeSim,
+        totalContacts: 0,
+        successfulSends: 0,
+        messageBody: '',
+      );
+    }
+    _dispatchedAlertKeys.add(alertKey);
+
+    final contacts = await EmergencyContactService.instance.getContacts();
+    final victimName = await EmergencyContactService.instance.getVictimName();
+    final message = buildPoliceCaseAlertMessage(
+      victimName: victimName,
+      caseNumber: caseNumber,
+      stationName: stationName,
+      officerPhone: officerPhone,
+    );
+
+    return _dispatchAlert(
+      alertType: 'POLICE_CASE_ALERT',
+      contacts: contacts,
+      message: message,
+      context: context,
+    );
+  }
+
   /// Sends crash alert via Real Native SmsManager or falls back to WhatsApp preview
   Future<EmergencySmsDispatchResult> sendCrashAlert({
     required double lat,
@@ -457,4 +505,20 @@ class EmergencySmsService {
       }
     }
   }
+
+  /// Builds official Police Case Docket alert message for next of kin
+  String buildPoliceDocketAlertMessage({
+    required String victimName,
+    required String caseNumber,
+    required String policeStationName,
+    required String officerName,
+    required String officerPhone,
+    String? hospitalName,
+  }) {
+    final hospClause = hospitalName != null ? ' Destination ER: $hospitalName.' : '';
+    return '🚨 BTP POLICE ALERT: Case #$caseNumber registered for $victimName. '
+        'Jurisdiction: $policeStationName. Investigating Officer: $officerName ($officerPhone).'
+        '$hospClause Official case docket: https://rakshak.ai/case/$caseNumber';
+  }
+
 }

@@ -1,3 +1,11 @@
+
+export interface PreCrashDataPoint {
+  relative_second: number; // -30 to 0
+  speed_kmh: number;
+  accel_g: number;
+  heading_deg?: number;
+  timestamp_ms?: number;
+}
 export type IncidentStatus =
   | 'detected'
   | 'broadcasting'
@@ -48,6 +56,14 @@ export interface Incident {
     updated_at?: string;
   } | null;
   victim_metadata: Record<string, unknown> | null;
+    case_number?: string | null;
+  police_station_name?: string | null;
+  police_officer_name?: string | null;
+  police_officer_phone?: string | null;
+  pre_crash_telemetry?: PreCrashDataPoint[] | null;
+  gridlock_detected?: boolean;
+  reassigned_from_ambulance_id?: string | null;
+  reassigned_at?: string | null;
   blackspot_info?: BlackspotInfo | null;
   created_at: string;
   updated_at: string;
@@ -84,7 +100,7 @@ export interface CreateIncidentResponse {
 }
 
 // Phase 13 & 26: Role-Based Access Control & Authentication Types
-export type UserRole = 'hospital_staff' | 'police' | 'ambulance' | 'admin';
+export type UserRole = 'hospital_staff' | 'police' | 'ambulance' | 'admin' | 'citizen';
 
 export interface User {
   id: string;

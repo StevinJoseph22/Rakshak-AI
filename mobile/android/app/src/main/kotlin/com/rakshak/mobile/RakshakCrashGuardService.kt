@@ -7,6 +7,7 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
@@ -49,17 +50,25 @@ class RakshakCrashGuardService : Service(), SensorEventListener {
             private set
 
         fun startService(context: Context) {
-            val intent = Intent(context, RakshakCrashGuardService::class.java)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                ContextCompat.startForegroundService(context, intent)
-            } else {
-                context.startService(intent)
+            try {
+                val intent = Intent(context, RakshakCrashGuardService::class.java)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    ContextCompat.startForegroundService(context, intent)
+                } else {
+                    context.startService(intent)
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "🛡️ Failed to start foreground service: ${e.message}")
             }
         }
 
         fun stopService(context: Context) {
-            val intent = Intent(context, RakshakCrashGuardService::class.java)
-            context.stopService(intent)
+            try {
+                val intent = Intent(context, RakshakCrashGuardService::class.java)
+                context.stopService(intent)
+            } catch (e: Exception) {
+                Log.w(TAG, "🛡️ Failed to stop foreground service: ${e.message}")
+            }
         }
     }
 
@@ -71,7 +80,24 @@ class RakshakCrashGuardService : Service(), SensorEventListener {
         super.onCreate()
         Log.i(TAG, "🛡️ [RakshakCrashGuardService] Created. Initializing 24/7 Foreground Sentinel...")
         createNotificationChannel()
-        startForeground(NOTIFICATION_ID, buildForegroundNotification())
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(
+                    NOTIFICATION_ID,
+                    buildForegroundNotification(),
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+                )
+            } else {
+                startForeground(NOTIFICATION_ID, buildForegroundNotification())
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "🛡️ startForeground fallback: ${e.message}")
+            try {
+                startForeground(NOTIFICATION_ID, buildForegroundNotification())
+            } catch (e2: Exception) {
+                Log.e(TAG, "🛡️ startForeground completely failed: ${e2.message}")
+            }
+        }
         initSensors()
         isRunning = true
     }

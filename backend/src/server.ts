@@ -10,8 +10,9 @@ import { authRouter } from './routes/auth';
 import { sentinelRouter } from './routes/sentinel';
 import { abhaRouter } from './routes/abha';
 import { auditRouter } from './routes/audit';
-import { initSocketIO } from './socket';
+import { initSocketIO, getRecentTelemetry } from './socket';
 import { getTlsCredentials } from './utils/tlsHelper';
+import { startEscalationWatchdog } from './escalation';
 
 dotenv.config();
 
@@ -119,6 +120,14 @@ app.get('/health', (_req: Request, res: Response) => {
   });
 });
 
+// Live Telemetry & Mobile Blackbox streaming feed endpoint
+app.get('/telemetry/latest', (_req: Request, res: Response) => {
+  res.status(200).json({
+    count: getRecentTelemetry().length,
+    telemetry: getRecentTelemetry(),
+  });
+});
+
 // Root metadata endpoint
 app.get('/', (_req: Request, res: Response) => {
   res.json({
@@ -141,6 +150,7 @@ app.get('/', (_req: Request, res: Response) => {
 
 // Mount Domain Routers
 app.use('/auth', authRouter);
+app.use('/api/auth', authRouter);
 app.use('/hospitals', hospitalsRouter);
 app.use('/incidents', incidentsRouter);
 app.use('/sentinel', sentinelRouter);
@@ -182,5 +192,7 @@ if (process.env.NODE_ENV !== 'test') {
     console.log(
       `[Rakshak Backend] ${protocol} server running on port ${PORT}`,
     );
+    // Start background auto-escalation heartbeat watchdog
+    startEscalationWatchdog();
   });
 }

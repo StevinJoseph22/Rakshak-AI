@@ -21,6 +21,7 @@ dependencies:
   url_launcher: ^6.3.2
   tflite_flutter: ^0.12.1
   flutter_webrtc: ^1.6.3
+  google_sign_in: ^6.2.2
 
 dev_dependencies:
   flutter_test:

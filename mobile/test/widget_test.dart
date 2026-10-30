@@ -29,13 +29,13 @@ void main() {
     await tester.pump();
 
     // Verify initial active state
-    expect(find.text('Rakshak-AI Guard'), findsOneWidget);
-    expect(find.text('Crash Guard Active: Monitoring Telemetry'), findsOneWidget);
+    expect(find.text('Rakshak AI'), findsOneWidget);
+    expect(find.text('SENTINEL ACTIVE'), findsOneWidget);
 
     // Toggle to Pause
     await tester.tap(find.text('Pause Guard'));
     await tester.pump();
-    expect(find.text('Monitoring Paused'), findsOneWidget);
+    expect(find.text('PAUSED'), findsOneWidget);
 
     // Toggle back to Activate
     await tester.tap(find.text('Activate Guard'));
@@ -99,7 +99,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
 
-    expect(find.text('Rakshak-AI Guard'), findsOneWidget);
+    expect(find.text('Rakshak AI'), findsOneWidget);
   });
 
   testWidgets('IntakeScreen displays Zero-Gallery Privacy banner and camera prompt',

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Hospital as HospitalIcon,
   CheckCircle2,
@@ -16,6 +16,7 @@ import { getStoredUser, clearStoredSession, AuthUser, authFetch } from '../servi
 import { LoginView } from '../components/LoginView';
 import { IncidentCard } from '../components/IncidentCard';
 import { ReconnectingBanner } from '../components/ReconnectingBanner';
+import { playHospitalErSiren, stopAllSirens } from '../utils/sirenAudio';
 import {
   HospitalCapabilityManager,
   DEFAULT_HOSPITAL_CAPABILITIES,
@@ -116,38 +117,11 @@ export const HospitalView: React.FC = () => {
     }
   };
 
-  // Audio Context Ref for instant emergency buzzer/chime without external files
-  const audioContextRef = useRef<AudioContext | null>(null);
-
   const playAlertChime = useCallback(() => {
     if (!soundEnabled) return;
     try {
-      if (!audioContextRef.current) {
-        const AudioCtx =
-          window.AudioContext ||
-          (window as unknown as { webkitAudioContext: typeof AudioContext })
-            .webkitAudioContext;
-        audioContextRef.current = new AudioCtx();
-      }
-      const ctx = audioContextRef.current;
-      if (ctx.state === 'suspended') {
-        ctx.resume();
-      }
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(880, ctx.currentTime); // A5
-      osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.35); // A4
-
-      gain.gain.setValueAtTime(0.3, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.35);
-
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-
-      osc.start();
-      osc.stop(ctx.currentTime + 0.35);
+      // 5-second continuous high-urgency ER trauma alarm siren
+      playHospitalErSiren(5.0, 0.45);
     } catch {
       // Audio autoplay policy catch
     }
@@ -1002,7 +976,7 @@ export const HospitalView: React.FC = () => {
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
           <button
             type="button"
-            onClick={() => setSoundEnabled(!soundEnabled)}
+            onClick={() => { if (soundEnabled) stopAllSirens(); setSoundEnabled(!soundEnabled); }}
             style={{
               display: 'flex',
               alignItems: 'center',

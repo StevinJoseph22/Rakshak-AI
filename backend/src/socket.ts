@@ -19,6 +19,33 @@ import {
 
 let io: SocketIOServer | null = null;
 
+export interface LiveTelemetryPayload {
+  device_id?: string;
+  timestamp: string;
+  net_g: number;
+  ax: number;
+  ay: number;
+  az: number;
+  gx?: number;
+  gy?: number;
+  gz?: number;
+  speed_kmh: number;
+  pitch?: number;
+  roll?: number;
+  yaw?: number;
+  action_label: string;
+  is_shake?: boolean;
+  is_braking?: boolean;
+  is_impact?: boolean;
+  variance?: number;
+}
+
+const gRecentTelemetryBuffer: LiveTelemetryPayload[] = [];
+
+export function getRecentTelemetry(): LiveTelemetryPayload[] {
+  return [...gRecentTelemetryBuffer];
+}
+
 export interface IncidentBroadcastPayload {
   id: string;
   latitude: number;
@@ -384,6 +411,25 @@ export function initSocketIO(httpServer: HttpServer | HttpsServer): SocketIOServ
         }
       }
     );
+
+    // Live Edge Telemetry, Motion & Shake Blackbox Stream from Mobile
+    socket.on('device_telemetry_live', (data: LiveTelemetryPayload) => {
+      try {
+        if (!data || typeof data.net_g !== 'number') return;
+        gRecentTelemetryBuffer.push(data);
+        if (gRecentTelemetryBuffer.length > 120) {
+          gRecentTelemetryBuffer.shift();
+        }
+        io?.to('all_incidents').emit('telemetry_live_feed', data);
+        io?.to('police_all').emit('telemetry_live_feed', data);
+      } catch (err) {
+        console.error('[Socket.io] Error in device_telemetry_live:', err);
+      }
+    });
+
+    socket.on('request_telemetry_history', (ack?: (data: LiveTelemetryPayload[]) => void) => {
+      ack?.([...gRecentTelemetryBuffer]);
+    });
 
     // Phase 17: Pre-Alert Soft Marker Socket Handlers
     socket.on(
@@ -1148,4 +1194,35 @@ export function broadcastHospitalCapabilitiesUpdated(payload: {
   io.emit('hospital:capabilities_updated', payload);
   io.to(payload.hospital_id).emit('hospital:capabilities_updated', payload);
   console.log(`[Socket.io] Emitted hospital:capabilities_updated for ${payload.hospital_id}`);
+}
+
+export function broadcastGridlockDetected(payload: {
+  incident_id: string;
+  ambulance_id: string;
+  stationary_seconds: number;
+  stagnation_severity_index: number;
+  latitude: number;
+  longitude: number;
+}): void {
+  if (!io) return;
+  io.emit('ambulance:gridlock_detected', payload);
+  console.log('[Socket.io] Emitted ambulance:gridlock_detected for Incident #' + payload.incident_id);
+}
+
+export function broadcastIncidentReassigned(payload: {
+  incident_id: string;
+  previous_ambulance_id: string;
+  new_ambulance: {
+    id: string;
+    plate: string;
+    driver_name: string;
+    driver_phone: string;
+    origin_station: string;
+  };
+  time_saved_minutes: number;
+  reason: string;
+}): void {
+  if (!io) return;
+  io.emit('incident:reassigned', payload);
+  console.log('[Socket.io] Emitted incident:reassigned for Incident #' + payload.incident_id);
 }

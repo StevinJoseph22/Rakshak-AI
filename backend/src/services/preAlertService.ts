@@ -81,7 +81,7 @@ export function clearAllSilentPromotions(): void {
  */
 export async function promoteSuspectedIncident(
   incidentId: string,
-  reason: 'USER_CONFIRMED' | 'COUNTDOWN_EXPIRED' | 'SILENT_WATCHDOG_TIMEOUT' = 'USER_CONFIRMED',
+  reason: 'USER_CONFIRMED' | 'COUNTDOWN_EXPIRED' | 'SILENT_WATCHDOG_TIMEOUT' | 'CONCURRENT_CONFIRM' = 'USER_CONFIRMED',
 ): Promise<{ incident: Incident; matchedHospitals: Hospital[] } | null> {
   cancelSilentPromotion(incidentId);
 

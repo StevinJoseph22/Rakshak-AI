@@ -212,6 +212,125 @@ In enterprise software terminology, an ERP integrates core operational processes
 
 ---
 
+### 12. Immediate Zero-Delay Auto-Escalation & 87-Hospital Spatial Registry
+* **Zero-Delay Dynamic Geofence Expansion**:
+  * In standard urban crashes, trauma matching initiates within a strict **8km geofence** to guarantee the shortest transit time.
+  * **Immediate Fallback**: If an accident occurs in peri-urban, industrial, or rural highway stretches where **0 accredited trauma centers exist within 8km**, the triage engine **skips the 45-second waiting interval entirely**. It immediately and synchronously escalates the search perimeter to **20km**, and if still zero, expands to the **50km metropolitan trauma registry**.
+  * The incident status is instantly promoted to `'escalated'` with `effectiveSearchRadiusKm = 20/50`, ensuring outer-corridor casualty wards receive incoming trauma alerts with zero loss of golden-hour seconds.
+* **Comprehensive 87-Hospital High-Speed Registry**:
+  * Fully seeded and verified across PostgreSQL PostGIS spatial tables, React web consoles, and Flutter offline directory services.
+  * Covers Central Bengaluru, North (Hebbal/Yelahanka), South (Jayanagar/Bannerghatta/Kanakapura), East (Whitefield/Koramangala/HSR), West (Rajajinagar/Yeshwanthpur/Peenya), and major arterial corridors:
+    * **NH-48 Corridor**: Nelamangala & Tumkur Road.
+    * **NH-75 Corridor**: Hosakote & Old Madras Road.
+    * **NH-275 Expressway**: Kengeri, Bidadi Industrial Hub & Ramanagara.
+    * **Alliance University / Chandapura / Anekal / Hosur Corridor**:
+      1. *Athreya Hospital, Chandapura* (Level-2 Multispeciality & Trauma)
+      2. *Sri Sai Hospital, Chandapura-Anekal Road* (Direct Campus Gate Trauma Station)
+      3. *General Hospital Anekal* (Taluk Civil Trauma & Casualty Station)
+      4. *Kauvery Hospital, Hosur* (Level-1 NH-44 Highway Apex Trauma Center)
+      5. *Gunam Super Speciality Hospital, Hosur* (Tertiary Trauma & Acute Surgical Hub)
+      6. *Government District Headquarters Hospital, Hosur* (District Apex Casualty Resuscitation)
+
+---
+
+### 13. 10-Second High-Intensity Crash Siren & Heavy Vibration (DND / Silent / Vibrate Override)
+* **Life-Critical Audio Architecture (`EmergencySirenService` & `MainActivity.kt`)**:
+  * Following a verified impact trigger, the victim's smartphone enters a 10-second countdown alert.
+  * **Do Not Disturb & Silent Mode Piercing**: Audio playback is marshaled natively via Android's `AudioManager.STREAM_ALARM` with `AudioAttributes.FLAG_AUDIBILITY_ENFORCED` and `AudioAttributes.USAGE_ALARM`. Under core Android OS specifications, alarms are deliberately immune to the physical mute switch, vibrate mode, or active Do Not Disturb (DND) profiles.
+  * **Synthesized High-Intensity Dual-Tone Siren**: An on-device `AudioTrack` synthesizes a frequency-modulated 44.1kHz emergency wail sweeping from $750\text{ Hz}$ to $1350\text{ Hz}$ at 100% volume, requiring no external media assets or cellular bandwidth.
+  * **Heavy Continuous Waveform Haptics**: Native `Vibrator` executes an aggressive pulsed waveform (`[0, 450, 100, 450, 100, 800]`) tagged with `USAGE_ALARM` to ensure the device vibrates violently even in locked pockets or glove compartments.
+  * Automatically silenced when the user confirms safety, taps SOS, or when auto-dispatch triggers.
+
+---
+
+### 14. 45-Second Paramedic Ambulance Dispatch Siren Alarm
+* **Urgent EMT Attention Protocol**:
+  * When an ambulance pilot is on duty (`AVAILABLE` shift status) and an active emergency case (`broadcasting` or `escalated`) enters the 25km dispatch radar, the pilot app sounds a continuous **45-second high-urgency siren alarm** accompanied by heavy haptics.
+  * Ensures paramedics are instantly alerted even if the tablet is mounted, dimmed, or placed in noisy vehicular environments.
+  * Immediately silences the moment the pilot taps **"CLAIM / RESPOND TO MISSION"** or accepts the case.
+
+---
+
+### 15. Dynamic Deadlock & Gridlock Re-Dispatch Arbiter (`dispatchArbiterService.ts`)
+* **Real-Time Traffic Deadlock Detection**:
+  * If a responding ambulance that claimed an incident becomes trapped in dense gridlock (moving at $<5\text{ km/h}$ for $>60\text{ seconds}$), the background arbiter evaluates the live situation.
+* **Automated Secondary Ambulance Handover**:
+  * The system polls real-time telemetry from all active fleet units. If another available ambulance can reach the victim $\ge 4\text{ minutes}$ faster than the gridlocked unit, the arbiter:
+    1. Reassigns the primary mission to the faster ambulance.
+    2. Sends a push notification and HUD update to the gridlocked ambulance instructing them to stand down.
+    3. Broadcasts the updated ambulance callsign and live ETA to the hospital trauma bay.
+    4. Transmits an automated SMS update to the victim's family with the new ambulance details.
+
+---
+
+### 16. Police Case Docket ID & Automated Emergency SMS Pipeline
+* **Instant BTP Case Docket Number Generation (`policeJurisdictionService.ts`)**:
+  * Upon crash detection, the system assigns a verified police docket reference (e.g. `BTP-CRASH-2026-68192`) tied to the jurisdictional traffic police station (e.g., *Madiwala Traffic Police Station*).
+* **Automated Emergency Contact SMS Dispatch**:
+  * Directly sends a single-part GSM SMS over Android native `SmsManager` to the victim's emergency contacts:
+    ```text
+    [RAKSHAK-AI POLICE DOCKET]
+    Case Ref: #BTP-CRASH-2026-68192
+    Station: Madiwala Traffic Police Station
+    IO: Insp. Raghavendra Rao (+91 94808 02100)
+    Victim: Stevin Joseph (KA-01-EA-108)
+    Admitted: Manipal Hospital HAL
+    Status: FIR Recorded. Trauma bay staging active.
+    ```
+  * Gives family members an official reference ID for legal, medical, and insurance claims with zero manual coordination.
+
+---
+
+### 17. Edge Computing 30-Second Pre-Crash Telemetry Blackbox (`PreCrashBlackboxService`)
+* **Rolling Circular Telemetry Buffer**:
+  * High-frequency on-device circular buffer continuously logging the final **30 seconds** of vehicular dynamics at $10\text{ Hz}$ (300 data points).
+* **Pre-Crash Kinematic Profiling**:
+  * Logs speed (km/h), longitudinal deceleration (G), lateral swerve G, and brake application.
+  * Computes reckless driving scores, hard braking onset, high-speed impact velocity, and swerve trajectories prior to impact.
+* **Police Investigation Dossier**:
+  * Telemetry is packaged and transmitted alongside the incident payload, rendering an interactive **Pre-Crash Kinematic Chart** on the Police Command Console for forensic accident reconstruction.
+
+---
+
+### 18. Admin Portal Hospital Directory, Facilities & Master Credentials Vault
+* **Complete Hospital Visibility (`/admin`)**:
+  * Built-in administrative console rendering a full searchable registry of all **87 verified hospitals**.
+  * Displays hospital name, zone, address, 24/7 hotline, latitude/longitude, trauma tier level, ICU capacity, CT/MRI operational status, blood bank type, and pre-configured staff login credentials (`username` / `hospital123`).
+  * Enables system auditors and hackathon evaluators to log into any hospital console instantly without database inspection.
+
+---
+
+### 19. Real-Time 50Hz Mobile Telemetry & Shake Blackbox (`TelemetryLiveView.tsx`)
+* **Continuous Edge Telemetry Streaming**:
+  * As soon as the Rakshak-AI app opens on a device, the background blackbox (`LiveTelemetryStreamService`) continuously captures and processes 50Hz tri-axial accelerations ($A_x, A_y, A_z$), gyroscopic angular rates, and GPS velocities.
+* **On-Device Motion & Shake Event Classifier**:
+  * Evaluates instantaneous acceleration variance and frequency alternations.
+  * When a user vigorously shakes the phone, the system instantly logs a **`PHONE_SHAKE`** action (e.g., `3.25G Peak`), flashes the on-device Detection Lab, and streams the packet over Socket.io to the web dashboard with sub-second latency!
+  * Also captures and records:
+    * `APP_LAUNCH`
+    * `STATIONARY / IDLE`
+    * `GENTLE HANDLING`
+    * `SMOOTH VEHICLE TRAVEL`
+    * `POTHOLE / ROAD IMPULSE`
+    * `HARSH BRAKING`
+    * `CRASH IMPACT SPIKE (>= 4.8G)`
+* **Web Dashboard Live Oscilloscope Console (`/telemetry`)**:
+  * Features an interactive high-frequency canvas oscilloscope plotting live G-force waves against the 1.0G Earth gravity baseline and the 4.8G impact threshold.
+  * Real-time digital speedometers, tri-axial vector chips, and an audit table logging every single action taken since app startup.
+  * Includes one-click **"Export Blackbox CSV"** for evaluators and judges.
+
+---
+
+### 20. Global Cloud Relay & Multi-Network Auto-Bridge (`start_public_tunnel.bat`)
+* **Any-Network Cellular & Wi-Fi Compatibility**:
+  * Enables physical phones running on separate cellular data networks (Jio / Airtel 4G/5G) or external Wi-Fi to communicate seamlessly with the dashboard.
+* **One-Click Public Relay (`start_public_tunnel.bat`)**:
+  * Automatically spins up a public tunnel (via localtunnel or Cloudflare Quick Tunnels) routing traffic directly to the local backend.
+* **Interactive In-App Relay Hub (`BackendRelayDialog`)**:
+  * Citizen app features a dedicated connection icon in the AppBar allowing 1-tap pasting of public relay URLs or auto-detecting the fastest available server candidate.
+
+---
+
 ## 🛰️ Hardware Devices Structure & IoT Architecture
 
 > For complete wiring schematics, pinout diagrams, and SNMP OID specifications, see **[HARDWARE_ARCHITECTURE.md](docs/HARDWARE_ARCHITECTURE.md)** and **[architecture.md](docs/architecture.md)**.

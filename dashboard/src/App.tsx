@@ -4,6 +4,7 @@ import { Navbar } from './components/Navbar';
 import { HospitalView } from './views/HospitalView';
 import { PoliceView } from './views/PoliceView';
 import { AdminView } from './views/AdminView';
+import { TelemetryLiveView } from './views/TelemetryLiveView';
 import { DemoModeLiveDrawer } from './components/DemoModeLiveDrawer';
 import { getSocket } from './services/socket';
 import { ConnectionStatus } from './types';
@@ -60,6 +61,7 @@ export const App: React.FC = () => {
             <Route path="/" element={<Navigate to="/hospital" replace />} />
             <Route path="/hospital" element={<HospitalView />} />
             <Route path="/police" element={<PoliceView />} />
+            <Route path="/telemetry" element={<TelemetryLiveView />} />
             <Route path="/admin" element={<AdminView />} />
             <Route path="*" element={<Navigate to="/hospital" replace />} />
           </Routes>

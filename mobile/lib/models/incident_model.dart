@@ -77,6 +77,12 @@ class IncidentDetail {
   final Map<String, dynamic>? victimMetadata;
   final double latitude;
   final double longitude;
+  final String? caseNumber;
+  final String? policeStationName;
+  final String? policeOfficerName;
+  final String? policeOfficerPhone;
+  final bool? gridlockDetected;
+  final String? reassignedFromAmbulanceId;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -87,6 +93,12 @@ class IncidentDetail {
     this.victimMetadata,
     required this.latitude,
     required this.longitude,
+    this.caseNumber,
+    this.policeStationName,
+    this.policeOfficerName,
+    this.policeOfficerPhone,
+    this.gridlockDetected,
+    this.reassignedFromAmbulanceId,
     this.createdAt,
     this.updatedAt,
   });
@@ -101,6 +113,12 @@ class IncidentDetail {
           : null,
       latitude: _parseDouble(json['latitude']),
       longitude: _parseDouble(json['longitude']),
+      caseNumber: json['case_number'] as String?,
+      policeStationName: json['police_station_name'] as String?,
+      policeOfficerName: json['police_officer_name'] as String?,
+      policeOfficerPhone: json['police_officer_phone'] as String?,
+      gridlockDetected: json['gridlock_detected'] as bool?,
+      reassignedFromAmbulanceId: json['reassigned_from_ambulance_id'] as String?,
       createdAt: json['created_at'] != null
           ? DateTime.tryParse(json['created_at'].toString())
           : null,
@@ -118,6 +136,12 @@ class IncidentDetail {
       'victim_metadata': victimMetadata,
       'latitude': latitude,
       'longitude': longitude,
+      'case_number': caseNumber,
+      'police_station_name': policeStationName,
+      'police_officer_name': policeOfficerName,
+      'police_officer_phone': policeOfficerPhone,
+      'gridlock_detected': gridlockDetected,
+      'reassigned_from_ambulance_id': reassignedFromAmbulanceId,
       'created_at': createdAt?.toIso8601String(),
       'updated_at': updatedAt?.toIso8601String(),
     };

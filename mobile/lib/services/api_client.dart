@@ -56,6 +56,7 @@ class ApiClient {
     String? status,
     Map<String, dynamic>? victimMetadata,
     Map<String, dynamic>? healthCard,
+    List<Map<String, dynamic>>? preCrashTelemetry,
     Duration timeout = const Duration(milliseconds: 8000),
   }) async {
     final payload = {
@@ -65,6 +66,7 @@ class ApiClient {
       if (status != null) 'status': status,
       if (victimMetadata != null) 'victim_metadata': victimMetadata,
       if (healthCard != null) 'health_card': healthCard,
+      if (preCrashTelemetry != null) 'pre_crash_telemetry': preCrashTelemetry,
     };
 
     final candidates = getBackendCandidates(baseUrl);
@@ -295,5 +297,27 @@ class ApiClient {
   void dispose() {
     _httpClient.close();
   }
-}
 
+  /// Generic POST helper for sending commands (e.g. /incidents/:id/gridlock)
+  Future<dynamic> post(String endpoint, {Map<String, dynamic>? data}) async {
+    final candidates = getBackendCandidates(baseUrl);
+    for (final candidate in candidates) {
+      final cleanEndpoint = endpoint.startsWith('/') ? endpoint : '/$endpoint';
+      final uri = Uri.parse('$candidate$cleanEndpoint');
+      try {
+        final res = await _httpClient.post(
+          uri,
+          headers: {'Content-Type': 'application/json'},
+          body: data != null ? jsonEncode(data) : null,
+        ).timeout(const Duration(seconds: 5));
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          return jsonDecode(res.body);
+        }
+      } catch (_) {
+        continue;
+      }
+    }
+    return null;
+  }
+
+}

@@ -335,7 +335,15 @@ export async function performEscalation(
   }
 
   // Broadcast escalation via Socket.io globally with full hospital network
-  broadcastIncidentEscalated(incident, matchedHospitals, radiusDescription, allMatchedHospitals);
+  const updatedIncident = {
+    ...incident,
+    status: 'escalated' as const,
+    victim_metadata: {
+      ...(incident.victim_metadata || {}),
+      search_radius: radiusDescription,
+    },
+  };
+  broadcastIncidentEscalated(updatedIncident, matchedHospitals, radiusDescription, allMatchedHospitals);
 
   // If this was Stage 1, schedule Stage 2 auto-escalation in case newly matched hospitals also timeout/reject
   if (stage === 1) {
@@ -347,3 +355,57 @@ export async function performEscalation(
 
   return { success: true, stage, newHospitalsCount: matchedHospitals.length };
 }
+
+/**
+ * Automatically catches up and escalates any broadcasting incidents that have exceeded 45 seconds.
+ * Guaranteed to run across server restarts, nodemon/tsx reloads, and container lifecycles.
+ */
+export async function catchUpOverdueEscalations(): Promise<number> {
+  try {
+    const overdueRes = await query<{ id: string; age_sec: string }>(
+      `SELECT id, ROUND(EXTRACT(EPOCH FROM (NOW() - created_at)))::text AS age_sec
+       FROM incidents 
+       WHERE status = 'broadcasting' 
+         AND created_at <= NOW() - INTERVAL '45 seconds'
+       ORDER BY created_at ASC
+       LIMIT 10;`
+    );
+
+    for (const row of overdueRes.rows) {
+      console.log(
+        `[Auto-Escalation Catchup] Escalating overdue incident ${row.id} (broadcasting for ${row.age_sec}s)...`
+      );
+      await performEscalation(row.id, 1);
+    }
+    return overdueRes.rowCount || 0;
+  } catch (err) {
+    // Non-fatal if DB not yet connected or during startup migrations
+    return 0;
+  }
+}
+
+let watchdogInterval: NodeJS.Timeout | null = null;
+
+/**
+ * Starts resilient background watchdog that verifies every 5 seconds that no incident remains
+ * unescalated past the 45-second threshold.
+ */
+export function startEscalationWatchdog(): void {
+  if (watchdogInterval) return;
+
+  // Run initial check after short 2s warmup to allow DB pools to initialize
+  setTimeout(() => {
+    catchUpOverdueEscalations().catch(() => {});
+  }, 2000);
+
+  // Sweeper every 5 seconds
+  watchdogInterval = setInterval(() => {
+    catchUpOverdueEscalations().catch(() => {});
+  }, 5000);
+
+  if (watchdogInterval.unref) {
+    watchdogInterval.unref();
+  }
+  console.log('[Auto-Escalation Watchdog] Background heartbeat watchdog started (5s check interval).');
+}
+

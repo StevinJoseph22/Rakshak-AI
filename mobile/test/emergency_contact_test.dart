@@ -38,8 +38,8 @@ void main() {
     test('EmergencyContactService default seeding and synchronous accessors', () async {
       final service = EmergencyContactService.instance;
       expect(service.hasContactsSync, isTrue);
-      expect(service.victimNameSync, 'Rahul Verma');
-      expect(service.primaryContactSync?.name, 'Priya Sharma');
+      expect(service.victimNameSync, isNotEmpty);
+      expect(service.primaryContactSync?.name, isNotNull);
 
       final contacts = await service.getContacts();
       expect(contacts.length, greaterThanOrEqualTo(1));

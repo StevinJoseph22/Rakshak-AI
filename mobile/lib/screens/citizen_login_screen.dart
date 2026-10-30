@@ -3,10 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/emergency_contact_model.dart';
 import '../services/citizen_auth_service.dart';
+import '../services/google_auth_service.dart';
 import '../services/emergency_contact_service.dart';
 import '../services/health_card_storage_service.dart';
 import '../services/user_profile_service.dart';
 import '../config/backend_config.dart';
+import 'india_emergency_directory_screen.dart';
 
 /// Professional, Multi-Step Citizen Onboarding & Registration Wizard
 /// Features:
@@ -50,7 +52,7 @@ class _CitizenLoginScreenState extends State<CitizenLoginScreen> {
   final List<FocusNode> _pinFocusNodes = List.generate(6, (_) => FocusNode());
   bool _isOtpSent = false;
   bool _isPhoneVerified = false;
-  String _latestOtp = '742918';
+  String _latestOtp = '';
   int _resendCountdown = 30;
   Timer? _countdownTimer;
   bool _isSendingOtp = false;
@@ -109,15 +111,15 @@ class _CitizenLoginScreenState extends State<CitizenLoginScreen> {
     final p = UserProfileService.instance.profile;
 
     _nameController = TextEditingController(text: p.userName);
-    _googleEmail = p.userEmail.isNotEmpty ? p.userEmail : 'stevinjoseph@gmail.com';
-    _isGoogleAuthenticated = p.authMethod == 'GOOGLE' || p.isRegistered;
+    _googleEmail = p.userEmail;
+    _isGoogleAuthenticated = p.authMethod == 'GOOGLE' && p.isRegistered;
 
-    _emailController = TextEditingController(text: p.userEmail.isNotEmpty ? p.userEmail : 'stevinjoseph@gmail.com');
-    _passwordController = TextEditingController(text: 'Rakshak@2026');
-    _confirmPasswordController = TextEditingController(text: 'Rakshak@2026');
+    _emailController = TextEditingController(text: p.userEmail);
+    _passwordController = TextEditingController();
+    _confirmPasswordController = TextEditingController();
 
     _phoneController = TextEditingController(text: p.phone.replaceAll('+91', '').trim());
-    _isPhoneVerified = p.isPhoneVerified || p.isRegistered;
+    _isPhoneVerified = p.isPhoneVerified && p.isRegistered;
 
     _contact1NameController = TextEditingController(text: p.emergencyContactName);
     _contact1PhoneController = TextEditingController(text: p.emergencyContactPhone.replaceAll('+91', '').trim());
@@ -125,8 +127,8 @@ class _CitizenLoginScreenState extends State<CitizenLoginScreen> {
       _contact1Relation = p.emergencyContactRelation;
     }
 
-    _contact2NameController = TextEditingController(text: p.secondaryContactName.isNotEmpty ? p.secondaryContactName : 'Rajesh Joseph');
-    _contact2PhoneController = TextEditingController(text: p.secondaryContactPhone.replaceAll('+91', '').trim().isNotEmpty ? p.secondaryContactPhone.replaceAll('+91', '').trim() : '9845012345');
+    _contact2NameController = TextEditingController(text: p.secondaryContactName);
+    _contact2PhoneController = TextEditingController(text: p.secondaryContactPhone.replaceAll('+91', '').trim());
     if (_relationships.contains(p.secondaryContactRelation)) {
       _contact2Relation = p.secondaryContactRelation;
     }
@@ -177,148 +179,249 @@ class _CitizenLoginScreenState extends State<CitizenLoginScreen> {
     super.dispose();
   }
 
-  // --- Step 1: Real Google Account Picker ---
-  void _openGoogleAccountPicker() {
+  // --- Step 1: Real-Time Native Google OAuth ---
+  bool _isGoogleSigningIn = false;
+
+  /// Triggers the native Google Account Picker on Android/iOS via google_sign_in
+  /// and sends the verified idToken to the Flask/Node backend in real-time.
+  Future<void> _triggerNativeGoogleSignIn() async {
     HapticFeedback.mediumImpact();
-    final customGoogleEmailController = TextEditingController();
+    setState(() => _isGoogleSigningIn = true);
+
+    try {
+      final result = await GoogleAuthService.instance.signInWithGoogle();
+
+      if (result.isCancelled) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Google Sign-In cancelled.'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+        return;
+      }
+
+      if (result.isConfigError) {
+        if (mounted) {
+          _showGoogleConfigAssistantDialog(result.errorMessage ?? 'Google Developer Configuration Required');
+        }
+        return;
+      }
+
+      if (!result.isSuccess || result.email == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(result.errorMessage ?? 'Google authentication failed.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
+
+      setState(() {
+        _isGoogleAuthenticated = true;
+        _googleEmail = result.email!;
+        _nameController.text = result.fullName ?? result.email!.split('@')[0];
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('✓ Verified Google Account: ${result.email}'),
+            backgroundColor: const Color(0xFF16A34A),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Google Sign-In error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isGoogleSigningIn = false);
+      }
+    }
+  }
+
+  void _showGoogleConfigAssistantDialog(String explanation) {
+    final emailCtrl = TextEditingController(text: _googleEmail.isNotEmpty ? _googleEmail : '');
+    final nameCtrl = TextEditingController(text: _nameController.text.isNotEmpty ? _nameController.text : '');
+    bool isSubmitting = false;
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.white,
+      backgroundColor: const Color(0xFF0F172A),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (ctx) => SafeArea(
-        child: Padding(
-          padding: EdgeInsets.only(
-            left: 20,
-            right: 20,
-            top: 18,
-            bottom: MediaQuery.of(ctx).viewInsets.bottom + 18,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Image.network(
-                    'https://www.gstatic.com/images/branding/product/2x/googleg_48dp.png',
-                    width: 26,
-                    height: 26,
-                    errorBuilder: (_, __, ___) => const Icon(Icons.g_mobiledata, size: 28, color: Colors.blue),
-                  ),
-                  const SizedBox(width: 10),
-                  const Text(
-                    'Sign in with Google',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 6),
-              const Text(
-                'Select a Google account to verify your identity and bind with Rakshak-AI Life-Guard.',
-                style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
-              ),
-              const Divider(height: 24),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const CircleAvatar(
-                  backgroundColor: Color(0xFFDC2626),
-                  child: Text('SJ', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                ),
-                title: const Text('Stevin Joseph', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                subtitle: const Text('stevinjoseph@gmail.com', style: TextStyle(fontSize: 12, color: Color(0xFF64748B))),
-                trailing: const Icon(Icons.check_circle, color: Color(0xFF16A34A), size: 20),
-                onTap: () async {
-                  Navigator.pop(ctx);
-                  await _selectGoogleAccount('Stevin Joseph', 'stevinjoseph@gmail.com');
-                },
-              ),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const CircleAvatar(
-                  backgroundColor: Color(0xFF0284C7),
-                  child: const Text('JE', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                ),
-                title: const Text('Stevin Joseph (College)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                subtitle: const Text('stevin.btech21@jecc.ac.in', style: TextStyle(fontSize: 12, color: Color(0xFF64748B))),
-                onTap: () async {
-                  Navigator.pop(ctx);
-                  await _selectGoogleAccount('Stevin Joseph', 'stevin.btech21@jecc.ac.in');
-                },
-              ),
-              const Divider(height: 18),
-              // Use another Google account
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const CircleAvatar(
-                  backgroundColor: Color(0xFFF1F5F9),
-                  child: Icon(Icons.person_add_alt_1, color: Color(0xFF334155), size: 20),
-                ),
-                title: const Text('Use another Google Account', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5)),
-                subtitle: const Text('Enter any Google Workspace or personal Gmail', style: TextStyle(fontSize: 11.5, color: Color(0xFF64748B))),
-                onTap: () {
-                  showDialog(
-                    context: ctx,
-                    builder: (dCtx) => AlertDialog(
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                      title: const Text('Enter Google Account Email', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                      content: TextField(
-                        controller: customGoogleEmailController,
-                        keyboardType: TextInputType.emailAddress,
-                        decoration: InputDecoration(
-                          hintText: 'e.g. yourname@gmail.com',
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                          prefixIcon: const Icon(Icons.email_outlined),
-                        ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setModalState) => SafeArea(
+          child: Padding(
+            padding: EdgeInsets.only(
+              left: 20,
+              right: 20,
+              top: 20,
+              bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF59E0B).withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(10),
                       ),
-                      actions: [
-                        TextButton(onPressed: () => Navigator.pop(dCtx), child: const Text('Cancel')),
-                        ElevatedButton(
-                          onPressed: () async {
-                            final email = customGoogleEmailController.text.trim();
-                            if (email.contains('@')) {
-                              Navigator.pop(dCtx);
+                      child: const Icon(Icons.build_circle, color: Color(0xFFF59E0B), size: 24),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: const [
+                          Text(
+                            'Google Play Services (ApiException 10)',
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white),
+                          ),
+                          SizedBox(height: 2),
+                          Text(
+                            'SHA-1 Key Registration in Progress',
+                            style: TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1E293B),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFF334155)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: const [
+                      Text(
+                        '💡 Why did this happen?',
+                        style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF38BDF8), fontSize: 12),
+                      ),
+                      SizedBox(height: 4),
+                      Text(
+                        'Google Play Services returned ApiException 10 because package "com.rakshak.mobile" requires its debug SHA-1 fingerprint added to Google Cloud Console.',
+                        style: TextStyle(color: Color(0xFFCBD5E1), fontSize: 11.5, height: 1.4),
+                      ),
+                      SizedBox(height: 6),
+                      Text(
+                        'Enter your Google account below to authenticate with the backend and proceed without interruption:',
+                        style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: emailCtrl,
+                  style: const TextStyle(color: Colors.white, fontSize: 14),
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: InputDecoration(
+                    labelText: 'Google Account Email',
+                    labelStyle: const TextStyle(color: Color(0xFF94A3B8)),
+                    hintText: 'e.g. yourname@gmail.com',
+                    hintStyle: const TextStyle(color: Color(0xFF64748B)),
+                    prefixIcon: const Icon(Icons.mail_outline, color: Color(0xFF38BDF8), size: 20),
+                    filled: true,
+                    fillColor: const Color(0xFF1E293B),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFF334155))),
+                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFF334155))),
+                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFF38BDF8))),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: nameCtrl,
+                  style: const TextStyle(color: Colors.white, fontSize: 14),
+                  decoration: InputDecoration(
+                    labelText: 'Full Display Name',
+                    labelStyle: const TextStyle(color: Color(0xFF94A3B8)),
+                    hintText: 'e.g. Your Full Name',
+                    hintStyle: const TextStyle(color: Color(0xFF64748B)),
+                    prefixIcon: const Icon(Icons.person_outline, color: Color(0xFF38BDF8), size: 20),
+                    filled: true,
+                    fillColor: const Color(0xFF1E293B),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFF334155))),
+                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFF334155))),
+                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFF38BDF8))),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: isSubmitting
+                        ? null
+                        : () async {
+                            final email = emailCtrl.text.trim();
+                            final name = nameCtrl.text.trim();
+                            if (!email.contains('@') || !email.contains('.')) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Please enter a valid Google email address'), backgroundColor: Colors.red),
+                              );
+                              return;
+                            }
+                            setModalState(() => isSubmitting = true);
+                            final directRes = await GoogleAuthService.instance.verifyGoogleEmailDirectly(
+                              email: email,
+                              fullName: name.isNotEmpty ? name : email.split('@')[0],
+                            );
+                            setModalState(() => isSubmitting = false);
+                            if (directRes.isSuccess) {
                               Navigator.pop(ctx);
-                              final parsedName = email.split('@')[0].replaceAll('.', ' ');
-                              await _selectGoogleAccount(parsedName, email);
+                              setState(() {
+                                _isGoogleAuthenticated = true;
+                                _googleEmail = directRes.email!;
+                                _nameController.text = directRes.fullName ?? email.split('@')[0];
+                              });
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('✓ Authenticated Google Account: ${directRes.email}'),
+                                    backgroundColor: const Color(0xFF16A34A),
+                                  ),
+                                );
+                              }
                             }
                           },
-                          child: const Text('Confirm'),
-                        ),
-                      ],
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF16A34A),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
-                  );
-                },
-              ),
-            ],
+                    child: isSubmitting
+                        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                        : const Text('Verify & Bind Google Account', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
     );
-  }
-
-  Future<void> _selectGoogleAccount(String name, String email) async {
-    setState(() {
-      _isGoogleAuthenticated = true;
-      _googleEmail = email;
-      _nameController.text = name;
-    });
-
-    // Call backend Google auth API
-    await CitizenAuthService.instance.authenticateGoogle(email: email, fullName: name);
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('✓ Authenticated with Google: $email'),
-          backgroundColor: const Color(0xFF16A34A),
-          duration: const Duration(seconds: 2),
-        ),
-      );
-    }
   }
 
   // --- Step 2: Real-Time OTP Dispatch via Backend ---
@@ -341,7 +444,7 @@ class _CitizenLoginScreenState extends State<CitizenLoginScreen> {
       _isSendingOtp = false;
       _isOtpSent = true;
       _resendCountdown = 30;
-      _latestOtp = result.otpPreview ?? '742918';
+      _latestOtp = result.otpPreview ?? '';
     });
 
     _countdownTimer?.cancel();
@@ -463,47 +566,7 @@ class _CitizenLoginScreenState extends State<CitizenLoginScreen> {
     }
   }
 
-  // --- Step 3: Pre-fill Demo Emergency Contacts ---
-  void _fillDemoEmergencyContacts() {
-    HapticFeedback.lightImpact();
-    setState(() {
-      _contact1NameController.text = 'Anjali Sharma';
-      _contact1PhoneController.text = '9876543211';
-      _contact1Relation = 'Spouse';
 
-      _contact2NameController.text = 'Rajesh Joseph';
-      _contact2PhoneController.text = '9845012345';
-      _contact2Relation = 'Parent';
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('✓ 2 Mandatory Emergency Contacts pre-filled'),
-        backgroundColor: Color(0xFF0284C7),
-        duration: Duration(seconds: 2),
-      ),
-    );
-  }
-
-  // --- Step 4: Pre-fill Demo ABHA Card ---
-  void _fillDemoAbhaCard() {
-    HapticFeedback.lightImpact();
-    setState(() {
-      _hasAbhaCard = true;
-      _abhaNumberController.text = '91-4829-1029-4821';
-      _abhaAddressController.text = 'stevin.joseph@abdm';
-      _selectedBloodGroup = 'O+ Positive';
-      _allergiesController.text = 'Penicillin Anaphylaxis, Sulfa Drugs';
-      _conditionsController.text = 'Asthma, Type 2 Diabetes';
-      _medicationsController.text = 'Salbutamol Inhaler, Metformin 500mg';
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('✓ Verified ABDM Sandbox ABHA Card loaded'),
-        backgroundColor: Color(0xFF0284C7),
-        duration: Duration(seconds: 2),
-      ),
-    );
-  }
 
   // --- Step Validation & Forward Navigation ---
   Future<void> _handleStepForward() async {
@@ -514,7 +577,7 @@ class _CitizenLoginScreenState extends State<CitizenLoginScreen> {
       if (_authTabIndex == 0) {
         // Google auth
         if (!_isGoogleAuthenticated) {
-          _openGoogleAccountPicker();
+          _triggerNativeGoogleSignIn();
           return;
         }
       } else {
@@ -641,7 +704,7 @@ class _CitizenLoginScreenState extends State<CitizenLoginScreen> {
     try {
       final name = _nameController.text.trim().isNotEmpty
           ? _nameController.text.trim()
-          : (_emailController.text.contains('@') ? _emailController.text.split('@')[0] : 'Stevin Joseph');
+          : (_emailController.text.contains('@') ? _emailController.text.split('@')[0] : 'Citizen User');
 
       final email = _authTabIndex == 0 ? _googleEmail : _emailController.text.trim().toLowerCase();
       final rawPhone = _phoneController.text.trim().replaceAll(RegExp(r'\D'), '');
@@ -758,6 +821,15 @@ class _CitizenLoginScreenState extends State<CitizenLoginScreen> {
           style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.phone_in_talk_rounded, color: Color(0xFFEF4444)),
+            tooltip: 'India Emergency Helplines (112, 108, Police)',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const IndiaEmergencyDirectoryScreen()),
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.wifi_tethering, color: Color(0xFF38BDF8)),
             tooltip: 'Server Gateway Settings',
@@ -944,7 +1016,52 @@ class _CitizenLoginScreenState extends State<CitizenLoginScreen> {
             ],
           ),
         ),
-        const SizedBox(height: 18),
+        const SizedBox(height: 12),
+
+        // Emergency Quick Call Banner
+        InkWell(
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const IndiaEmergencyDirectoryScreen()),
+            );
+          },
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: const Color(0xFFDC2626).withOpacity(0.12),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFDC2626).withOpacity(0.4)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.emergency_rounded, color: Color(0xFFEF4444), size: 20),
+                const SizedBox(width: 10),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'In an Emergency? Call 112 / Emergency Numbers',
+                        style: TextStyle(
+                          color: Color(0xFFFCA5A5),
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
+                      ),
+                      Text(
+                        'Direct 1-tap toll-free calling for Ambulance, Police, Highway, Women',
+                        style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10),
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.arrow_forward_ios, color: Color(0xFFFCA5A5), size: 12),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 14),
 
         // Segmented Switcher: Google vs Email & Password
         Container(
@@ -1010,9 +1127,9 @@ class _CitizenLoginScreenState extends State<CitizenLoginScreen> {
         const SizedBox(height: 18),
 
         if (_authTabIndex == 0) ...[
-          // Google Sign-In View
+          // Google Sign-In View (Native Real-Time Google OAuth)
           ElevatedButton(
-            onPressed: _openGoogleAccountPicker,
+            onPressed: _isGoogleSigningIn ? null : _triggerNativeGoogleSignIn,
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.white,
               foregroundColor: const Color(0xFF0F172A),
@@ -1023,15 +1140,26 @@ class _CitizenLoginScreenState extends State<CitizenLoginScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Image.network(
-                  'https://www.gstatic.com/images/branding/product/2x/googleg_48dp.png',
-                  width: 22,
-                  height: 22,
-                  errorBuilder: (_, __, ___) => const Icon(Icons.g_mobiledata, size: 24, color: Colors.blue),
-                ),
+                if (_isGoogleSigningIn)
+                  const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF0F172A)),
+                  )
+                else
+                  Image.network(
+                    'https://www.gstatic.com/images/branding/product/2x/googleg_48dp.png',
+                    width: 22,
+                    height: 22,
+                    errorBuilder: (_, __, ___) => const Icon(Icons.g_mobiledata, size: 24, color: Colors.blue),
+                  ),
                 const SizedBox(width: 10),
                 Text(
-                  _isGoogleAuthenticated ? 'Switch Google Account' : 'Continue with Google',
+                  _isGoogleSigningIn
+                      ? 'Signing in with Google...'
+                      : _isGoogleAuthenticated
+                          ? 'Switch Google Account'
+                          : 'Continue with Google',
                   style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
                 ),
               ],
@@ -1081,7 +1209,7 @@ class _CitizenLoginScreenState extends State<CitizenLoginScreen> {
           _buildTextField(
             controller: _nameController,
             label: 'Full Name',
-            hint: 'e.g. Stevin Joseph',
+            hint: 'e.g. John Doe',
             prefixIcon: Icons.badge,
           ),
         ] else ...[
@@ -1108,7 +1236,7 @@ class _CitizenLoginScreenState extends State<CitizenLoginScreen> {
             _buildTextField(
               controller: _nameController,
               label: 'Full Name',
-              hint: 'e.g. Stevin Joseph',
+              hint: 'e.g. John Doe',
               prefixIcon: Icons.person,
             ),
             const SizedBox(height: 12),
@@ -1117,7 +1245,7 @@ class _CitizenLoginScreenState extends State<CitizenLoginScreen> {
           _buildTextField(
             controller: _emailController,
             label: 'Email Address',
-            hint: 'e.g. stevinjoseph@gmail.com',
+            hint: 'e.g. user@gmail.com',
             keyboardType: TextInputType.emailAddress,
             prefixIcon: Icons.alternate_email,
           ),
@@ -1350,18 +1478,7 @@ class _CitizenLoginScreenState extends State<CitizenLoginScreen> {
                 'Rakshak-AI requires at least 2 emergency contacts. Both contacts will receive high-G crash telemetry, real-time GPS map links, and hospital triage statuses.',
                 style: TextStyle(fontSize: 12, color: Color(0xFF94A3B8), height: 1.4),
               ),
-              const SizedBox(height: 10),
-              ElevatedButton.icon(
-                onPressed: _fillDemoEmergencyContacts,
-                icon: const Icon(Icons.bolt, size: 16),
-                label: const Text('⚡ Auto-Fill 2 Verified Contacts', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF0284C7),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                ),
-              ),
+
             ],
           ),
         ),
@@ -1467,7 +1584,7 @@ class _CitizenLoginScreenState extends State<CitizenLoginScreen> {
           _buildTextField(
             controller: nameController,
             label: 'Contact Name',
-            hint: number == 1 ? 'e.g. Anjali Sharma' : 'e.g. Rajesh Joseph',
+            hint: number == 1 ? 'e.g. Primary Contact Name' : 'e.g. Secondary Contact Name',
             prefixIcon: Icons.person,
           ),
           const SizedBox(height: 10),
@@ -1572,18 +1689,7 @@ class _CitizenLoginScreenState extends State<CitizenLoginScreen> {
         const SizedBox(height: 16),
 
         if (_hasAbhaCard) ...[
-          ElevatedButton.icon(
-            onPressed: _fillDemoAbhaCard,
-            icon: const Icon(Icons.bolt, size: 16),
-            label: const Text('⚡ Fill Demo ABHA Sandbox Card', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF0284C7),
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 10),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-          ),
-          const SizedBox(height: 16),
+
 
           _buildSectionHeader(Icons.badge, 'ABHA Credentials'),
           const SizedBox(height: 8),
@@ -1598,7 +1704,7 @@ class _CitizenLoginScreenState extends State<CitizenLoginScreen> {
           _buildTextField(
             controller: _abhaAddressController,
             label: 'ABHA Address (PHR Handle)',
-            hint: 'stevin.joseph@abdm',
+            hint: 'e.g. yourname@abdm',
             prefixIcon: Icons.alternate_email,
           ),
           const SizedBox(height: 10),

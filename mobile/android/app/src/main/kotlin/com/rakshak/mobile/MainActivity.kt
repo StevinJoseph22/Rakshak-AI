@@ -6,10 +6,19 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.AudioAttributes
+import android.media.AudioFormat
+import android.media.AudioManager
+import android.media.AudioTrack
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.os.PowerManager
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import android.provider.Settings
 import android.telephony.SmsManager
 import android.view.WindowManager
@@ -19,6 +28,7 @@ import androidx.core.content.ContextCompat
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import kotlin.math.sin
 
 class MainActivity : FlutterActivity() {
     companion object {
@@ -28,15 +38,26 @@ class MainActivity : FlutterActivity() {
 
     private val CHANNEL = "com.rakshak.mobile/lock_screen"
     private val SMS_CHANNEL = "com.rakshak.mobile/emergency_sms"
+    private val SIREN_CHANNEL = "com.rakshak.mobile/emergency_siren"
     private val EMERGENCY_CHANNEL_ID = "rakshak_emergency_sos"
+
+    private var sirenAudioTrack: AudioTrack? = null
+    private var sirenVibrator: Vibrator? = null
+    private var sirenStopRunnable: Runnable? = null
+    private val sirenHandler = Handler(Looper.getMainLooper())
+    private var sirenWakeLock: PowerManager.WakeLock? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         checkCrashIntent(intent)
         enableLockScreenFlags()
         createEmergencyNotificationChannel()
-        // Automatically start the 24/7 background sentinel service
-        RakshakCrashGuardService.startService(this)
+        // Safely start the 24/7 background sentinel service
+        try {
+            RakshakCrashGuardService.startService(this)
+        } catch (e: Exception) {
+            android.util.Log.w("MainActivity", "Failed to start crash guard service: ${e.message}")
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -233,6 +254,156 @@ class MainActivity : FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, SIREN_CHANNEL).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "startEmergencySiren" -> {
+                    val durationSeconds = call.argument<Int>("durationSeconds") ?: 10
+                    val isAmbulance = call.argument<Boolean>("isAmbulance") ?: false
+                    startEmergencySiren(durationSeconds, isAmbulance)
+                    result.success(true)
+                }
+                "stopEmergencySiren" -> {
+                    stopEmergencySiren()
+                    result.success(true)
+                }
+                else -> result.notImplemented()
+            }
+        }
+    }
+
+    private fun startEmergencySiren(durationSeconds: Int, isAmbulance: Boolean) {
+        stopEmergencySiren()
+
+        try {
+            // 1. Acquire WakeLock to keep screen & CPU active during alarm
+            val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+            sirenWakeLock = pm.newWakeLock(
+                PowerManager.SCREEN_BRIGHT_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP,
+                "rakshak:emergency_siren_alarm"
+            )
+            sirenWakeLock?.acquire((durationSeconds * 1000).toLong() + 2000L)
+        } catch (_: Exception) {}
+
+        try {
+            // 2. Audio: Set STREAM_ALARM to maximum volume
+            val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            val maxAlarmVol = audioManager.getStreamMaxVolume(AudioManager.STREAM_ALARM)
+            audioManager.setStreamVolume(AudioManager.STREAM_ALARM, maxAlarmVol, 0)
+
+            // 3. AudioTrack high-intensity emergency siren synthesis (bypasses silent/vibrate/DND via USAGE_ALARM)
+            val sampleRate = 44100
+            val cycleDuration = if (isAmbulance) 1.2 else 0.8 // Cycle period in seconds
+            val numSamples = (sampleRate * cycleDuration).toInt()
+            val buffer = ShortArray(numSamples)
+            var phase = 0.0
+
+            val minFreq = if (isAmbulance) 650.0 else 750.0
+            val maxFreq = if (isAmbulance) 1200.0 else 1350.0
+
+            for (i in 0 until numSamples) {
+                val progress = i.toDouble() / numSamples
+                val freq = if (progress < 0.5) {
+                    minFreq + (maxFreq - minFreq) * (progress * 2.0)
+                } else {
+                    maxFreq - (maxFreq - minFreq) * ((progress - 0.5) * 2.0)
+                }
+                phase += 2.0 * Math.PI * freq / sampleRate
+                val sample = (sin(phase) * 32767.0 * 0.98).toInt().toShort()
+                buffer[i] = sample
+            }
+
+            val audioAttributes = AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_ALARM)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                .setFlags(AudioAttributes.FLAG_AUDIBILITY_ENFORCED)
+                .build()
+
+            val audioFormat = AudioFormat.Builder()
+                .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                .setSampleRate(sampleRate)
+                .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                .build()
+
+            sirenAudioTrack = AudioTrack.Builder()
+                .setAudioAttributes(audioAttributes)
+                .setAudioFormat(audioFormat)
+                .setBufferSizeInBytes(buffer.size * 2)
+                .setTransferMode(AudioTrack.MODE_STATIC)
+                .build()
+
+            sirenAudioTrack?.write(buffer, 0, buffer.size)
+            sirenAudioTrack?.setLoopPoints(0, numSamples, -1) // -1 loops continuously
+            sirenAudioTrack?.play()
+        } catch (e: Exception) {
+            android.util.Log.e("RakshakSiren", "AudioTrack siren failed: ${e.message}", e)
+        }
+
+        try {
+            // 4. Heavy continuous haptic vibration that bypasses DND via USAGE_ALARM
+            val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val vm = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
+                vm.defaultVibrator
+            } else {
+                @Suppress("DEPRECATION")
+                getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+            }
+            sirenVibrator = vibrator
+
+            val pattern = longArrayOf(0, 450, 100, 450, 100, 800)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val effect = VibrationEffect.createWaveform(pattern, 0)
+                val alarmVibeAttrs = AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_ALARM)
+                    .build()
+                vibrator.vibrate(effect, alarmVibeAttrs)
+            } else {
+                @Suppress("DEPRECATION")
+                vibrator.vibrate(pattern, 0)
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("RakshakSiren", "Heavy vibration failed: ${e.message}", e)
+        }
+
+        // 5. Automatically stop when timer expires
+        val stopRunnable = Runnable {
+            stopEmergencySiren()
+        }
+        sirenStopRunnable = stopRunnable
+        sirenHandler.postDelayed(stopRunnable, (durationSeconds * 1000).toLong())
+    }
+
+    private fun stopEmergencySiren() {
+        sirenStopRunnable?.let {
+            sirenHandler.removeCallbacks(it)
+            sirenStopRunnable = null
+        }
+        try {
+            sirenAudioTrack?.let {
+                if (it.playState == AudioTrack.PLAYSTATE_PLAYING) {
+                    it.stop()
+                }
+                it.release()
+            }
+            sirenAudioTrack = null
+        } catch (_: Exception) {}
+
+        try {
+            sirenVibrator?.cancel()
+            sirenVibrator = null
+        } catch (_: Exception) {}
+
+        try {
+            if (sirenWakeLock?.isHeld == true) {
+                sirenWakeLock?.release()
+            }
+            sirenWakeLock = null
+        } catch (_: Exception) {}
+    }
+
+    override fun onDestroy() {
+        stopEmergencySiren()
+        super.onDestroy()
     }
 
     private fun createEmergencyNotificationChannel() {

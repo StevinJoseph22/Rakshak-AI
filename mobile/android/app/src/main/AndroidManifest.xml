@@ -7,6 +7,7 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <uses-permission android:name="android.permission.VIBRATE"/>
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
     <uses-permission android:name="android.permission.SEND_SMS"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION"/>
@@ -40,7 +41,7 @@
             android:name=".RakshakCrashGuardService"
             android:enabled="true"
             android:exported="false"
-            android:foregroundServiceType="dataSync|location"
+            android:foregroundServiceType="dataSync"
             android:stopWithTask="false" />
 
         <!-- Auto-launch Crash Sentinel on phone boot / restart -->
@@ -60,4 +61,16 @@
             android:name="flutterEmbedding"
             android:value="2" />
     </application>
+
+    <!-- Queries required for url_launcher on Android 11+ to launch phone dialer -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.DIAL" />
+            <data android:scheme="tel" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="tel" />
+        </intent>
+    </queries>
 </manifest>

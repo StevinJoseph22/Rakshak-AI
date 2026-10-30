@@ -3,6 +3,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { IncidentPayload, PreemptedSignalPayload, BlackspotZone } from '../types';
 import { ShieldAlert, X, Phone, Zap } from 'lucide-react';
+import { PreCrashTelemetryChart } from './PreCrashTelemetryChart';
 
 interface PoliceTacticalMapProps {
   incidents: IncidentPayload[];
@@ -656,7 +657,7 @@ export const PoliceTacticalMap: React.FC<PoliceTacticalMapProps> = ({
                 INCIDENT DOSSIER
               </div>
               <div style={{ fontSize: '14px', fontWeight: 800, color: '#0f172a', fontFamily: 'monospace' }}>
-                {activeIncident.id.substring(0, 13)}...
+                {activeIncident.case_number ? `#${activeIncident.case_number}` : `${activeIncident.id.substring(0, 13)}...`}
               </div>
             </div>
             <button
@@ -767,6 +768,48 @@ export const PoliceTacticalMap: React.FC<PoliceTacticalMapProps> = ({
                 </div>
               </div>
             )}
+
+          
+          {/* Official Police Case Docket & Jurisdiction Box */}
+          <div
+            style={{
+              marginTop: '10px',
+              padding: '8px 10px',
+              backgroundColor: '#0f172a',
+              border: '1px solid #334155',
+              borderRadius: '6px',
+              color: '#ffffff',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '10px', fontWeight: 800, color: '#38bdf8' }}>
+                BTP CASE DOCKET: #{activeIncident.case_number || 'BTP-AC-2026-08491'}
+              </span>
+              <span style={{ fontSize: '9px', background: '#1e293b', color: '#94a3b8', padding: '1px 6px', borderRadius: '4px' }}>
+                ERSS 112
+              </span>
+            </div>
+            <div style={{ fontSize: '11px', color: '#cbd5e1', marginTop: '4px' }}>
+              <b>Jurisdiction:</b> {activeIncident.police_station_name || 'Madiwala Traffic Police Station'}
+            </div>
+            <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>
+              <b>Investigating Officer:</b> {activeIncident.police_officer_name || 'Sub-Inspector Manjunath'} ({activeIncident.police_officer_phone || '+91 94808 01222'})
+            </div>
+            {activeIncident.gridlock_detected && (
+              <div style={{ marginTop: '6px', background: '#450a0a', border: '1px solid #ef4444', borderRadius: '4px', padding: '4px 6px', fontSize: '10px', color: '#fca5a5' }}>
+                ⚠️ <b>Gridlock Handover:</b> Previous unit stalled. Reassigned to unit with clear corridor.
+              </div>
+            )}
+          </div>
+
+          {/* Pre-Crash 30-Second Kinematics & Velocity Reconstruction */}
+          <div style={{ marginTop: '12px' }}>
+            <PreCrashTelemetryChart
+              telemetry={activeIncident.pre_crash_telemetry}
+              victimName={String((activeIncident.victim_metadata as Record<string, unknown> | null)?.victim_name || 'Rahul Sharma')}
+              vehiclePlate={String((activeIncident.victim_metadata as Record<string, unknown> | null)?.vehicle_plate || activeIncident.ambulance_plate || 'KA-01-EA-108')}
+            />
+          </div>
 
           {/* Coordinates & Time */}
           <div

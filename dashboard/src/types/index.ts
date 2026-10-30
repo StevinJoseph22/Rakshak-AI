@@ -1,3 +1,11 @@
+
+export interface PreCrashDataPoint {
+  relative_second: number; // -30 to 0
+  speed_kmh: number;
+  accel_g: number;
+  heading_deg?: number;
+  timestamp_ms?: number;
+}
 export type ConnectionStatus = 'connected' | 'reconnecting' | 'disconnected';
 
 export interface Hospital {
@@ -12,6 +20,13 @@ export interface Hospital {
   longitude: number;
   distance_km?: number;
   road_distance_km?: number;
+  username?: string;
+  password?: string;
+  trauma_tier?: string;
+  icu_beds?: number;
+  blood_bank?: string;
+  ct_mri?: boolean;
+  zone?: string;
 }
 
 export interface RejectionRecord {
@@ -57,7 +72,15 @@ export interface IncidentPayload {
   ambulance_arrived_at?: string | null;
   ambulance_arrival_lat?: number | null;
   ambulance_arrival_lng?: number | null;
-  blackspot_info?: BlackspotInfo | null;
+    blackspot_info?: BlackspotInfo | null;
+  case_number?: string | null;
+  police_station_name?: string | null;
+  police_officer_name?: string | null;
+  police_officer_phone?: string | null;
+  pre_crash_telemetry?: PreCrashDataPoint[] | null;
+  gridlock_detected?: boolean;
+  reassigned_from_ambulance_id?: string | null;
+  reassigned_at?: string | null;
 }
 
 export interface BlackspotInfo {

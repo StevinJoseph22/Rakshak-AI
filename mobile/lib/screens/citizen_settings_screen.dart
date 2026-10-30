@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/emergency_contact_model.dart';
 import '../services/emergency_contact_service.dart';
 import '../services/user_profile_service.dart';
+import '../services/theme_service.dart';
 import '../services/lock_screen_service.dart';
 import '../config/backend_config.dart';
 import 'emergency_contacts_screen.dart';
@@ -383,6 +384,41 @@ class _CitizenSettingsScreenState extends State<CitizenSettingsScreen> {
                       padding: const EdgeInsets.symmetric(vertical: 10),
                     ),
                   ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+
+            // Section 4B: Visual Theme & Appearance
+            _buildSectionHeader('APPEARANCE & VISUAL THEME', Icons.palette_outlined),
+            const SizedBox(height: 10),
+            _buildCard(
+              children: [
+                ValueListenableBuilder<ThemeMode>(
+                  valueListenable: ThemeService.instance.themeMode,
+                  builder: (ctx, mode, _) {
+                    final isDark = mode == ThemeMode.dark;
+                    return SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      secondary: Icon(
+                        isDark ? Icons.dark_mode_rounded : Icons.light_mode_rounded,
+                        color: isDark ? const Color(0xFFFBBF24) : const Color(0xFF38BDF8),
+                      ),
+                      title: Text(
+                        isDark ? 'Executive Dark Theme (Active)' : 'Executive Light Theme (Active)',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white),
+                      ),
+                      subtitle: Text(
+                        isDark ? 'OLED deep slate • High-contrast emergency vision' : 'Clean medical slate • Daylight clarity',
+                        style: const TextStyle(fontSize: 11, color: Color(0xFF94A3B8)),
+                      ),
+                      value: isDark,
+                      activeColor: const Color(0xFFEF4444),
+                      onChanged: (val) {
+                        ThemeService.instance.setDarkMode(val);
+                      },
+                    );
+                  },
                 ),
               ],
             ),

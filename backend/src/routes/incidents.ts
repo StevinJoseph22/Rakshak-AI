@@ -27,6 +27,7 @@ import {
   hasEphemeralHealthCard,
   storeEncryptedIncidentPhoto,
   getDecryptedIncidentPhoto,
+  purgeIncidentPhoto,
 } from '../redis';
 import { decryptIncidentPhoto } from '../services/photoCryptoService';
 import {
@@ -39,6 +40,8 @@ import {
   cancelAutoEscalation,
   clearAllEscalations,
   triggerImmediateEscalation,
+  performEscalation,
+  catchUpOverdueEscalations,
 } from '../escalation';
 import {
   scheduleSilentPromotion,
@@ -48,6 +51,9 @@ import {
 } from '../services/preAlertService';
 import { TripSentinelService } from '../services/tripSentinelService';
 import { checkIncidentBlackspot, getAllBlackspotZones } from '../services/blackspotService';
+import { resolvePoliceJurisdiction, buildPoliceDocketSms } from '../services/policeJurisdictionService';
+import { DispatchArbiterService } from '../services/dispatchArbiterService';
+import { reportGridlockSchema } from '../validations';
 import { authenticateJWT, optionalAuth, requireRole } from '../middleware/auth';
 import { getAbdmMode } from '../services/abdm';
 
@@ -286,7 +292,8 @@ incidentsRouter.post(
       });
     }
 
-    const { id, latitude, longitude, victim_metadata, status, health_card } = parseResult.data;
+    const { id, latitude, longitude, victim_metadata, status, health_card, pre_crash_telemetry } = parseResult.data;
+    const policeJurisdiction = resolvePoliceJurisdiction(latitude, longitude);
     const { sanitized, healthCardToStore } = sanitizeVictimMetadata(victim_metadata, health_card);
 
     // Discard stale store-and-forward payloads (>30 mins) to prevent replaying days-old test incidents
@@ -392,22 +399,43 @@ incidentsRouter.post(
     if (status === 'suspected') {
       const insertSql = id
         ? `
-          INSERT INTO incidents (id, location, status, victim_metadata)
-          VALUES ($1, ST_SetSRID(ST_MakePoint($2, $3), 4326)::geography, 'suspected', $4)
+          INSERT INTO incidents (id, location, status, victim_metadata, case_number, police_station_name, police_officer_name, police_officer_phone, pre_crash_telemetry)
+          VALUES ($1, ST_SetSRID(ST_MakePoint($2, $3), 4326)::geography, 'suspected', $4, $5, $6, $7, $8, $9)
           RETURNING id, status, accepted_hospital_id, victim_metadata,
+                    case_number, police_station_name, police_officer_name, police_officer_phone, pre_crash_telemetry,
                     ST_Y(location::geometry) AS latitude, ST_X(location::geometry) AS longitude,
                     created_at, updated_at;
         `
         : `
-          INSERT INTO incidents (location, status, victim_metadata)
-          VALUES (ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography, 'suspected', $3)
+          INSERT INTO incidents (location, status, victim_metadata, case_number, police_station_name, police_officer_name, police_officer_phone, pre_crash_telemetry)
+          VALUES (ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography, 'suspected', $3, $4, $5, $6, $7, $8)
           RETURNING id, status, accepted_hospital_id, victim_metadata,
+                    case_number, police_station_name, police_officer_name, police_officer_phone, pre_crash_telemetry,
                     ST_Y(location::geometry) AS latitude, ST_X(location::geometry) AS longitude,
                     created_at, updated_at;
         `;
       const params = id
-        ? [id, longitude, latitude, sanitized ? JSON.stringify(sanitized) : null]
-        : [longitude, latitude, sanitized ? JSON.stringify(sanitized) : null];
+        ? [
+            id,
+            longitude,
+            latitude,
+            sanitized ? JSON.stringify(sanitized) : null,
+            policeJurisdiction.case_number,
+            policeJurisdiction.police_station_name,
+            policeJurisdiction.police_officer_name,
+            policeJurisdiction.police_officer_phone,
+            pre_crash_telemetry ? JSON.stringify(pre_crash_telemetry) : null,
+          ]
+        : [
+            longitude,
+            latitude,
+            sanitized ? JSON.stringify(sanitized) : null,
+            policeJurisdiction.case_number,
+            policeJurisdiction.police_station_name,
+            policeJurisdiction.police_officer_name,
+            policeJurisdiction.police_officer_phone,
+            pre_crash_telemetry ? JSON.stringify(pre_crash_telemetry) : null,
+          ];
 
       const insertResult = await query<Incident>(insertSql, params);
       const raw = insertResult.rows[0];
@@ -446,23 +474,44 @@ incidentsRouter.post(
     // 1. Insert incident into PostgreSQL + PostGIS with 'broadcasting' status
     const insertSql = id
       ? `
-        INSERT INTO incidents (id, location, status, victim_metadata)
-        VALUES ($1, ST_SetSRID(ST_MakePoint($2, $3), 4326)::geography, 'broadcasting', $4)
+        INSERT INTO incidents (id, location, status, victim_metadata, case_number, police_station_name, police_officer_name, police_officer_phone, pre_crash_telemetry)
+        VALUES ($1, ST_SetSRID(ST_MakePoint($2, $3), 4326)::geography, 'broadcasting', $4, $5, $6, $7, $8, $9)
         RETURNING id, status, accepted_hospital_id, victim_metadata,
+                  case_number, police_station_name, police_officer_name, police_officer_phone, pre_crash_telemetry,
                   ST_Y(location::geometry) AS latitude, ST_X(location::geometry) AS longitude,
                   created_at, updated_at;
       `
       : `
-        INSERT INTO incidents (location, status, victim_metadata)
-        VALUES (ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography, 'broadcasting', $3)
+        INSERT INTO incidents (location, status, victim_metadata, case_number, police_station_name, police_officer_name, police_officer_phone, pre_crash_telemetry)
+        VALUES (ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography, 'broadcasting', $3, $4, $5, $6, $7, $8)
         RETURNING id, status, accepted_hospital_id, victim_metadata,
+                  case_number, police_station_name, police_officer_name, police_officer_phone, pre_crash_telemetry,
                   ST_Y(location::geometry) AS latitude, ST_X(location::geometry) AS longitude,
                   created_at, updated_at;
       `;
 
     const insertParams = id
-      ? [id, longitude, latitude, sanitized ? JSON.stringify(sanitized) : null]
-      : [longitude, latitude, sanitized ? JSON.stringify(sanitized) : null];
+      ? [
+          id,
+          longitude,
+          latitude,
+          sanitized ? JSON.stringify(sanitized) : null,
+          policeJurisdiction.case_number,
+          policeJurisdiction.police_station_name,
+          policeJurisdiction.police_officer_name,
+          policeJurisdiction.police_officer_phone,
+          pre_crash_telemetry ? JSON.stringify(pre_crash_telemetry) : null,
+        ]
+      : [
+          longitude,
+          latitude,
+          sanitized ? JSON.stringify(sanitized) : null,
+          policeJurisdiction.case_number,
+          policeJurisdiction.police_station_name,
+          policeJurisdiction.police_officer_name,
+          policeJurisdiction.police_officer_phone,
+          pre_crash_telemetry ? JSON.stringify(pre_crash_telemetry) : null,
+        ];
 
     const insertResult = await query<Incident>(insertSql, insertParams);
 
@@ -505,10 +554,75 @@ incidentsRouter.post(
       ORDER BY distance_km ASC;
     `;
 
-    const matchResult = await query<Hospital>(matchHospitalsSql, [
+    let matchResult = await query<Hospital>(matchHospitalsSql, [
       longitude,
       latitude,
     ]);
+    let effectiveSearchRadiusKm = 8;
+
+    // IMMEDIATE ZERO-DELAY AUTO-ESCALATION:
+    // If no trauma centers found within 8km, immediately expand perimeter to 20km without waiting!
+    if (matchResult.rows.length === 0) {
+      console.log(`[Auto-Escalation] ⚡ 0 hospitals found within 8km for Incident ${incident.id}. Immediately expanding perimeter to 20km...`);
+      effectiveSearchRadiusKm = 20;
+      const escalated20kmSql = `
+        SELECT 
+          h.id,
+          h.name,
+          h.phone,
+          h.address,
+          h.has_trauma_center,
+          h.has_icu_capacity,
+          h.is_verified,
+          ST_Y(h.location::geometry) AS latitude,
+          ST_X(h.location::geometry) AS longitude,
+          ROUND((ST_Distance(h.location, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography) / 1000)::numeric, 2) AS distance_km,
+          COALESCE(hc.ct_scan, true) AS ct_scan,
+          COALESCE(hc.mri, true) AS mri,
+          COALESCE(hc.neuro_icu, true) AS neuro_icu,
+          COALESCE(hc.blood_bank, true) AS blood_bank,
+          COALESCE(hc.ventilators, true) AS ventilators
+        FROM hospitals h
+        LEFT JOIN hospital_capabilities hc ON hc.hospital_id = h.id
+        WHERE h.has_trauma_center = true
+          AND ST_DWithin(h.location, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography, 20000)
+        ORDER BY distance_km ASC;
+      `;
+      matchResult = await query<Hospital>(escalated20kmSql, [longitude, latitude]);
+
+      // If still 0 (e.g. peri-urban highway borders), immediately expand to full metropolitan registry
+      if (matchResult.rows.length === 0) {
+        console.log(`[Auto-Escalation] ⚡ Still 0 hospitals within 20km. Expanding to 50km metropolitan trauma registry...`);
+        effectiveSearchRadiusKm = 50;
+        const registry50kmSql = `
+          SELECT 
+            h.id,
+            h.name,
+            h.phone,
+            h.address,
+            h.has_trauma_center,
+            h.has_icu_capacity,
+            h.is_verified,
+            ST_Y(h.location::geometry) AS latitude,
+            ST_X(h.location::geometry) AS longitude,
+            ROUND((ST_Distance(h.location, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography) / 1000)::numeric, 2) AS distance_km,
+            COALESCE(hc.ct_scan, true) AS ct_scan,
+            COALESCE(hc.mri, true) AS mri,
+            COALESCE(hc.neuro_icu, true) AS neuro_icu,
+            COALESCE(hc.blood_bank, true) AS blood_bank,
+            COALESCE(hc.ventilators, true) AS ventilators
+          FROM hospitals h
+          LEFT JOIN hospital_capabilities hc ON hc.hospital_id = h.id
+          WHERE h.has_trauma_center = true
+          ORDER BY distance_km ASC
+          LIMIT 10;
+        `;
+        matchResult = await query<Hospital>(registry50kmSql, [longitude, latitude]);
+      }
+
+      await query(`UPDATE incidents SET status = 'escalated', updated_at = CURRENT_TIMESTAMP WHERE id = $1`, [incident.id]);
+      incident.status = 'escalated';
+    }
 
     const vMeta = (incident.victim_metadata || {}) as Record<string, unknown>;
     const isRolloverCrash = Boolean(vMeta.rollover_suspected || vMeta.rollover_detected);
@@ -555,6 +669,21 @@ incidentsRouter.post(
     // Broadcast in real-time to matched hospital rooms and police all_incidents room
     broadcastNewIncident(incident, matchedHospitals);
 
+    // Structure official Police Docket Reference SMS for victim's emergency contacts
+    const vMetaForSms = (incident.victim_metadata || {}) as Record<string, unknown>;
+    const victimNameForSms = String(vMetaForSms.victim_name || 'Citizen');
+    const vehiclePlateForSms = String(vMetaForSms.vehicle_plate || 'KA-01-EA-108');
+    const policeDocketSms = buildPoliceDocketSms(
+      incident.case_number || policeJurisdiction.case_number,
+      incident.police_station_name || policeJurisdiction.police_station_name,
+      incident.police_officer_name || policeJurisdiction.police_officer_name,
+      incident.police_officer_phone || policeJurisdiction.police_officer_phone,
+      victimNameForSms,
+      vehiclePlateForSms,
+      matchedHospitals[0]?.name
+    );
+    console.log(`[PoliceDocket] 🚨 Emergency Contacts SMS dispatched with Case ID #${incident.case_number}:\n${policeDocketSms}`);
+
     // Cache matched hospital IDs in volatile Redis RAM (15m TTL) for Phase 6 & 7 room routing
     try {
       await redis.setex(
@@ -567,18 +696,22 @@ incidentsRouter.post(
     }
 
     // Phase 7: Schedule auto-escalation timer
-    if (matchedHospitals.length === 0) {
-      // 0 matched hospitals within 8km -> immediately trigger auto-escalation (Stage 1 / 2)
-      scheduleAutoEscalation(incident.id, 1, 0);
+    if (effectiveSearchRadiusKm > 8) {
+      // Already escalated immediately due to 0 hospitals in 8km.
+      // If at 20km, schedule Stage 2 (50km) in 45s. If already 50km, no further stage needed.
+      if (effectiveSearchRadiusKm === 20) {
+        scheduleAutoEscalation(incident.id, 2);
+      }
     } else {
-      // Default 45s timer before search radius widens
+      // Default 45s timer before search radius widens from 8km to 20km (Stage 1)
       scheduleAutoEscalation(incident.id, 1);
     }
 
     return res.status(201).json({
       message: 'Incident recorded successfully and trauma triage query executed.',
       incident,
-      search_radius_km: 8,
+      police_case_sms: policeDocketSms,
+      search_radius_km: effectiveSearchRadiusKm,
       matched_hospitals_count: matchResult.rowCount,
       matched_hospitals: matchedHospitals,
     });
@@ -597,6 +730,9 @@ incidentsRouter.post(
 // GET /incidents - Retrieve recent incidents with matched trauma hospitals (for Police & Hospital views)
 incidentsRouter.get('/', optionalAuth, async (req: Request, res: Response) => {
   try {
+    // Proactively catch up any broadcasting incidents that have exceeded the 45-second threshold
+    await catchUpOverdueEscalations().catch(() => {});
+
     const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 20, 1), 100);
     let hospitalId = typeof req.query.hospital_id === 'string' ? req.query.hospital_id : undefined;
 
@@ -623,6 +759,14 @@ incidentsRouter.get('/', optionalAuth, async (req: Request, res: Response) => {
           i.ambulance_arrived_at,
           i.ambulance_arrival_lat,
           i.ambulance_arrival_lng,
+          i.case_number,
+          i.police_station_name,
+          i.police_officer_name,
+          i.police_officer_phone,
+          i.pre_crash_telemetry,
+          i.gridlock_detected,
+          i.reassigned_from_ambulance_id,
+          i.reassigned_at,
           i.victim_metadata,
           ST_Y(i.location::geometry) AS latitude,
           ST_X(i.location::geometry) AS longitude,
@@ -707,6 +851,14 @@ incidentsRouter.get('/', optionalAuth, async (req: Request, res: Response) => {
           i.ambulance_arrived_at,
           i.ambulance_arrival_lat,
           i.ambulance_arrival_lng,
+          i.case_number,
+          i.police_station_name,
+          i.police_officer_name,
+          i.police_officer_phone,
+          i.pre_crash_telemetry,
+          i.gridlock_detected,
+          i.reassigned_from_ambulance_id,
+          i.reassigned_at,
           i.victim_metadata,
           ST_Y(i.location::geometry) AS latitude,
           ST_X(i.location::geometry) AS longitude,
@@ -835,11 +987,19 @@ incidentsRouter.get('/', optionalAuth, async (req: Request, res: Response) => {
         updated_at: row.updated_at,
         distance_km: straightKm,
         road_distance_km: roadKm,
-        imageUrl: cachedImages[idx]
-          ? (cachedImages[idx]!.startsWith('enc:v1:')
+        imageUrl: await (async () => {
+          const createdMs = new Date(row.created_at as string).getTime();
+          if (Date.now() - createdMs >= 15 * 60 * 1000) {
+            purgeIncidentPhoto(row.id as string).catch(() => {});
+            return null;
+          }
+          if (cachedImages[idx]) {
+            return cachedImages[idx]!.startsWith('enc:v1:')
               ? decryptIncidentPhoto(row.id as string, cachedImages[idx]!)
-              : cachedImages[idx])
-          : (await getDecryptedIncidentPhoto(row.id as string)),
+              : cachedImages[idx];
+          }
+          return getDecryptedIncidentPhoto(row.id as string);
+        })(),
         hospital_id: hospitalId || (matchedHospitals[0]?.id ?? undefined),
         hospital_name: matchedHospitals[0]?.name ?? undefined,
         matched_hospitals_count: matchedHospitals.length,
@@ -1009,6 +1169,14 @@ incidentsRouter.get('/nearby', async (req: Request, res: Response) => {
         i.ambulance_arrived_at,
         i.ambulance_arrival_lat,
         i.ambulance_arrival_lng,
+          i.case_number,
+          i.police_station_name,
+          i.police_officer_name,
+          i.police_officer_phone,
+          i.pre_crash_telemetry,
+          i.gridlock_detected,
+          i.reassigned_from_ambulance_id,
+          i.reassigned_at,
         i.victim_metadata,
         ST_Y(i.location::geometry) AS latitude,
         ST_X(i.location::geometry) AS longitude,
@@ -1091,11 +1259,19 @@ incidentsRouter.get('/nearby', async (req: Request, res: Response) => {
         updated_at: row.updated_at,
         distance_km: straightKm,
         road_distance_km: roadKm,
-        imageUrl: cachedImages[idx]
-          ? (cachedImages[idx]!.startsWith('enc:v1:')
+        imageUrl: await (async () => {
+          const createdMs = new Date(row.created_at as string).getTime();
+          if (Date.now() - createdMs >= 15 * 60 * 1000) {
+            purgeIncidentPhoto(row.id as string).catch(() => {});
+            return null;
+          }
+          if (cachedImages[idx]) {
+            return cachedImages[idx]!.startsWith('enc:v1:')
               ? decryptIncidentPhoto(row.id as string, cachedImages[idx]!)
-              : cachedImages[idx])
-          : (await getDecryptedIncidentPhoto(row.id as string)),
+              : cachedImages[idx];
+          }
+          return getDecryptedIncidentPhoto(row.id as string);
+        })(),
       };
     }));
 
@@ -1379,6 +1555,54 @@ incidentsRouter.post('/:id/ambulance-arrived', optionalAuth, async (req: Request
   }
 });
 
+// POST /incidents/:id/gridlock - Edge telematics detects ambulance gridlock deadlock
+incidentsRouter.post('/:id/gridlock', async (req: Request, res: Response) => {
+  try {
+    const parseResult = reportGridlockSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      return res.status(400).json({
+        error: 'Validation failed',
+        details: parseResult.error.errors,
+      });
+    }
+    const result = await DispatchArbiterService.evaluateAndReassign({
+      incident_id: req.params.id,
+      ...parseResult.data,
+      current_lat: parseResult.data.latitude,
+      current_lng: parseResult.data.longitude,
+    });
+    return res.status(200).json(result);
+  } catch (err) {
+    console.error('[Incidents] Error evaluating gridlock handover:', err);
+    return res.status(500).json({ error: 'Failed to process gridlock evaluation' });
+  }
+});
+
+// GET /incidents/case/:caseNumber - Public and Police lookup by official Case Docket ID
+incidentsRouter.get('/case/:caseNumber', async (req: Request, res: Response) => {
+  try {
+    const { caseNumber } = req.params;
+    const result = await query<Incident>(
+      `SELECT id, status, accepted_hospital_id, victim_metadata,
+              case_number, police_station_name, police_officer_name, police_officer_phone,
+              pre_crash_telemetry, gridlock_detected, reassigned_from_ambulance_id, reassigned_at,
+              ambulance_id, ambulance_plate, ambulance_driver_name, ambulance_driver_phone,
+              ambulance_origin_station, ambulance_arrived_at,
+              ST_Y(location::geometry) AS latitude, ST_X(location::geometry) AS longitude,
+              created_at, updated_at
+       FROM incidents WHERE case_number = $1`,
+      [caseNumber]
+    );
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Case not found' });
+    }
+    return res.status(200).json(result.rows[0]);
+  } catch (err) {
+    console.error('[Incidents] Error fetching case by case_number:', err);
+    return res.status(500).json({ error: 'Failed to retrieve case docket' });
+  }
+});
+
 // GET /incidents/:id - Retrieve incident detail by ID
 incidentsRouter.get('/:id', async (req: Request, res: Response) => {
   try {
@@ -1405,6 +1629,14 @@ incidentsRouter.get('/:id', async (req: Request, res: Response) => {
         i.ambulance_arrived_at,
         i.ambulance_arrival_lat,
         i.ambulance_arrival_lng,
+          i.case_number,
+          i.police_station_name,
+          i.police_officer_name,
+          i.police_officer_phone,
+          i.pre_crash_telemetry,
+          i.gridlock_detected,
+          i.reassigned_from_ambulance_id,
+          i.reassigned_at,
         i.victim_metadata,
         ST_Y(i.location::geometry) AS latitude,
         ST_X(i.location::geometry) AS longitude,
@@ -1477,34 +1709,40 @@ incidentsRouter.get('/:id', async (req: Request, res: Response) => {
 incidentsRouter.get('/:id/image', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    let imageUrl = await getDecryptedIncidentPhoto(id);
 
-    if (!imageUrl) {
-      // Fallback: Check if another recent incident within 15 minutes has an encrypted photo in RAM
-      try {
-        const recentRes = await query<{ id: string }>(
-          `SELECT id FROM incidents WHERE created_at > NOW() - INTERVAL '15 minutes' ORDER BY created_at DESC LIMIT 6;`
-        );
-        for (const row of recentRes.rows) {
-          if (row.id !== id) {
-            const candidateUrl = await getDecryptedIncidentPhoto(row.id);
-            if (candidateUrl) {
-              imageUrl = candidateUrl;
-              console.log(`[GET /incidents/:id/image] Fallback: Found photo in recent incident ${row.id} for requested ${id}`);
-              // Cache under this ID too for fast subsequent lookups
-              await storeEncryptedIncidentPhoto(id, candidateUrl, 900);
-              break;
-            }
-          }
-        }
-      } catch (_) {
-        // Non-fatal check error
-      }
+    // Check incident creation time to strictly enforce 15-minute retention ceiling
+    const incRes = await query<{ created_at: string }>(
+      'SELECT created_at FROM incidents WHERE id = $1;',
+      [id]
+    );
+
+    if (incRes.rowCount === 0) {
+      return res.status(404).json({ error: 'Incident not found', imageUrl: null });
     }
 
-    if (!imageUrl) {
-      return res.status(404).json({ error: 'Image not found or expired', imageUrl: null });
+    const createdMs = new Date(incRes.rows[0].created_at).getTime();
+    const elapsedMs = Date.now() - createdMs;
+
+    // If incident is older than 15 minutes (900,000 ms), strictly scrub and deny
+    if (elapsedMs >= 15 * 60 * 1000) {
+      await purgeIncidentPhoto(id).catch(() => {});
+      return res.status(404).json({
+        error: 'Victim photo has expired. The 15-minute privacy retention TTL has elapsed.',
+        expired: true,
+        imageUrl: null,
+      });
     }
+
+    const imageUrl = await getDecryptedIncidentPhoto(id);
+
+    if (!imageUrl) {
+      return res.status(404).json({
+        error: 'Victim photo not found or not yet uploaded.',
+        expired: false,
+        imageUrl: null,
+      });
+    }
+
     return res.json({ incident_id: id, imageUrl });
   } catch (err) {
     console.error('[GET /incidents/:id/image Error]', err);
@@ -1547,23 +1785,33 @@ incidentsRouter.post('/:id/image', validateImageUpload, async (req: Request, res
       // Non-fatal incident auto-healing check failure
     }
 
-    // Store encrypted with AES-256-GCM in volatile Redis RAM with 15-minute TTL (900 seconds)
-    await storeEncryptedIncidentPhoto(effectiveIncidentId, dataUrl, 900);
-    if (effectiveIncidentId !== id) {
-      await storeEncryptedIncidentPhoto(id, dataUrl, 900);
-    }
-    // Also cross-link with sibling incidents created in the last 3 minutes so all related dashboard cards have the photo
+    // Check incident creation time to compute remaining TTL
+    let remainingTtl = 900;
     try {
-      const siblingRes = await query<{ id: string }>(
-        `SELECT id FROM incidents WHERE created_at > NOW() - INTERVAL '3 minutes' LIMIT 6;`
+      const incRes = await query<{ created_at: string }>(
+        'SELECT created_at FROM incidents WHERE id = $1;',
+        [effectiveIncidentId]
       );
-      for (const sib of siblingRes.rows) {
-        if (sib.id !== effectiveIncidentId && sib.id !== id) {
-          await storeEncryptedIncidentPhoto(sib.id, dataUrl, 900);
-        }
+      if (incRes.rowCount && incRes.rowCount > 0) {
+        const createdMs = new Date(incRes.rows[0].created_at).getTime();
+        const elapsedSec = Math.floor((Date.now() - createdMs) / 1000);
+        remainingTtl = 900 - elapsedSec;
       }
     } catch (_) {}
-    console.log(`[Photo Encryption] Stored encrypted photo stream via HTTP POST in Redis RAM (TTL 900s): ${effectiveIncidentId}`);
+
+    if (remainingTtl <= 0) {
+      return res.status(410).json({
+        error: '15-minute privacy retention window has expired for this incident. Photo cannot be accepted.',
+        expired: true,
+      });
+    }
+
+    // Store encrypted in Redis RAM strictly with the remaining TTL (up to 15m from incident creation)
+    await storeEncryptedIncidentPhoto(effectiveIncidentId, dataUrl, remainingTtl);
+    if (effectiveIncidentId !== id) {
+      await storeEncryptedIncidentPhoto(id, dataUrl, remainingTtl);
+    }
+    console.log(`[Photo Encryption] Stored encrypted photo in Redis RAM with remaining TTL ${remainingTtl}s: ${effectiveIncidentId}`);
 
     // Broadcast image_update via Socket.IO
     const io = getIO();
@@ -2170,6 +2418,40 @@ incidentsRouter.post('/:id/reject', authenticateJWT, async (req: Request, res: R
         error instanceof Error
           ? error.message
           : 'Unexpected database error while recording rejection.',
+    });
+  }
+});
+
+// POST /incidents/:id/escalate - Explicitly escalate incident radius (8km -> 20km)
+incidentsRouter.post('/:id/escalate', async (req: Request, res: Response) => {
+  try {
+    const paramsResult = incidentIdParamsSchema.safeParse(req.params);
+    if (!paramsResult.success) {
+      return res.status(400).json({
+        error: 'Validation failed',
+        message: 'Invalid incident ID format. Must be a valid UUID.',
+      });
+    }
+
+    const { id } = paramsResult.data;
+    const result = await performEscalation(id, 1);
+
+    return res.status(200).json({
+      success: result.success,
+      message: result.success
+        ? 'Incident triage search perimeter escalated to 20km.'
+        : 'Escalation aborted or unnecessary.',
+      stage: result.stage,
+      new_hospitals_count: result.newHospitalsCount,
+    });
+  } catch (error) {
+    console.error('[POST /incidents/:id/escalate Error]', error);
+    return res.status(500).json({
+      error: 'Escalation failed',
+      message:
+        error instanceof Error
+          ? error.message
+          : 'Unexpected database error while escalating.',
     });
   }
 });

@@ -19,6 +19,18 @@ export const createIncidentSchema = z.object({
     .min(-180, 'Longitude must be >= -180')
     .max(180, 'Longitude must be <= 180'),
   victim_metadata: z.record(z.unknown()).optional().nullable(),
+  pre_crash_telemetry: z
+    .array(
+      z.object({
+        relative_second: z.number(),
+        speed_kmh: z.number(),
+        accel_g: z.number(),
+        heading_deg: z.number().optional(),
+        timestamp_ms: z.number().optional(),
+      })
+    )
+    .optional()
+    .nullable(),
   health_card: z.record(z.unknown()).optional().nullable(),
 });
 
@@ -131,3 +143,12 @@ export const ambulanceLocationSchema = z.object({
   heading: z.number().optional(),
 });
 
+
+export const reportGridlockSchema = z.object({
+  ambulance_id: z.string().min(1, { message: 'ambulance_id cannot be empty' }),
+  latitude: z.number().min(-90).max(90),
+  longitude: z.number().min(-180).max(180),
+  stationary_seconds: z.number().min(0),
+  stagnation_severity_index: z.number().min(0).max(1),
+  current_speed_kmh: z.number().optional().default(0),
+});

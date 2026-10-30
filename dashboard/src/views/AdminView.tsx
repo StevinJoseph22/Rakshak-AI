@@ -1,17 +1,31 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Trash2,
   RefreshCw,
-  Database,
   Radio,
-  Hospital,
+  Hospital as HospitalIcon,
   AlertTriangle,
   CheckCircle2,
   Zap,
   Server,
   Activity,
+  Search,
+  Key,
+  Copy,
+  Check,
+  MapPin,
+  Phone,
+  ExternalLink,
+  ShieldCheck,
+  Download,
+  Building2,
+  Eye,
+  EyeOff,
+  Filter,
 } from 'lucide-react';
 import { getSocket } from '../services/socket';
+import { SEEDED_HOSPITALS } from '../config/hospitals';
+import { Hospital } from '../types';
 
 interface SystemStats {
   total_incidents: number;
@@ -27,6 +41,14 @@ export const AdminView: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(false);
   const [actionMessage, setActionMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
   const [logs, setLogs] = useState<Array<{ time: string; message: string; type: string }>>([]);
+
+  // Hospital directory search and filter state
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [selectedZone, setSelectedZone] = useState<string>('ALL');
+  const [filterTraumaOnly, setFilterTraumaOnly] = useState<boolean>(false);
+  const [filterIcuOnly, setFilterIcuOnly] = useState<boolean>(false);
+  const [showPasswords, setShowPasswords] = useState<Record<string, boolean>>({});
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   const fetchStats = async () => {
     try {
@@ -154,7 +176,6 @@ export const AdminView: React.FC = () => {
     setActionMessage(null);
 
     try {
-      // Seeds 3 incidents near Silk Board Central Junction (12.9176, 77.6238) within 200m
       const coords = [
         { lat: 12.9176, lng: 77.6238 },
         { lat: 12.9181, lng: 77.6242 },
@@ -191,6 +212,88 @@ export const AdminView: React.FC = () => {
     }
   };
 
+  // Filtered hospitals calculation
+  const filteredHospitals = useMemo(() => {
+    return SEEDED_HOSPITALS.filter((h: Hospital) => {
+      // 1. Text Search across name, address, phone, username, zone
+      const query = searchQuery.trim().toLowerCase();
+      const matchText =
+        !query ||
+        h.name.toLowerCase().includes(query) ||
+        h.address.toLowerCase().includes(query) ||
+        h.phone.toLowerCase().includes(query) ||
+        (h.username && h.username.toLowerCase().includes(query)) ||
+        (h.zone && h.zone.toLowerCase().includes(query));
+
+      // 2. Zone filter
+      const matchZone = selectedZone === 'ALL' || h.zone === selectedZone;
+
+      // 3. Trauma filter
+      const matchTrauma = !filterTraumaOnly || h.has_trauma_center;
+
+      // 4. ICU filter
+      const matchIcu = !filterIcuOnly || h.has_icu_capacity;
+
+      return matchText && matchZone && matchTrauma && matchIcu;
+    });
+  }, [searchQuery, selectedZone, filterTraumaOnly, filterIcuOnly]);
+
+  const copyToClipboard = (text: string, key: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedKey(key);
+    setTimeout(() => {
+      setCopiedKey(null);
+    }, 2000);
+  };
+
+  const togglePasswordVisibility = (hospitalId: string) => {
+    setShowPasswords((prev) => ({
+      ...prev,
+      [hospitalId]: !prev[hospitalId],
+    }));
+  };
+
+  const handleExportCsv = () => {
+    const headers = [
+      'Hospital Name',
+      'Portal Username',
+      'Portal Password',
+      'Role',
+      'Emergency Hotline',
+      'Trauma Tier',
+      'ICU Beds',
+      'Zone',
+      'Latitude',
+      'Longitude',
+      'Full Address',
+      'Hospital ID',
+    ];
+
+    const rows = SEEDED_HOSPITALS.map((h: Hospital) => [
+      `"${h.name.replace(/"/g, '""')}"`,
+      `"${h.username || 'unassigned'}"`,
+      `"${h.password || 'hospital123'}"`,
+      '"hospital_staff"',
+      `"${h.phone}"`,
+      `"${h.trauma_tier || (h.has_trauma_center ? 'Level-1 Trauma' : 'General Care')}"`,
+      `"${h.icu_beds ?? (h.has_icu_capacity ? 4 : 0)}"`,
+      `"${h.zone || 'Bengaluru'}"`,
+      h.latitude,
+      h.longitude,
+      `"${h.address.replace(/"/g, '""')}"`,
+      `"${h.id}"`,
+    ]);
+
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `rakshak_hospital_credentials_registry_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const activeCount =
     (stats?.status_counts.broadcasting || 0) +
     (stats?.status_counts.suspected || 0) +
@@ -198,41 +301,66 @@ export const AdminView: React.FC = () => {
     (stats?.status_counts.accepted || 0) +
     (stats?.status_counts.en_route || 0);
 
+  const zones = ['ALL', 'Central', 'South', 'South-East', 'East', 'North', 'North-East', 'West', 'North-West', 'Highway Corridor'];
+
   return (
-    <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '1.5rem 2rem' }}>
+    <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '1.5rem 2rem' }}>
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem' }}>
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <Server size={24} color="#dc2626" />
-            <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#0f172a', margin: 0 }}>
-              System Administration & Incident Reset Lab
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+            <Server size={26} color="#dc2626" />
+            <h1 style={{ fontSize: '1.6rem', fontWeight: 800, color: '#0f172a', margin: 0 }}>
+              Rakshak-AI Master Administration & Hospital Credential Vault
             </h1>
           </div>
-          <p style={{ margin: '0.25rem 0 0 0', color: '#64748b', fontSize: '0.875rem' }}>
-            Purge active incidents across PostgreSQL, Redis RAM, and WebSockets to start fresh for testing and demonstrations.
+          <p style={{ margin: '0.35rem 0 0 0', color: '#64748b', fontSize: '0.875rem' }}>
+            Real-time management for 81 verified hospitals, emergency casualty hotlines, PostGIS coordinates, and pre-configured staff authentication credentials.
           </p>
         </div>
 
-        <button
-          onClick={fetchStats}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.4rem',
-            padding: '0.5rem 0.85rem',
-            background: '#ffffff',
-            border: '1px solid #cbd5e1',
-            borderRadius: '0.375rem',
-            color: '#475569',
-            fontSize: '0.8rem',
-            fontWeight: 600,
-            cursor: 'pointer',
-          }}
-        >
-          <RefreshCw size={14} />
-          Refresh Metrics
-        </button>
+        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+          <button
+            onClick={handleExportCsv}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.45rem',
+              padding: '0.55rem 0.95rem',
+              background: '#047857',
+              border: 'none',
+              borderRadius: '0.375rem',
+              color: '#ffffff',
+              fontSize: '0.825rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+              boxShadow: '0 2px 6px rgba(4, 120, 87, 0.25)',
+            }}
+          >
+            <Download size={15} />
+            Export Credentials Manifest (CSV)
+          </button>
+
+          <button
+            onClick={fetchStats}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.4rem',
+              padding: '0.55rem 0.85rem',
+              background: '#ffffff',
+              border: '1px solid #cbd5e1',
+              borderRadius: '0.375rem',
+              color: '#475569',
+              fontSize: '0.8rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+            }}
+          >
+            <RefreshCw size={14} />
+            Refresh State
+          </button>
+        </div>
       </div>
 
       {/* Action Notification Alert */}
@@ -257,7 +385,7 @@ export const AdminView: React.FC = () => {
       )}
 
       {/* Metrics Row */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
         <div style={{ background: '#ffffff', padding: '1rem', borderRadius: '0.5rem', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Active Incidents</span>
@@ -273,45 +401,401 @@ export const AdminView: React.FC = () => {
 
         <div style={{ background: '#ffffff', padding: '1rem', borderRadius: '0.5rem', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Pre-Alerts (Suspected)</span>
-            <AlertTriangle size={18} color="#f59e0b" />
-          </div>
-          <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#f59e0b', marginTop: '0.25rem' }}>
-            {stats?.status_counts.suspected ?? 0}
-          </div>
-          <div style={{ fontSize: '0.725rem', color: '#94a3b8', marginTop: '0.25rem' }}>
-            Police soft markers pending confirm
-          </div>
-        </div>
-
-        <div style={{ background: '#ffffff', padding: '1rem', borderRadius: '0.5rem', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Connected Hospitals</span>
-            <Hospital size={18} color="#2563eb" />
+            <HospitalIcon size={18} color="#0284c7" />
           </div>
-          <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#2563eb', marginTop: '0.25rem' }}>
-            {stats?.total_hospitals ?? 5}
+          <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#0284c7', marginTop: '0.25rem' }}>
+            {SEEDED_HOSPITALS.length}
           </div>
-          <div style={{ fontSize: '0.725rem', color: '#94a3b8', marginTop: '0.25rem' }}>
-            Bengaluru verified trauma centers
+          <div style={{ fontSize: '0.725rem', color: '#64748b', marginTop: '0.25rem' }}>
+            All Bengaluru Zones & Corridors
           </div>
         </div>
 
         <div style={{ background: '#ffffff', padding: '1rem', borderRadius: '0.5rem', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Redis Volatile Keys</span>
-            <Database size={18} color="#7c3aed" />
+            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Trauma Centers</span>
+            <ShieldCheck size={18} color="#dc2626" />
+          </div>
+          <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#dc2626', marginTop: '0.25rem' }}>
+            {SEEDED_HOSPITALS.filter((h: Hospital) => h.has_trauma_center).length}
+          </div>
+          <div style={{ fontSize: '0.725rem', color: '#94a3b8', marginTop: '0.25rem' }}>
+            Level-1 & Level-2 Apex Facilities
+          </div>
+        </div>
+
+        <div style={{ background: '#ffffff', padding: '1rem', borderRadius: '0.5rem', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Total ICU Capacity</span>
+            <Building2 size={18} color="#16a34a" />
+          </div>
+          <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#16a34a', marginTop: '0.25rem' }}>
+            {SEEDED_HOSPITALS.reduce((acc: number, h: Hospital) => acc + (h.icu_beds || 0), 0)} Beds
+          </div>
+          <div style={{ fontSize: '0.725rem', color: '#94a3b8', marginTop: '0.25rem' }}>
+            Live tracked emergency beds
+          </div>
+        </div>
+
+        <div style={{ background: '#ffffff', padding: '1rem', borderRadius: '0.5rem', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Staff Credentials</span>
+            <Key size={18} color="#7c3aed" />
           </div>
           <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#7c3aed', marginTop: '0.25rem' }}>
-            {stats?.redis_cached_keys ?? 0}
+            {SEEDED_HOSPITALS.length} SSO
           </div>
           <div style={{ fontSize: '0.725rem', color: '#94a3b8', marginTop: '0.25rem' }}>
-            RAM image buffers & telemetries
+            Password: <code>hospital123</code>
           </div>
         </div>
       </div>
 
-      {/* Main Operations Control Card */}
+      {/* ========================================================================= */}
+      {/* SECTION 1: MASTER HOSPITAL DIRECTORY & CREDENTIALS VAULT                 */}
+      {/* ========================================================================= */}
+      <div
+        style={{
+          background: '#ffffff',
+          borderRadius: '0.75rem',
+          border: '1.5px solid #e2e8f0',
+          padding: '1.5rem',
+          marginBottom: '2rem',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.03)',
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.25rem' }}>
+          <div>
+            <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#0f172a', margin: '0 0 0.25rem 0', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <Key size={22} color="#0284c7" />
+              Hospital Network Registry, Facilities & Login Credentials Vault
+            </h2>
+            <p style={{ color: '#64748b', fontSize: '0.85rem', margin: 0 }}>
+              Complete institutional master records. Each hospital staff account has pre-configured single-sign-on access for emergency receiving and ABHA record decryption.
+            </p>
+          </div>
+
+          <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#0284c7', background: '#f0f9ff', border: '1px solid #bae6fd', padding: '0.35rem 0.75rem', borderRadius: '1rem' }}>
+            Showing {filteredHospitals.length} of {SEEDED_HOSPITALS.length} Hospitals
+          </div>
+        </div>
+
+        {/* Search & Filter Controls */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1.25rem' }}>
+          <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+            {/* Search Input */}
+            <div style={{ flex: '1 1 300px', position: 'relative' }}>
+              <Search size={16} color="#94a3b8" style={{ position: 'absolute', left: '0.85rem', top: '50%', transform: 'translateY(-50%)' }} />
+              <input
+                type="text"
+                placeholder="Search hospital by name, street address, hotline, or portal username..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '0.65rem 1rem 0.65rem 2.4rem',
+                  borderRadius: '0.5rem',
+                  border: '1.5px solid #cbd5e1',
+                  fontSize: '0.85rem',
+                  outline: 'none',
+                  boxSizing: 'border-box',
+                }}
+              />
+            </div>
+
+            {/* Quick Filters */}
+            <button
+              onClick={() => setFilterTraumaOnly((p) => !p)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.4rem',
+                padding: '0.55rem 0.85rem',
+                background: filterTraumaOnly ? '#fee2e2' : '#f8fafc',
+                border: `1.5px solid ${filterTraumaOnly ? '#ef4444' : '#cbd5e1'}`,
+                color: filterTraumaOnly ? '#991b1b' : '#475569',
+                borderRadius: '0.5rem',
+                fontSize: '0.8rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              <ShieldCheck size={14} color={filterTraumaOnly ? '#ef4444' : '#64748b'} />
+              Level-1 Trauma Bays Only
+            </button>
+
+            <button
+              onClick={() => setFilterIcuOnly((p) => !p)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.4rem',
+                padding: '0.55rem 0.85rem',
+                background: filterIcuOnly ? '#dcfce7' : '#f8fafc',
+                border: `1.5px solid ${filterIcuOnly ? '#22c55e' : '#cbd5e1'}`,
+                color: filterIcuOnly ? '#166534' : '#475569',
+                borderRadius: '0.5rem',
+                fontSize: '0.8rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              <Building2 size={14} color={filterIcuOnly ? '#22c55e' : '#64748b'} />
+              ICU Ready Only
+            </button>
+          </div>
+
+          {/* Zone Selector Chips */}
+          <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', marginRight: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
+              <Filter size={12} /> Zone:
+            </span>
+            {zones.map((zone) => (
+              <button
+                key={zone}
+                onClick={() => setSelectedZone(zone)}
+                style={{
+                  padding: '0.3rem 0.65rem',
+                  fontSize: '0.75rem',
+                  borderRadius: '1rem',
+                  fontWeight: selectedZone === zone ? 700 : 500,
+                  background: selectedZone === zone ? '#0f172a' : '#f1f5f9',
+                  color: selectedZone === zone ? '#ffffff' : '#475569',
+                  border: 'none',
+                  cursor: 'pointer',
+                  transition: 'all 0.1s ease',
+                }}
+              >
+                {zone === 'ALL' ? 'All Zones' : zone}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Hospital Cards Grid */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(420px, 1fr))', gap: '1rem', maxHeight: '720px', overflowY: 'auto', paddingRight: '0.25rem' }}>
+          {filteredHospitals.length === 0 ? (
+            <div style={{ gridColumn: '1 / -1', padding: '3rem', textAlign: 'center', color: '#94a3b8' }}>
+              <HospitalIcon size={40} style={{ margin: '0 auto 0.75rem auto', opacity: 0.5 }} />
+              <div style={{ fontSize: '1rem', fontWeight: 700, color: '#475569' }}>No hospitals match your search criteria</div>
+              <div style={{ fontSize: '0.825rem', marginTop: '0.25rem' }}>Try clearing your search query or switching zone filters.</div>
+            </div>
+          ) : (
+            filteredHospitals.map((h: Hospital, idx: number) => {
+              const passVisible = showPasswords[h.id] || false;
+              const defaultPass = h.password || 'hospital123';
+              const credText = `Username: ${h.username || 'unassigned'} | Password: ${defaultPass}`;
+              const isCopied = copiedKey === h.id;
+
+              return (
+                <div
+                  key={h.id}
+                  style={{
+                    background: '#f8fafc',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '0.625rem',
+                    padding: '1rem',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'space-between',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
+                    transition: 'border-color 0.15s ease',
+                  }}
+                >
+                  <div>
+                    {/* Top Row: Index + Name + Zone */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem', marginBottom: '0.4rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flex: 1 }}>
+                        <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#94a3b8', background: '#ffffff', border: '1px solid #e2e8f0', padding: '0.1rem 0.35rem', borderRadius: '4px' }}>
+                          #{idx + 1}
+                        </span>
+                        <h3 style={{ fontSize: '0.95rem', fontWeight: 800, color: '#0f172a', margin: 0, lineHeight: 1.3 }}>
+                          {h.name}
+                        </h3>
+                      </div>
+                      <span
+                        style={{
+                          fontSize: '0.7rem',
+                          fontWeight: 700,
+                          padding: '0.2rem 0.5rem',
+                          borderRadius: '1rem',
+                          background: '#e0f2fe',
+                          color: '#0369a1',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {h.zone || 'Bengaluru'}
+                      </span>
+                    </div>
+
+                    {/* Facility Tier & Badges */}
+                    <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '0.6rem' }}>
+                      <span
+                        style={{
+                          fontSize: '0.7rem',
+                          fontWeight: 700,
+                          padding: '0.15rem 0.45rem',
+                          borderRadius: '4px',
+                          background: h.has_trauma_center ? '#fee2e2' : '#f1f5f9',
+                          color: h.has_trauma_center ? '#991b1b' : '#64748b',
+                        }}
+                      >
+                        {h.trauma_tier || (h.has_trauma_center ? 'Level-1 Trauma Center' : 'Secondary Medical')}
+                      </span>
+
+                      <span
+                        style={{
+                          fontSize: '0.7rem',
+                          fontWeight: 700,
+                          padding: '0.15rem 0.45rem',
+                          borderRadius: '4px',
+                          background: '#dcfce7',
+                          color: '#166534',
+                        }}
+                      >
+                        {h.icu_beds ?? (h.has_icu_capacity ? 4 : 0)} ICU Beds Available
+                      </span>
+
+                      {h.ct_mri !== false && (
+                        <span
+                          style={{
+                            fontSize: '0.7rem',
+                            fontWeight: 700,
+                            padding: '0.15rem 0.45rem',
+                            borderRadius: '4px',
+                            background: '#fef3c7',
+                            color: '#92400e',
+                          }}
+                        >
+                          24/7 CT & MRI
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Address & Geo-Coordinates */}
+                    <div style={{ fontSize: '0.775rem', color: '#475569', marginBottom: '0.4rem', display: 'flex', alignItems: 'flex-start', gap: '0.35rem' }}>
+                      <MapPin size={14} color="#64748b" style={{ flexShrink: 0, marginTop: '2px' }} />
+                      <span style={{ lineHeight: 1.35 }}>{h.address}</span>
+                    </div>
+
+                    <div style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span>
+                        GPS: <strong>{h.latitude.toFixed(4)}, {h.longitude.toFixed(4)}</strong>
+                      </span>
+                      <a
+                        href={`https://www.google.com/maps/search/?api=1&query=${h.latitude},${h.longitude}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{ color: '#0284c7', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '0.2rem', fontWeight: 600 }}
+                      >
+                        Open Maps <ExternalLink size={11} />
+                      </a>
+                    </div>
+
+                    {/* Contact Phone Hotline */}
+                    <div style={{ fontSize: '0.775rem', color: '#0f172a', marginBottom: '0.65rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#ffffff', padding: '0.4rem 0.6rem', borderRadius: '4px', border: '1px solid #e2e8f0' }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                        <Phone size={13} color="#059669" />
+                        <strong>Hotline:</strong> {h.phone}
+                      </span>
+                      <button
+                        onClick={() => copyToClipboard(h.phone, `phone_${h.id}`)}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: copiedKey === `phone_${h.id}` ? '#059669' : '#0284c7',
+                          fontSize: '0.725rem',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.2rem',
+                        }}
+                      >
+                        {copiedKey === `phone_${h.id}` ? <Check size={12} /> : <Copy size={12} />}
+                        {copiedKey === `phone_${h.id}` ? 'Copied' : 'Copy'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Portal Authentication Credentials Box */}
+                  <div
+                    style={{
+                      background: '#ffffff',
+                      border: '1.5px solid #cbd5e1',
+                      borderRadius: '0.5rem',
+                      padding: '0.65rem 0.85rem',
+                      marginTop: '0.5rem',
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                      <span style={{ fontSize: '0.725rem', fontWeight: 800, color: '#475569', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                        <Key size={13} color="#7c3aed" /> Staff Portal Login Credentials
+                      </span>
+                      <span style={{ fontSize: '0.675rem', fontWeight: 700, color: '#059669', background: '#dcfce7', padding: '0.1rem 0.35rem', borderRadius: '3px' }}>
+                        ROLE: hospital_staff
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', fontSize: '0.75rem', marginBottom: '0.45rem' }}>
+                      <div>
+                        <span style={{ color: '#64748b' }}>Username:</span>
+                        <div style={{ fontWeight: 700, color: '#0f172a', fontFamily: 'monospace', fontSize: '0.8rem' }}>
+                          {h.username || 'unassigned'}
+                        </div>
+                      </div>
+
+                      <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ color: '#64748b' }}>Password:</span>
+                          <button
+                            onClick={() => togglePasswordVisibility(h.id)}
+                            style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: '#64748b' }}
+                            title={passVisible ? 'Hide Password' : 'Show Password'}
+                          >
+                            {passVisible ? <EyeOff size={12} /> : <Eye size={12} />}
+                          </button>
+                        </div>
+                        <div style={{ fontWeight: 700, color: '#0f172a', fontFamily: 'monospace', fontSize: '0.8rem' }}>
+                          {passVisible ? defaultPass : '•••••••••••'}
+                        </div>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => copyToClipboard(credText, h.id)}
+                      style={{
+                        width: '100%',
+                        padding: '0.35rem 0.5rem',
+                        background: isCopied ? '#dcfce7' : '#f1f5f9',
+                        border: `1px solid ${isCopied ? '#86efac' : '#cbd5e1'}`,
+                        borderRadius: '0.35rem',
+                        color: isCopied ? '#166534' : '#334155',
+                        fontSize: '0.75rem',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '0.35rem',
+                        transition: 'all 0.15s ease',
+                      }}
+                    >
+                      {isCopied ? <Check size={13} color="#166534" /> : <Copy size={13} />}
+                      {isCopied ? 'Credentials Copied to Clipboard!' : 'Copy Portal Credentials'}
+                    </button>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+
+      {/* ========================================================================= */}
+      {/* SECTION 2: OPERATIONS CONTROL & INCIDENT PURGE                           */}
+      {/* ========================================================================= */}
       <div style={{ background: '#ffffff', borderRadius: '0.75rem', border: '1.5px solid #e2e8f0', padding: '1.5rem', marginBottom: '1.5rem', boxShadow: '0 4px 12px rgba(0,0,0,0.03)' }}>
         <h2 style={{ fontSize: '1.1rem', fontWeight: 800, color: '#0f172a', margin: '0 0 0.5rem 0', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <Trash2 size={20} color="#dc2626" />
@@ -348,7 +832,9 @@ export const AdminView: React.FC = () => {
         </div>
       </div>
 
-      {/* Testing Convenience Tools */}
+      {/* ========================================================================= */}
+      {/* SECTION 3: TESTING SCENARIO INJECTORS                                    */}
+      {/* ========================================================================= */}
       <div style={{ background: '#ffffff', borderRadius: '0.75rem', border: '1.5px solid #e2e8f0', padding: '1.5rem', marginBottom: '1.5rem' }}>
         <h2 style={{ fontSize: '1.1rem', fontWeight: 800, color: '#0f172a', margin: '0 0 0.5rem 0', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <Zap size={20} color="#f59e0b" />
@@ -403,7 +889,9 @@ export const AdminView: React.FC = () => {
         </div>
       </div>
 
-      {/* Live System Activity Log */}
+      {/* ========================================================================= */}
+      {/* SECTION 4: LIVE SYSTEM WEBSOCKET AUDIT LOG                               */}
+      {/* ========================================================================= */}
       <div style={{ background: '#0f172a', borderRadius: '0.75rem', padding: '1.25rem', color: '#f8fafc' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
           <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#94a3b8', letterSpacing: '0.05em', textTransform: 'uppercase' }}>

@@ -18,6 +18,7 @@ class CrashEvent {
   final bool rolloverSuspected;
   final bool postImpactStillness;
   final Map<String, dynamic>? factorBreakdown;
+  final List<Map<String, dynamic>>? preCrashTelemetry;
 
   const CrashEvent({
     required this.timestamp,
@@ -36,6 +37,7 @@ class CrashEvent {
     this.rolloverSuspected = false,
     this.postImpactStillness = true,
     this.factorBreakdown,
+    this.preCrashTelemetry,
   })  : latitude = latitude ?? simulatedLatitude ?? 12.9716,
         longitude = longitude ?? simulatedLongitude ?? 77.5946;
 

@@ -60,7 +60,7 @@ void main() {
     // Tap Citizen App switcher button
     await tester.tap(find.text('Citizen App'));
     await tester.pumpAndSettle();
-    expect(find.text('Rakshak-AI Guard'), findsOneWidget);
+    expect(find.text('Rakshak AI'), findsOneWidget);
   });
 
   testWidgets('Ambulance app multi-language switcher updates UI to Indian languages',

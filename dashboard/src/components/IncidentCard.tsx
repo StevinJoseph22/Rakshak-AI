@@ -28,6 +28,7 @@ import { authFetch } from '../services/auth';
 import { IncidentRouteMap } from './IncidentRouteMap';
 import { formatTimeSafe, formatDateTimeSafe } from '../utils/dateUtils';
 import { evaluateTraumaReadiness } from './HospitalCapabilityManager';
+import { PreCrashTelemetryChart } from './PreCrashTelemetryChart';
 
 const REJECTION_REASONS = [
   'No ICU capacity',
@@ -101,8 +102,34 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
   };
   const [selectedRejectReason, setSelectedRejectReason] = useState<string>('No ICU capacity');
   const [isSubmittingReject, setIsSubmittingReject] = useState<boolean>(false);
-  const [localImageUrl, setLocalImageUrl] = useState<string | null>(incident.imageUrl || null);
+  const [isPhotoExpired, setIsPhotoExpired] = useState<boolean>(() => {
+    return Date.now() - new Date(incident.created_at).getTime() >= 15 * 60 * 1000;
+  });
+  const [localImageUrl, setLocalImageUrl] = useState<string | null>(() => {
+    if (Date.now() - new Date(incident.created_at).getTime() >= 15 * 60 * 1000) {
+      return null;
+    }
+    return incident.imageUrl || null;
+  });
   const [photoTransport, setPhotoTransport] = useState<'webrtc' | 'websocket'>('websocket');
+
+  // Real-time 15-minute privacy retention countdown and automatic purge
+  useEffect(() => {
+    const checkExpiration = () => {
+      const elapsed = Date.now() - new Date(incident.created_at).getTime();
+      if (elapsed >= 15 * 60 * 1000) {
+        setIsPhotoExpired(true);
+        setLocalImageUrl(null);
+        setIsLightboxOpen(false);
+      } else {
+        setIsPhotoExpired(false);
+      }
+    };
+
+    checkExpiration();
+    const timer = setInterval(checkExpiration, 1000);
+    return () => clearInterval(timer);
+  }, [incident.created_at]);
 
   // Executive Clean Layout: "Backside" Drawer Toggle & Active Tab
   const [isBacksideExpanded, setIsBacksideExpanded] = useState<boolean>(false);
@@ -124,12 +151,16 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
 
   // Auto-fetch scene photo on mount or incident update if not already loaded via socket/webrtc
   useEffect(() => {
+    if (isPhotoExpired) {
+      setLocalImageUrl(null);
+      return;
+    }
     if (!localImageUrl && incident.id) {
       let isMounted = true;
       fetch(`${BACKEND_API_BASE}/incidents/${incident.id}/image`)
         .then((r) => (r.ok ? r.json() : null))
         .then((data) => {
-          if (isMounted && data && data.imageUrl) {
+          if (isMounted && data && data.imageUrl && !data.expired) {
             setLocalImageUrl(data.imageUrl);
             setPhotoTransport('websocket');
           }
@@ -139,7 +170,7 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
         isMounted = false;
       };
     }
-  }, [incident.id, localImageUrl]);
+  }, [incident.id, localImageUrl, isPhotoExpired]);
 
   // Police view: query whether health card is on file (strictly yes/no only, zero medical content)
   useEffect(() => {
@@ -411,6 +442,14 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
   };
 
   const handleFetchOrViewPhoto = async () => {
+    const elapsed = Date.now() - new Date(incident.created_at).getTime();
+    if (elapsed >= 15 * 60 * 1000 || isPhotoExpired) {
+      setIsPhotoExpired(true);
+      setLocalImageUrl(null);
+      setIsLightboxOpen(false);
+      alert('🔒 Victim photo has expired: The 15-minute privacy retention TTL has elapsed as per DPDP Act Zero-Storage compliance.');
+      return;
+    }
     if (localImageUrl) {
       setIsLightboxOpen(true);
       return;
@@ -420,7 +459,7 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
       const res = await fetch(`${BACKEND_API_BASE}/incidents/${incident.id}/image`);
       if (res.ok) {
         const data = await res.json();
-        if (data && data.imageUrl) {
+        if (data && data.imageUrl && !data.expired) {
           setLocalImageUrl(data.imageUrl);
           setPhotoTransport('websocket');
           setIsLightboxOpen(true);
@@ -562,6 +601,22 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
 
   const isBroadcasting = incident.status === 'broadcasting';
 
+  const handleTriggerEscalate = async () => {
+    try {
+      const res = await fetch(`${BACKEND_API_BASE}/incidents/${incident.id}/escalate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      if (res.ok) {
+        setCurrentRadius('20km');
+        setEscalatedPulse(true);
+        setTimeout(() => setEscalatedPulse(false), 5000);
+      }
+    } catch (err) {
+      console.warn('[IncidentCard] Escalation fallback error:', err);
+    }
+  };
+
   // 45-second auto-escalation countdown timer
   const [secondsUntilEscalation, setSecondsUntilEscalation] = useState<number | null>(() => {
     if (incident.status !== 'broadcasting' && !isBroadcasting) return null;
@@ -576,19 +631,24 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
       setSecondsUntilEscalation(null);
       return;
     }
-    const interval = setInterval(() => {
+
+    const checkAndTick = () => {
       const createdMs = new Date(incident.created_at).getTime();
       const elapsedSec = Math.floor((Date.now() - createdMs) / 1000);
       const remaining = 45 - elapsedSec;
       if (remaining <= 0) {
         setSecondsUntilEscalation(0);
-        clearInterval(interval);
+        // Automatically request escalation if still broadcasting
+        handleTriggerEscalate();
       } else {
         setSecondsUntilEscalation(remaining);
       }
-    }, 1000);
+    };
+
+    checkAndTick();
+    const interval = setInterval(checkAndTick, 1000);
     return () => clearInterval(interval);
-  }, [incident.status, incident.created_at, isBroadcasting]);
+  }, [incident.status, incident.created_at, isBroadcasting, incident.id]);
 
   const acceptedHospital: Hospital | undefined = incident.accepted_hospital ||
     (hospitalsList && hospitalsList.length > 0
@@ -639,6 +699,45 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+          {incident.case_number && (
+            <div
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.35rem',
+                background: '#0f172a',
+                color: '#38bdf8',
+                padding: '0.2rem 0.55rem',
+                borderRadius: '6px',
+                fontFamily: 'monospace',
+                fontSize: '0.75rem',
+                fontWeight: 800,
+                letterSpacing: '0.04em',
+                border: '1px solid #1e293b',
+              }}
+            >
+              <span>DOCKET: #{incident.case_number}</span>
+            </div>
+          )}
+          {incident.gridlock_detected && (
+            <div
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.3rem',
+                background: '#fef2f2',
+                color: '#dc2626',
+                padding: '0.2rem 0.5rem',
+                borderRadius: '6px',
+                fontSize: '0.7rem',
+                fontWeight: 800,
+                border: '1px solid #fecaca',
+              }}
+            >
+              <span>⚠️ GRIDLOCK RE-ASSIGNMENT ACTIVE</span>
+            </div>
+          )}
+
           {isThisHospitalAccepted ? (
             <span
               style={{
@@ -765,6 +864,32 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
               <Clock size={11} color="#2563eb" />
               Auto-Escalates in: {secondsUntilEscalation}s (8km → 20km)
             </span>
+          )}
+
+          {!isEscalatedTier && isBroadcasting && secondsUntilEscalation === 0 && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleTriggerEscalate();
+              }}
+              title="Click to manually escalate search radius to 20km"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.25rem',
+                background: '#fff1f2',
+                color: '#e11d48',
+                border: '1px solid #fecdd3',
+                padding: '0.2rem 0.55rem',
+                borderRadius: '9999px',
+                fontSize: '0.7rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+              }}
+            >
+              <Zap size={11} color="#e11d48" />
+              Expanding to 20km... (Force)
+            </button>
           )}
 
           {Boolean(metadata.delayed_delivery) && (
@@ -1137,34 +1262,58 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
               )}
 
               {/* Scene Photo / Victim Image Action Button */}
-              <button
-                type="button"
-                onClick={handleFetchOrViewPhoto}
-                title={localImageUrl ? 'Click to open full victim scene photo in lightbox' : 'Fetch victim photo from camera relay'}
-                disabled={isFetchingPhoto}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '0.35rem',
-                  padding: '0.4rem 0.75rem',
-                  background: localImageUrl ? '#0f172a' : '#f8fafc',
-                  color: localImageUrl ? '#38bdf8' : '#475569',
-                  border: localImageUrl ? '1px solid #38bdf8' : '1px solid #cbd5e1',
-                  borderRadius: '0.375rem',
-                  fontSize: '0.75rem',
-                  fontWeight: 700,
-                  cursor: isFetchingPhoto ? 'wait' : 'pointer',
-                  transition: 'all 0.15s ease',
-                  boxShadow: localImageUrl ? '0 1px 3px rgba(0,0,0,0.2)' : 'none',
-                }}
-              >
-                <Camera size={13} color={localImageUrl ? '#38bdf8' : '#64748b'} />
-                {isFetchingPhoto
-                  ? 'Loading Photo...'
-                  : localImageUrl
-                  ? `📸 View Scene Photo (${photoTransport === 'webrtc' ? 'P2P' : 'Relay'})`
-                  : '📷 Fetch Scene Photo'}
-              </button>
+              {isPhotoExpired ? (
+                <button
+                  type="button"
+                  disabled
+                  title="Victim photo retention expired after 15 minutes as per DPDP Act Zero-Storage compliance."
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.35rem',
+                    padding: '0.4rem 0.75rem',
+                    background: '#f1f5f9',
+                    color: '#94a3b8',
+                    border: '1px solid #cbd5e1',
+                    borderRadius: '0.375rem',
+                    fontSize: '0.75rem',
+                    fontWeight: 700,
+                    cursor: 'not-allowed',
+                  }}
+                >
+                  <Clock size={13} color="#94a3b8" />
+                  🔒 Photo Expired (15m Limit)
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleFetchOrViewPhoto}
+                  title={localImageUrl ? 'Click to open full victim scene photo in lightbox' : 'Fetch victim photo from camera relay'}
+                  disabled={isFetchingPhoto}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.35rem',
+                    padding: '0.4rem 0.75rem',
+                    background: localImageUrl ? '#0f172a' : '#f8fafc',
+                    color: localImageUrl ? '#38bdf8' : '#475569',
+                    border: localImageUrl ? '1px solid #38bdf8' : '1px solid #cbd5e1',
+                    borderRadius: '0.375rem',
+                    fontSize: '0.75rem',
+                    fontWeight: 700,
+                    cursor: isFetchingPhoto ? 'wait' : 'pointer',
+                    transition: 'all 0.15s ease',
+                    boxShadow: localImageUrl ? '0 1px 3px rgba(0,0,0,0.2)' : 'none',
+                  }}
+                >
+                  <Camera size={13} color={localImageUrl ? '#38bdf8' : '#64748b'} />
+                  {isFetchingPhoto
+                    ? 'Loading Photo...'
+                    : localImageUrl
+                    ? `📸 View Scene Photo (${photoTransport === 'webrtc' ? 'P2P' : 'Relay'})`
+                    : '📷 Fetch Scene Photo'}
+                </button>
+              )}
             </div>
           </div>
 
@@ -2057,6 +2206,15 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
             {/* TAB CONTENT: Kinematics & Measured Factors */}
             {backsideTab === 'kinematics' && (
               <div>
+                {/* 30-Second Pre-Crash Speed & Telemetry Curve */}
+                <div style={{ marginTop: '0.75rem' }}>
+                  <PreCrashTelemetryChart
+                    telemetry={incident.pre_crash_telemetry}
+                    victimName={String((incident.victim_metadata as Record<string, unknown> | null)?.victim_name || 'Rahul Sharma')}
+                    vehiclePlate={String((incident.victim_metadata as Record<string, unknown> | null)?.vehicle_plate || incident.ambulance_plate || 'KA-01-EA-108')}
+                  />
+                </div>
+
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0.5rem', marginBottom: '0.75rem' }}>
                   <div style={{ background: '#ffffff', padding: '0.5rem 0.75rem', borderRadius: '0.375rem', border: '1px solid #e2e8f0' }}>
                     <div style={{ fontSize: '0.65rem', color: '#64748b', fontWeight: 600 }}>PEAK ACCELERATION (SENSOR RANGE)</div>
@@ -2099,7 +2257,33 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
                         ⚡ Triage search perimeter auto-escalated to <strong>{currentRadius} (+45s Tier)</strong>. Broadcast dispatched to trauma centers:
                       </span>
                     ) : (
-                      'Trauma centers within 8km radius dispatched for this incident:'
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <span>Trauma centers within 8km radius dispatched for this incident:</span>
+                        {isBroadcasting && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleTriggerEscalate();
+                            }}
+                            title="Force widen search to 20km perimeter immediately"
+                            style={{
+                              background: '#eff6ff',
+                              color: '#1d4ed8',
+                              border: '1px solid #bfdbfe',
+                              padding: '0.12rem 0.45rem',
+                              borderRadius: '9999px',
+                              fontSize: '0.67rem',
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '0.2rem',
+                            }}
+                          >
+                            <Zap size={10} /> Expand to 20km
+                          </button>
+                        )}
+                      </div>
                     )}
                   </div>
                   {isEscalatedTier && (
@@ -2207,7 +2391,7 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
       ────────────────────────────────────────────────────────────────────────── */}
 
       {/* Lightbox Modal */}
-      {isLightboxOpen && localImageUrl && (
+      {isLightboxOpen && localImageUrl && !isPhotoExpired && (
         <div
           onClick={() => setIsLightboxOpen(false)}
           style={{

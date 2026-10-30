@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:http/http.dart' as http;
@@ -12,6 +13,7 @@ import '../models/cv2x_standards_model.dart';
 import '../models/incident_model.dart';
 import '../services/api_client.dart';
 import '../services/crash_detector_service.dart';
+import '../services/emergency_siren_service.dart';
 import '../services/emergency_sms_service.dart';
 import '../services/incident_tracking_service.dart';
 import '../services/traffic_signal_service.dart';
@@ -122,9 +124,15 @@ class _AmbulanceDispatchScreenState extends State<AmbulanceDispatchScreen> {
   bool _arrivalNotificationSent = false;
   String _routeLeg = 'to_scene'; // 'to_scene' | 'to_hospital'
 
+  // Dynamic Deadlock & Ambulance Reassignment Handover
+  bool _isEvaluatingGridlock = false;
+  bool _isReassignedAway = false;
+  String? _reassignmentNotice;
+
   @override
   void initState() {
     super.initState();
+    EmergencySirenService.instance.stopSiren();
     _apiClient = widget.apiClient ?? ApiClient();
     _initAmbulanceLocation();
 
@@ -203,6 +211,108 @@ class _AmbulanceDispatchScreenState extends State<AmbulanceDispatchScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Opening Google Maps failed: $e')),
+        );
+      }
+    }
+  }
+
+  void _showReassignedDialog(String newPlate, String origin, String timeSaved) {
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF0F172A),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: Color(0xFFEF4444), width: 2),
+        ),
+        title: const Row(
+          children: [
+            Icon(Icons.swap_calls_rounded, color: Color(0xFFEF4444), size: 28),
+            SizedBox(width: 8),
+            Text(
+              'MISSION REASSIGNED',
+              style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEF4444).withOpacity(0.15),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFEF4444).withOpacity(0.4)),
+              ),
+              child: Text(
+                'TRAFFIC DEADLOCK DETECTED: This unit is immobilized in severe congestion. Incident #${widget.incident.id.substring(0, min(8, widget.incident.id.length))} has been dynamically reassigned to a faster secondary fleet unit.',
+                style: const TextStyle(color: Color(0xFFFCA5A5), fontSize: 12, height: 1.4),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text('• Reassigned Unit: $newPlate', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+            const SizedBox(height: 4),
+            Text('• Origin Station: $origin', style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12)),
+            const SizedBox(height: 4),
+            Text('• Projected Time Saved: ~$timeSaved mins', style: const TextStyle(color: Color(0xFF10B981), fontWeight: FontWeight.bold, fontSize: 13)),
+          ],
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              Navigator.pop(context); // Return to standby radar
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF334155),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            ),
+            child: const Text('STAND DOWN & RETURN TO RADAR', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _reportGridlockAndRequestHandover() async {
+    setState(() => _isEvaluatingGridlock = true);
+    final payload = {
+      'ambulance_id': widget.ambulanceId,
+      'latitude': _ambulanceLat,
+      'longitude': _ambulanceLng,
+      'stationary_seconds': 120,
+      'stagnation_severity_index': 0.88,
+    };
+
+    try {
+      final result = await _apiClient.post('/incidents/${widget.incident.id}/gridlock', data: payload);
+      if (!mounted) return;
+      setState(() => _isEvaluatingGridlock = false);
+
+      if (result is Map && result['reassigned'] == true) {
+        final newAmb = result['new_ambulance'] as Map?;
+        final newPlate = newAmb?['plate']?.toString() ?? 'Secondary Unit';
+        final origin = newAmb?['origin_station']?.toString() ?? 'Nearby Depot';
+        final saved = result['time_saved_minutes']?.toString() ?? '3.5';
+        _showReassignedDialog(newPlate, origin, saved);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('⚠️ Gridlock registered: No faster secondary unit within radius. C-V2X ITMS green wave prioritization escalated!'),
+            backgroundColor: Color(0xFFF59E0B),
+            duration: Duration(seconds: 4),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isEvaluatingGridlock = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Gridlock check error: $e')),
         );
       }
     }
@@ -306,6 +416,26 @@ class _AmbulanceDispatchScreenState extends State<AmbulanceDispatchScreen> {
                 LatLng(hLat, hLng),
               );
             }
+          }
+        }
+      });
+
+      // Listen for dynamic deadlock / gridlock mission handover & diversion
+      socket.on('incident:reassigned', (data) {
+        if (data is Map && mounted) {
+          final incId = data['incident_id']?.toString();
+          if (incId == widget.incident.id) {
+            final newAmb = data['new_ambulance'] as Map?;
+            final newPlate = newAmb?['plate']?.toString() ?? 'Secondary Unit';
+            final newOrigin = newAmb?['origin_station']?.toString() ?? 'Nearby Hub';
+            final timeSaved = data['time_saved_minutes']?.toString() ?? '3.5';
+
+            setState(() {
+              _isReassignedAway = true;
+              _reassignmentNotice = 'MISSION DIVERTED: Deadlock traffic detected. Mission reassigned to Unit $newPlate ($newOrigin) reaching ~$timeSaved mins faster.';
+            });
+
+            _showReassignedDialog(newPlate, newOrigin, timeSaved);
           }
         }
       });
@@ -1373,8 +1503,8 @@ class _AmbulanceDispatchScreenState extends State<AmbulanceDispatchScreen> {
 
                       const SizedBox(height: 10),
 
-                      // Primary Action Button: Arrival Confirmation
-                      if (!_hasArrivedOnScene)
+                      // Primary Action Button: Arrival Confirmation & Gridlock Handover
+                      if (!_hasArrivedOnScene) ...[
                         SizedBox(
                           width: double.infinity,
                           child: ElevatedButton.icon(
@@ -1393,7 +1523,28 @@ class _AmbulanceDispatchScreenState extends State<AmbulanceDispatchScreen> {
                               elevation: 4,
                             ),
                           ),
-                        )
+                        ),
+                        const SizedBox(height: 8),
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            onPressed: _isEvaluatingGridlock ? null : _reportGridlockAndRequestHandover,
+                            icon: _isEvaluatingGridlock
+                                ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(color: Color(0xFFF59E0B), strokeWidth: 2))
+                                : const Icon(Icons.traffic_rounded, color: Color(0xFFF59E0B), size: 16),
+                            label: const Text(
+                              'REPORT TRAFFIC DEADLOCK (REQUEST HANDOVER)',
+                              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 11, letterSpacing: 0.3, color: Color(0xFFF59E0B)),
+                            ),
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(color: Color(0xFFF59E0B), width: 1.2),
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              backgroundColor: const Color(0xFFF59E0B).withOpacity(0.08),
+                            ),
+                          ),
+                        ),
+                      ]
                       else
                         Container(
                           width: double.infinity,

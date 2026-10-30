@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
-import { ShieldAlert, Hospital, Activity, Radio, Wifi, WifiOff, Settings, Info } from 'lucide-react';
+import { ShieldAlert, Hospital, Activity, Radio, Wifi, WifiOff, Settings, Info, Gauge } from 'lucide-react';
 import { AboutSystemModal } from './AboutSystemModal';
 import { ConnectionStatus } from '../types';
 import { BACKEND_API_BASE } from '../services/socket';
@@ -153,6 +153,27 @@ export const Navbar: React.FC<NavbarProps> = ({ status, demoMode = false, onTogg
           >
             <Activity size={18} />
             <span>Police Control Room</span>
+          </NavLink>
+
+          <NavLink
+            to="/telemetry"
+            style={({ isActive }) => ({
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.45rem',
+              padding: '0.5rem 1rem',
+              borderRadius: '0.375rem',
+              textDecoration: 'none',
+              fontSize: '0.875rem',
+              fontWeight: 600,
+              background: isActive ? '#f0f9ff' : 'transparent',
+              color: isActive ? '#0284c7' : '#64748b',
+              border: isActive ? '1px solid #bae6fd' : '1px solid transparent',
+              transition: 'all 0.15s ease',
+            })}
+          >
+            <Gauge size={18} />
+            <span>⚡ Live Telemetry</span>
           </NavLink>
 
           <NavLink
